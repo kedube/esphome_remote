@@ -4,7 +4,7 @@ substitutions:
   FRIENDLY_NAME: "ESP32 OLED Remote"
   SLEEP_DURATION: "120" # seconds until auto-sleep
   DEEP_SLEEP_DURATION: "360min"
-  VERSION: "1.0"
+  VERSION: "1.1"
   PIN_WAKE: "0"
   PIN_I2C_SDA: "27"
   PIN_I2C_SCL: "25"
@@ -14,7 +14,7 @@ substitutions:
   PIN_BTN_NEXT: "33"
   PIN_BTN_PREV: "22"
   PIN_BTN_DIMMER_UP: "23"
-  PIN_BTN_DIMMER_UP_2: "17"
+  PIN_BTN_DIMMER_UP_2: "5"
   PIN_BTN_DIMMER_DOWN: "19"
   PIN_BTN_DIMMER_DOWN_2: "18"
 
@@ -26,6 +26,10 @@ font:
   - file: "fonts/arial_bold.ttf"
     id: small
     size: 9
+    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]"]
+  - file: "fonts/arial_bold.ttf"
+    id: tiny
+    size: 8
     glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]"]
   - file:
       type: gfonts
@@ -117,6 +121,14 @@ globals:
     restore_value: no
     initial_value: '0'
 
+  - id: last_brightness_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_contrast_interaction
+    type: uint32_t
+    initial_value: '0'
+
   - id: updated_ui
     type: bool
     initial_value: 'true'
@@ -199,6 +211,7 @@ binary_sensor:
             float contrast_value = id(contrast) * 1.0 / 10;
             ESP_LOGD("display", "Contrast = %f", contrast_value);
             id(oled_display).set_contrast(contrast_value);
+            id(last_contrast_interaction) = millis();
             id(updated_ui) = true;
         - script.execute: update_display
 
@@ -451,6 +464,7 @@ script:
           if (next < 10) next = 10;
           id(selected_brightness_pct) = next;
           id(current_light_state) = "on";
+          id(last_brightness_interaction) = millis();
           id(updated_ui) = true;
       - homeassistant.service:
           service: light.turn_on
@@ -473,6 +487,7 @@ script:
             - lambda: |-
                 id(selected_brightness_pct) = 0;
                 id(current_light_state) = "off";
+                id(last_brightness_interaction) = millis();
                 id(updated_ui) = true;
             - script.execute: update_display
           else:
@@ -481,6 +496,7 @@ script:
                 if (next < 1) next = 1;
                 id(selected_brightness_pct) = next;
                 id(current_light_state) = "on";
+                id(last_brightness_interaction) = millis();
                 id(updated_ui) = true;
             - homeassistant.service:
                 service: light.turn_on
@@ -497,25 +513,45 @@ script:
           then:
             - lambda: |-
                 auto it = id(oled_display);
-                char status_line[64];
-                char brightness_line[64];
+                char status_line[16];
+                char footer_line[32];
+                const int bar_x = 14;
+                const int bar_y = 46;
+                const int bar_w = 100;
+                const int bar_h = 8;
+                int bar_fill = 0;
+                bool show_brightness_bar = (millis() - id(last_brightness_interaction)) <= 3000 && id(current_light_state) == "on";
+                bool show_contrast_feedback = (millis() - id(last_contrast_interaction)) <= 3000;
 
                 it->clear();
-                it->print(64, 8, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue518");
-                it->print(64, 22, id(small), COLOR_ON, display::TextAlign::CENTER, "SELECTED LIGHT");
-                it->print(64, 34, id(basic), COLOR_ON, display::TextAlign::CENTER, id(selected_light_name).c_str());
+                it->print(20, 6, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue518");
+                it->print(74, 6, id(small), COLOR_ON, display::TextAlign::CENTER, "SELECTED LIGHT");
+                it->print(64, 22, id(basic), COLOR_ON, display::TextAlign::CENTER, id(selected_light_name).c_str());
 
                 if (id(current_light_state) == "on") {
-                  snprintf(status_line, sizeof(status_line), "ON %d%%", id(selected_brightness_pct));
+                  snprintf(status_line, sizeof(status_line), "ON");
+                  if (show_brightness_bar) {
+                    bar_fill = (bar_w - 2) * id(selected_brightness_pct) / 100;
+                  }
                 } else if (id(current_light_state) == "off") {
                   snprintf(status_line, sizeof(status_line), "OFF");
                 } else {
-                  snprintf(status_line, sizeof(status_line), "UNKNOWN");
+                  snprintf(status_line, sizeof(status_line), "SYNCING");
                 }
 
-                snprintf(brightness_line, sizeof(brightness_line), "[ << ]    [ Contrast ]     [ >> ]");
-                it->print(64, 48, id(basic), COLOR_ON, display::TextAlign::CENTER, status_line);
-                it->print(64, 59, id(small), COLOR_ON, display::TextAlign::CENTER, brightness_line);
+                it->print(64, 37, id(basic), COLOR_ON, display::TextAlign::CENTER, status_line);
+                if (show_brightness_bar) {
+                  it->rectangle(bar_x, bar_y, bar_w, bar_h, COLOR_ON);
+                  if (bar_fill > 0) {
+                    it->filled_rectangle(bar_x + 1, bar_y + 1, bar_fill, bar_h - 2, COLOR_ON);
+                  }
+                  snprintf(footer_line, sizeof(footer_line), "BRIGHTNESS %d%%", id(selected_brightness_pct));
+                } else if (show_contrast_feedback) {
+                  snprintf(footer_line, sizeof(footer_line), "CONTRAST %d%%", id(contrast) * 10);
+                } else {
+                  snprintf(footer_line, sizeof(footer_line), "[PREV]   [CONTRAST]   [NEXT]");
+                }
+                it->print(64, 58, id(tiny), COLOR_ON, display::TextAlign::CENTER, footer_line);
                 it->display();
                 id(updated_ui) = false;
 
@@ -534,6 +570,15 @@ interval:
           then:
             - script.execute: turn_off
           else:
+            - lambda: |-
+                uint32_t elapsed = millis() - id(last_brightness_interaction);
+                if (elapsed > 3000 && elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t contrast_elapsed = millis() - id(last_contrast_interaction);
+                if (contrast_elapsed > 3000 && contrast_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
             - if:
                 condition:
                   lambda: 'return id(show_boot_screen) && id(current_light_state) == "unknown";'

@@ -2,7 +2,7 @@ substitutions:
   BOARD: "esp32dev"
   DEVICE_NAME: "esp32-remote"
   FRIENDLY_NAME: "ESP32 OLED Remote"
-  VERSION: "1.0"
+  VERSION: "1.1"
   SLEEP_DURATION: "120" # seconds until auto-sleep
   DEEP_SLEEP_DURATION: "360min"
   PIN_WAKE: "0"
@@ -38,6 +38,10 @@ font:
   - file: "fonts/arial_bold.ttf"
     id: small
     size: 9
+    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]"]
+  - file: "fonts/arial_bold.ttf"
+    id: tiny
+    size: 8
     glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]"]
   - file:
       type: gfonts
@@ -135,7 +139,19 @@ globals:
     type: uint32_t
     initial_value: '0'
 
+  - id: last_brightness_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_contrast_interaction
+    type: uint32_t
+    initial_value: '0'
+
   - id: updated_ui
+    type: bool
+    initial_value: 'true'
+
+  - id: show_footer_hint
     type: bool
     initial_value: 'true'
 
@@ -242,6 +258,7 @@ binary_sensor:
         - script.execute: turn_off
 
   - platform: gpio
+    id: prev_button
     pin:
       number: ${PIN_BTN_PREV}
       mode:
@@ -255,8 +272,14 @@ binary_sensor:
       then:
         - script.execute: reset_idle_timer
         - script.execute: select_previous_light
+    on_release:
+      then:
+        - lambda: |-
+            id(updated_ui) = true;
+        - script.execute: update_display
 
   - platform: gpio
+    id: contrast_button
     pin:
       number: ${PIN_BTN_CONTRAST}
       mode:
@@ -275,10 +298,17 @@ binary_sensor:
             float contrast_value = id(contrast) * 1.0 / 10;
             ESP_LOGD("display", "Contrast = %f", contrast_value);
             id(oled_display).set_contrast(contrast_value);
+            id(last_contrast_interaction) = millis();
+            id(updated_ui) = true;
+        - script.execute: update_display
+    on_release:
+      then:
+        - lambda: |-
             id(updated_ui) = true;
         - script.execute: update_display
 
   - platform: gpio
+    id: next_button
     pin:
       number: ${PIN_BTN_NEXT}
       mode:
@@ -292,6 +322,11 @@ binary_sensor:
       then:
         - script.execute: reset_idle_timer
         - script.execute: select_next_light
+    on_release:
+      then:
+        - lambda: |-
+            id(updated_ui) = true;
+        - script.execute: update_display
 
   - platform: gpio
     pin:
@@ -540,6 +575,7 @@ script:
           if (next < 10) next = 10;
           id(selected_brightness_pct) = next;
           id(current_light_state) = "on";
+          id(last_brightness_interaction) = millis();
           id(updated_ui) = true;
       - homeassistant.service:
           service: light.turn_on
@@ -562,6 +598,7 @@ script:
             - lambda: |-
                 id(selected_brightness_pct) = 0;
                 id(current_light_state) = "off";
+                id(last_brightness_interaction) = millis();
                 id(updated_ui) = true;
             - script.execute: update_display
           else:
@@ -570,6 +607,7 @@ script:
                 if (next < 1) next = 1;
                 id(selected_brightness_pct) = next;
                 id(current_light_state) = "on";
+                id(last_brightness_interaction) = millis();
                 id(updated_ui) = true;
             - homeassistant.service:
                 service: light.turn_on
@@ -586,27 +624,49 @@ script:
           then:
             - lambda: |-
                 auto it = id(oled_display);
-                char status_line[64];
-                char battery_line[64];
+                char status_line[16];
+                char footer_line[32];
+                const int bar_x = 14;
+                const int bar_y = 46;
+                const int bar_w = 100;
+                const int bar_h = 8;
+                int bar_fill = 0;
+                bool show_brightness_bar = (millis() - id(last_brightness_interaction)) <= 3000 && id(current_light_state) == "on";
+                bool show_contrast_feedback = (millis() - id(last_contrast_interaction)) <= 3000;
 
                 it->clear();
-                it->print(64, 6, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue518");
-                it->print(64, 22, id(small), COLOR_ON, display::TextAlign::CENTER, "SELECTED LIGHT");
-                it->print(64, 34, id(basic), COLOR_ON, display::TextAlign::CENTER, id(selected_light_name).c_str());
+                it->print(20, 6, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue518");
+                it->print(74, 6, id(small), COLOR_ON, display::TextAlign::CENTER, "SELECTED LIGHT");
+                it->print(64, 22, id(basic), COLOR_ON, display::TextAlign::CENTER, id(selected_light_name).c_str());
 
                 if (id(current_light_state) == "on") {
-                  snprintf(status_line, sizeof(status_line), "ON %d%%", id(selected_brightness_pct));
+                  snprintf(status_line, sizeof(status_line), "ON");
+                  if (show_brightness_bar) {
+                    bar_fill = (bar_w - 2) * id(selected_brightness_pct) / 100;
+                  }
                 } else if (id(current_light_state) == "off") {
                   snprintf(status_line, sizeof(status_line), "OFF");
                 } else {
-                  snprintf(status_line, sizeof(status_line), "UNKNOWN");
+                  snprintf(status_line, sizeof(status_line), "SYNCING");
                 }
-                it->print(64, 48, id(basic), COLOR_ON, display::TextAlign::CENTER, status_line);
 
-                if (id(battery_percent).has_state()) {
-                  snprintf(battery_line, sizeof(battery_line), "BATTERY %.0f%%", id(battery_percent).state);
-                  it->print(64, 59, id(small), COLOR_ON, display::TextAlign::CENTER, battery_line);
+                it->print(64, 37, id(basic), COLOR_ON, display::TextAlign::CENTER, status_line);
+                if (show_brightness_bar) {
+                  it->rectangle(bar_x, bar_y, bar_w, bar_h, COLOR_ON);
+                  if (bar_fill > 0) {
+                    it->filled_rectangle(bar_x + 1, bar_y + 1, bar_fill, bar_h - 2, COLOR_ON);
+                  }
+                  snprintf(footer_line, sizeof(footer_line), "BRIGHTNESS %d%%", id(selected_brightness_pct));
+                } else if (show_contrast_feedback) {
+                  snprintf(footer_line, sizeof(footer_line), "CONTRAST %d%%", id(contrast) * 10);
+                } else if (id(show_footer_hint)) {
+                  snprintf(footer_line, sizeof(footer_line), "[PREV]   [CONTRAST]   [NEXT]");
+                } else if (id(battery_percent).has_state() && id(battery_voltage).has_state()) {
+                  snprintf(footer_line, sizeof(footer_line), "BATTERY %.0f%% (%.2fV)", id(battery_percent).state, id(battery_voltage).state);
+                } else {
+                  snprintf(footer_line, sizeof(footer_line), "BATTERY SYNCING");
                 }
+                it->print(64, 59, id(tiny), COLOR_ON, display::TextAlign::CENTER, footer_line);
 
                 it->display();
                 id(updated_ui) = false;
@@ -626,6 +686,24 @@ interval:
           then:
             - script.execute: turn_off
           else:
+            - lambda: |-
+                bool should_show_footer_hint =
+                  ((millis() / 1000) - id(last_active)) <= 10 ||
+                  id(prev_button).state ||
+                  id(next_button).state ||
+                  id(contrast_button).state;
+                if (should_show_footer_hint != id(show_footer_hint)) {
+                  id(show_footer_hint) = should_show_footer_hint;
+                  id(updated_ui) = true;
+                }
+                uint32_t elapsed = millis() - id(last_brightness_interaction);
+                if (elapsed > 3000 && elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t contrast_elapsed = millis() - id(last_contrast_interaction);
+                if (contrast_elapsed > 3000 && contrast_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
             - if:
                 condition:
                   lambda: 'return id(show_boot_screen) && id(current_light_state) == "unknown";'
