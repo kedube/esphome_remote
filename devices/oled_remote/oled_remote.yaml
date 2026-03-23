@@ -27,10 +27,6 @@ font:
     id: small
     size: 9
     glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]"]
-  - file: "fonts/arial_bold.ttf"
-    id: big
-    size: 15
-    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":"]
   - file:
       type: gfonts
       family: Material+Symbols+Rounded
@@ -40,6 +36,7 @@ font:
     glyphs: [
       "\ue518", # lightbulb
       "\ue8ac", # power off
+      "\ue88b", # loading
     ]
 
 esphome:
@@ -57,13 +54,14 @@ esphome:
             id(last_active) = millis() / 1000;
             id(updated_ui) = true;
         - script.execute: update_selected_light
-        - script.execute: sync_selected_light_status
-        - script.execute: update_display
 
 esp32:
   board: ${BOARD}
+  flash_size: 4MB
   framework:
     type: arduino
+    advanced:
+      minimum_chip_revision: "3.1"
 
 wifi:
   ssid: !secret wifi_ssid
@@ -120,6 +118,10 @@ globals:
     initial_value: '0'
 
   - id: updated_ui
+    type: bool
+    initial_value: 'true'
+
+  - id: show_boot_screen
     type: bool
     initial_value: 'true'
 
@@ -342,32 +344,51 @@ script:
       - script.execute: sync_selected_light_status
       - script.execute: update_display
 
+  - id: boot_screen
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 16, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue88b");
+          it->print(64, 35, id(small), COLOR_ON, display::TextAlign::CENTER, "LOADING");
+          it->print(64, 50, id(small), COLOR_ON, display::TextAlign::CENTER, "V${VERSION}");
+          it->display();
+
   - id: sync_selected_light_status
     then:
       - lambda: |-
           int idx = id(selected_light_index);
           std::string state = selected_light_state(idx);
           float brightness = selected_light_brightness(idx);
+          std::string next_state = id(current_light_state);
+          int next_brightness_pct = id(selected_brightness_pct);
 
           if (state == "on") {
-            id(current_light_state) = "on";
+            next_state = "on";
             if (selected_light_has_brightness(idx) && !isnan(brightness) && brightness > 0) {
               int pct = (int) roundf((brightness / 255.0f) * 100.0f);
               if (pct < 1) pct = 1;
               if (pct > 100) pct = 100;
-              id(selected_brightness_pct) = pct;
-            } else if (id(selected_brightness_pct) <= 0) {
-              id(selected_brightness_pct) = 100;
+              next_brightness_pct = pct;
+            } else if (next_brightness_pct <= 0) {
+              next_brightness_pct = 100;
             }
-            id(updated_ui) = true;
           } else if (state == "off") {
-            id(current_light_state) = "off";
-            id(selected_brightness_pct) = 0;
-            id(updated_ui) = true;
+            next_state = "off";
+            next_brightness_pct = 0;
           } else {
-            id(current_light_state) = "unknown";
-            id(updated_ui) = true;
+            next_state = "unknown";
             request_selected_light_status(idx);
+          }
+
+          if (next_state != id(current_light_state) || next_brightness_pct != id(selected_brightness_pct)) {
+            id(current_light_state) = next_state;
+            id(selected_brightness_pct) = next_brightness_pct;
+            id(updated_ui) = true;
+          }
+
+          if (next_state == "on" || next_state == "off") {
+            id(show_boot_screen) = false;
           }
 
   - id: select_next_light
@@ -513,5 +534,12 @@ interval:
           then:
             - script.execute: turn_off
           else:
-            - script.execute: sync_selected_light_status
-            - script.execute: update_display
+            - if:
+                condition:
+                  lambda: 'return id(show_boot_screen) && id(current_light_state) == "unknown";'
+                then:
+                  - script.execute: boot_screen
+                  - script.execute: sync_selected_light_status
+                else:
+                  - script.execute: sync_selected_light_status
+                  - script.execute: update_display
