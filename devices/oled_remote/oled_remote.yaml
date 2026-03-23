@@ -1,6 +1,6 @@
 substitutions:
   BOARD: "esp32dev"
-  DEVICE_NAME: "esp32_remote"
+  DEVICE_NAME: "esp32-remote"
   FRIENDLY_NAME: "ESP32 Remote"
   VERSION: "1.0"
   PIN_WAKE: "0"
@@ -27,7 +27,7 @@ font:
     glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]"]
   - file: "fonts/arial_bold.ttf"
     id: big
-    size: 16
+    size: 15
     glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":"]
   - file:
       type: gfonts
@@ -89,6 +89,7 @@ deep_sleep:
   wakeup_pin:
     number: ${PIN_WAKE}
     allow_other_uses: true
+    ignore_strapping_warning: true
   wakeup_pin_mode: INVERT_WAKEUP
 
 i2c:
@@ -148,6 +149,7 @@ binary_sensor:
     pin:
       allow_other_uses: true
       number: ${PIN_WAKE}
+      ignore_strapping_warning: true
       mode:
         input: True
         pullup: True
@@ -459,7 +461,7 @@ script:
                 }
 
                 snprintf(brightness_line, sizeof(brightness_line), "[ << ]    [ Contrast ]     [ >> ]");
-                it->print(64, 48, id(basic), COLOR_ON, display::TextAlign::CENTER, status_line);
+                it->print(64, 47, id(basic), COLOR_ON, display::TextAlign::CENTER, status_line);
                 it->print(64, 58, id(small), COLOR_ON, display::TextAlign::CENTER, brightness_line);
                 it->display();
                 id(updated_ui) = false;

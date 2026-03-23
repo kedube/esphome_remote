@@ -27,15 +27,15 @@ ota:
 font:
   - file: "fonts/arial_bold.ttf"
     id: basic
-    size: 14
+    size: 13
     glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "%", "[", "]"]
   - file: "fonts/arial_bold.ttf"
     id: small
-    size: 10
+    size: 9
     glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]"]
   - file: "fonts/arial_bold.ttf"
     id: big
-    size: 18
+    size: 15
     glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":"]
   - file:
       type: gfonts
@@ -93,6 +93,7 @@ deep_sleep:
   wakeup_pin:
     number: ${PIN_WAKE}
     allow_other_uses: true
+    ignore_strapping_warning: true
   wakeup_pin_mode: INVERT_WAKEUP
 
 output:
@@ -219,6 +220,7 @@ binary_sensor:
     pin:
       allow_other_uses: true
       number: ${PIN_WAKE}
+      ignore_strapping_warning: true
       mode:
         input: True
         pullup: True
@@ -535,8 +537,8 @@ script:
 
                 it->clear();
                 it->print(64, 6, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue518");
-                it->print(64, 18, id(small), COLOR_ON, display::TextAlign::CENTER, "SELECTED LIGHT");
-                it->print(64, 30, id(basic), COLOR_ON, display::TextAlign::CENTER, id(selected_light_name).c_str());
+                it->print(64, 21, id(small), COLOR_ON, display::TextAlign::CENTER, "SELECTED LIGHT");
+                it->print(64, 33, id(basic), COLOR_ON, display::TextAlign::CENTER, id(selected_light_name).c_str());
 
                 if (id(current_light_state) == "on") {
                   snprintf(status_line, sizeof(status_line), "ON %d%%", id(selected_brightness_pct));
@@ -545,7 +547,7 @@ script:
                 } else {
                   snprintf(status_line, sizeof(status_line), "UNKNOWN");
                 }
-                it->print(64, 44, id(basic), COLOR_ON, display::TextAlign::CENTER, status_line);
+                it->print(64, 47, id(basic), COLOR_ON, display::TextAlign::CENTER, status_line);
 
                 if (id(battery_percent).has_state()) {
                   snprintf(battery_line, sizeof(battery_line), "BAT %.0f%%", id(battery_percent).state);
