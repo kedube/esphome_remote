@@ -1,16 +1,22 @@
 substitutions:
+  BOARD: "esp32dev"
+  DEVICE_NAME: "esp32-remote"
+  FRIENDLY_NAME: "ESP32 OLED Remote"
+  VERSION: "1.0"
+  SLEEP_DURATION: "120" # seconds until auto-sleep
+  DEEP_SLEEP_DURATION: "360min"
   PIN_WAKE: "0"
   PIN_I2C_SDA: "27"
   PIN_I2C_SCL: "25"
   PIN_BTN_CONTRAST: "5"
-  PIN_BTN_SWITCH_AC: "14"
-  PIN_BTN_TOGGLE: "26"
-  PIN_BTN_FAN: "33"
-  PIN_BTN_MODE: "22"
-  PIN_BTN_TEMP_UP: "23"
-  PIN_BTN_TEMP_UP_2: "17"
-  PIN_BTN_TEMP_DOWN: "19"
-  PIN_BTN_TEMP_DOWN_2: "18"
+  PIN_BTN_SWITCH: "14"
+  PIN_BTN_POWER_SWITCH: "26"
+  PIN_BTN_NEXT: "33"
+  PIN_BTN_PREV: "22"
+  PIN_BTN_DIMMER_UP: "23"
+  PIN_BTN_DIMMER_UP_2: "17"
+  PIN_BTN_DIMMER_DOWN: "19"
+  PIN_BTN_DIMMER_DOWN_2: "18"
   PIN_OLED_EN: "15"
   PIN_BAT_ADC: "32"
 
@@ -42,15 +48,15 @@ font:
       family: Material+Symbols+Rounded
       weight: 400
     id: symbols
-    size: 24
+    size: 16
     glyphs: [
       "\ue518", # lightbulb
       "\ue8ac", # power off
     ]
 
 esphome:
-  name: oled-remote-v31
-  friendly_name: OLED Remote
+  name: ${DEVICE_NAME}
+  friendly_name: ${FRIENDLY_NAME}
   min_version: 2024.11.0
   name_add_mac_suffix: false
   includes:
@@ -74,7 +80,7 @@ esphome:
         - script.execute: update_display
 
 esp32:
-  board: esp32dev
+  board: ${BOARD}
   framework:
     type: arduino
 
@@ -86,10 +92,11 @@ wifi:
   power_save_mode: LIGHT
 
 logger:
+  level: INFO # DEBUG
 
 deep_sleep:
   id: go_sleep
-  sleep_duration: 360min
+  sleep_duration: ${DEEP_SLEEP_DURATION}
   wakeup_pin:
     number: ${PIN_WAKE}
     allow_other_uses: true
@@ -224,7 +231,7 @@ binary_sensor:
       mode:
         input: True
         pullup: True
-    name: "Power Button"
+    name: "Remote Power Button"
     internal: True
     filters:
       - invert:
@@ -234,11 +241,26 @@ binary_sensor:
 
   - platform: gpio
     pin:
+      number: ${PIN_BTN_PREV}
+      mode:
+        input: True
+        pullup: True
+    name: "Previous Light Entity"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: select_previous_light
+
+  - platform: gpio
+    pin:
       number: ${PIN_BTN_CONTRAST}
       mode:
         input: True
         pullup: True
-    name: "Contrast"
+    name: "OLED Contrast"
     internal: True
     filters:
       - invert:
@@ -256,59 +278,11 @@ binary_sensor:
 
   - platform: gpio
     pin:
-      number: ${PIN_BTN_SWITCH_AC}
+      number: ${PIN_BTN_NEXT}
       mode:
         input: True
         pullup: True
-    name: "Refresh Battery"
-    internal: True
-    filters:
-      - invert:
-    on_press:
-      then:
-        - script.execute: reset_idle_timer
-        - script.execute: update_battery
-        - lambda: |-
-            id(updated_ui) = true;
-        - script.execute: update_display
-
-  - platform: gpio
-    pin:
-      number: ${PIN_BTN_TOGGLE}
-      mode:
-        input: True
-        pullup: True
-    name: "Light Toggle"
-    internal: True
-    filters:
-      - invert:
-    on_press:
-      then:
-        - script.execute: reset_idle_timer
-        - script.execute: toggle_selected_light
-
-  - platform: gpio
-    pin:
-      number: ${PIN_BTN_FAN}
-      mode:
-        input: True
-        pullup: True
-    name: "Previous Light"
-    internal: True
-    filters:
-      - invert:
-    on_press:
-      then:
-        - script.execute: reset_idle_timer
-        - script.execute: select_previous_light
-
-  - platform: gpio
-    pin:
-      number: ${PIN_BTN_MODE}
-      mode:
-        input: True
-        pullup: True
-    name: "Next Light"
+    name: "Next Light Entity"
     internal: True
     filters:
       - invert:
@@ -319,11 +293,40 @@ binary_sensor:
 
   - platform: gpio
     pin:
-      number: ${PIN_BTN_TEMP_UP}
+      number: ${PIN_BTN_SWITCH}
       mode:
         input: True
         pullup: True
-    name: "Brightness Up"
+    name: "No Function"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_POWER_SWITCH}
+      mode:
+        input: True
+        pullup: True
+    name: "Light Power Switch"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: toggle_selected_light
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_DIMMER_UP}
+      mode:
+        input: True
+        pullup: True
+    name: "Light Brightness Up"
     internal: True
     filters:
       - invert:
@@ -334,11 +337,26 @@ binary_sensor:
 
   - platform: gpio
     pin:
-      number: ${PIN_BTN_TEMP_DOWN}
+      number: ${PIN_BTN_DIMMER_UP_2}
       mode:
         input: True
         pullup: True
-    name: "Brightness Down"
+    name: "Light Brightness Up 2"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: increase_brightness
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_DIMMER_DOWN}
+      mode:
+        input: True
+        pullup: True
+    name: "Light Brightness Down"
     internal: True
     filters:
       - invert:
@@ -346,6 +364,21 @@ binary_sensor:
       then:
         - script.execute: reset_idle_timer
         - script.execute: decrease_brightness
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_DIMMER_DOWN_2}
+      mode:
+        input: True
+        pullup: True
+    name: "Light Brightness Down 2"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: decrease_brightness       
 
 script:
   - id: turn_off
@@ -532,8 +565,8 @@ script:
           then:
             - lambda: |-
                 auto it = id(oled_display);
-                char status_line[24];
-                char battery_line[24];
+                char status_line[64];
+                char battery_line[64];
 
                 it->clear();
                 it->print(64, 6, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue518");
@@ -550,7 +583,7 @@ script:
                 it->print(64, 48, id(basic), COLOR_ON, display::TextAlign::CENTER, status_line);
 
                 if (id(battery_percent).has_state()) {
-                  snprintf(battery_line, sizeof(battery_line), "BAT %.0f%%", id(battery_percent).state);
+                  snprintf(battery_line, sizeof(battery_line), "BATTERY %.0f%%", id(battery_percent).state);
                   it->print(64, 59, id(small), COLOR_ON, display::TextAlign::CENTER, battery_line);
                 }
 
@@ -568,7 +601,7 @@ interval:
     then:
       - if:
           condition:
-            lambda: 'return (millis() / 1000) - id(last_active) >= 120;'
+            lambda: 'return (millis() / 1000) - id(last_active) >= ${SLEEP_DURATION};'
           then:
             - script.execute: turn_off
           else:

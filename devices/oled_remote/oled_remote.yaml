@@ -1,7 +1,9 @@
 substitutions:
   BOARD: "esp32dev"
   DEVICE_NAME: "esp32-remote"
-  FRIENDLY_NAME: "ESP32 Remote"
+  FRIENDLY_NAME: "ESP32 OLED Remote"
+  SLEEP_DURATION: "120" # seconds until auto-sleep
+  DEEP_SLEEP_DURATION: "360min"
   VERSION: "1.0"
   PIN_WAKE: "0"
   PIN_I2C_SDA: "27"
@@ -85,7 +87,7 @@ logger:
 
 deep_sleep:
   id: go_sleep
-  sleep_duration: 4320min
+  sleep_duration: ${DEEP_SLEEP_DURATION}
   wakeup_pin:
     number: ${PIN_WAKE}
     allow_other_uses: true
@@ -507,7 +509,7 @@ interval:
     then:
       - if:
           condition:
-            lambda: 'return (millis() / 1000) - id(last_active) >= 120;'
+            lambda: 'return (millis() / 1000) - id(last_active) >= ${SLEEP_DURATION};'
           then:
             - script.execute: turn_off
           else:
