@@ -15,9 +15,10 @@ substitutions:
   PIN_BAT_ADC: "32"
 
 api:
+  homeassistant_states: true
   reboot_timeout: 0s
   encryption:
-    key: "<UPDATE_YOUR_KEY>"
+    key: !secret encryption_key
 
 ota:
   - platform: esphome
@@ -26,32 +27,15 @@ font:
   - file: "fonts/arial_bold.ttf"
     id: basic
     size: 14
-    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":"]
+    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "%", "[", "]"]
   - file: "fonts/arial_bold.ttf"
     id: small
     size: 10
-    glyphs: [ADEFGHILMNOTUWVRY1234567890., " "]
-  - file: "fonts/arial_bold.ttf"
-    id: bigger
-    size: 28
-    glyphs: [ADEGHILMOTUWRY0123456789]
+    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]"]
   - file: "fonts/arial_bold.ttf"
     id: big
-    size: 40
-    glyphs: [ADEGHILMOTUWRY0123456789]
-  - file:
-      type: gfonts
-      family: Material+Symbols+Rounded
-      weight: 400
-    id: symbols_small
     size: 18
-    glyphs: [
-      "\ueae6", # up
-      "\uf887", # fan
-      "\ue5d5", # refresh
-      "\ue8ac", # off,
-      "\uea35", # ECO Simplier
-    ]
+    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":"]
   - file:
       type: gfonts
       family: Material+Symbols+Rounded
@@ -59,48 +43,34 @@ font:
     id: symbols
     size: 24
     glyphs: [
-      "\uf168", # fan
-      "\ueb3b", # AC
-      "\uf164", # dry
-      "\ue8ac", # off,
-      "\ue88b", # loading
-      "\uf8be", # ECO
-    ]
-  - file:
-      type: gfonts
-      family: Material+Symbols+Rounded
-      weight: 700
-    id: symbols_big
-    size: 36
-    glyphs: [
-      "\uf168", # fan
-      "\ueb3b", # AC
-      "\uf164", # dry
-      "\ue8ac", # off,
-      "\ue88b", # loading
+      "\ue518", # lightbulb
+      "\ue8ac", # power off
     ]
 
 esphome:
-  name: ac-remote-v31
-  friendly_name: AC Controller
+  name: oled-remote-v31
+  friendly_name: OLED Remote
   min_version: 2024.11.0
   name_add_mac_suffix: false
+  includes:
+    - light_entities.h
   on_boot:
     - priority: 700
       then:
         - output.turn_on: oled_power
         - delay: 10ms
-
     - priority: 400
       then:
         - script.execute: update_battery
-
     - priority: 250
       then:
         - lambda: |-
+            ensure_light_status_tracker();
             id(last_active) = millis() / 1000;
-  includes:
-    - ac_entities.h
+            id(updated_ui) = true;
+        - script.execute: update_selected_light
+        - script.execute: sync_selected_light_status
+        - script.execute: update_display
 
 esp32:
   board: esp32dev
@@ -118,7 +88,7 @@ logger:
 
 deep_sleep:
   id: go_sleep
-  sleep_duration: 360min # update battery every 6h
+  sleep_duration: 360min
   wakeup_pin:
     number: ${PIN_WAKE}
     allow_other_uses: true
@@ -144,11 +114,6 @@ display:
     id: oled_display
 
 globals:
-
-  - id: debounce_active
-    type: bool
-    initial_value: 'false'
-
   - id: contrast
     type: int
     initial_value: '5'
@@ -167,78 +132,30 @@ globals:
     type: bool
     initial_value: 'true'
 
-  - id: is_booting
-    type: bool
-    initial_value: 'false'
-
-  - id: selected_ac_index
+  - id: selected_light_index
     type: int
     initial_value: '0'
     restore_value: True
-  - id: selected_ac
+
+  - id: selected_light_name
     type: std::string
-    initial_value: '"climate.living_room_ac"'
-    restore_value: True
-  - id: selected_ac_name
-    type: std::string
-    initial_value: '"Living"'
+    initial_value: '"Living Room"'
     restore_value: True
 
-  - id: selected_ac_mode_index
-    type: int
-    initial_value: '0'
-  - id: current_ac_mode
+  - id: selected_light_entity
     type: std::string
-    initial_value: '"unknown"'
-  - id: selected_ac_mode
+    initial_value: '"light.living_room"'
+    restore_value: True
+
+  - id: current_light_state
     type: std::string
     initial_value: '"unknown"'
 
-  - id: current_temp
-    type: int
-    initial_value: '-1'
-  - id: selected_temp
-    type: int
-    initial_value: '-1'
-
-  - id: selected_fan_index
+  - id: selected_brightness_pct
     type: int
     initial_value: '0'
-  - id: current_fan_mode
-    type: std::string
-    initial_value: '"unknown"'
-  - id: selected_fan_mode
-    type: std::string
-    initial_value: '"unknown"'
 
 sensor:
-  - platform: homeassistant
-    id: living_room_ac_temp
-    entity_id: climate.living_room_ac
-    attribute: temperature
-    on_value:
-      then:
-        - script.execute: set_current_states
-        - script.execute: set_selections
-
-  - platform: homeassistant
-    id: office_ac_temp
-    entity_id: climate.office_ac
-    attribute: temperature
-    on_value:
-      then:
-        - script.execute: set_current_states
-        - script.execute: set_selections
-
-  - platform: homeassistant
-    id: bedroom_ac_temp
-    entity_id: climate.bedroom_ac
-    attribute: temperature
-    on_value:
-      then:
-        - script.execute: set_current_states
-        - script.execute: set_selections
-
   - platform: adc
     pin: ${PIN_BAT_ADC}
     id: battery_adc
@@ -260,7 +177,6 @@ sensor:
         return NAN;
       }
       return id(battery_adc).state;
-
 
   - platform: template
     id: battery_percent
@@ -297,61 +213,7 @@ sensor:
 
       return (int)roundf(pct);
 
-
-text_sensor:
-  - platform: homeassistant
-    id: living_room_ac_mode
-    entity_id: climate.living_room_ac
-    on_value:
-      then:
-        - script.execute: set_current_states
-        - script.execute: set_selections
-
-  - platform: homeassistant
-    id: office_ac_mode
-    entity_id: climate.office_ac
-    on_value:
-      then:
-        - script.execute: set_current_states
-        - script.execute: set_selections
-
-  - platform: homeassistant
-    id: bedroom_ac_mode
-    entity_id: climate.bedroom_ac
-    on_value:
-      then:
-        - script.execute: set_current_states
-        - script.execute: set_selections
-
-  - platform: homeassistant
-    id: living_room_fan_mode
-    entity_id: climate.living_room_ac
-    attribute: fan_mode
-    on_value:
-      then:
-        - script.execute: set_current_states
-        - script.execute: set_selections
-
-  - platform: homeassistant
-    id: office_fan_mode
-    entity_id: climate.office_ac
-    attribute: fan_mode
-    on_value:
-      then:
-        - script.execute: set_current_states
-        - script.execute: set_selections
-
-  - platform: homeassistant
-    id: bedroom_fan_mode
-    entity_id: climate.bedroom_ac
-    attribute: fan_mode
-    on_value:
-      then:
-        - script.execute: set_current_states
-        - script.execute: set_selections
-
 binary_sensor:
-
   - platform: gpio
     pin:
       allow_other_uses: true
@@ -359,7 +221,7 @@ binary_sensor:
       mode:
         input: True
         pullup: True
-    name: "On/Off Remote"
+    name: "Power Button"
     internal: True
     filters:
       - invert:
@@ -379,12 +241,15 @@ binary_sensor:
       - invert:
     on_press:
       then:
+        - script.execute: reset_idle_timer
         - lambda: |-
             id(contrast) += 1;
             if (id(contrast) > 10) id(contrast) = 1;
             float contrast_value = id(contrast) * 1.0 / 10;
-            ESP_LOGD("script", "Contrast = %f", contrast_value);
+            ESP_LOGD("display", "Contrast = %f", contrast_value);
             id(oled_display).set_contrast(contrast_value);
+            id(updated_ui) = true;
+        - script.execute: update_display
 
   - platform: gpio
     pin:
@@ -392,17 +257,17 @@ binary_sensor:
       mode:
         input: True
         pullup: True
-    name: "Switch AC"
+    name: "Refresh Battery"
     internal: True
     filters:
       - invert:
     on_press:
       then:
         - script.execute: reset_idle_timer
+        - script.execute: update_battery
         - lambda: |-
-            id(selected_ac_index) += 1;
-            if (id(selected_ac_index) >= 3) id(selected_ac_index) = 0;
-        - script.execute: update_selected_ac
+            id(updated_ui) = true;
+        - script.execute: update_display
 
   - platform: gpio
     pin:
@@ -410,19 +275,14 @@ binary_sensor:
       mode:
         input: True
         pullup: True
+    name: "Light Toggle"
+    internal: True
     filters:
       - invert:
-    name: "AC Toggle Button"
-    internal: True
     on_press:
       then:
         - script.execute: reset_idle_timer
-        - lambda: |-
-            if (id(selected_ac_mode) == "off") {
-              id(selected_ac_mode) = "cool";
-            } else {
-              id(selected_ac_mode) = "off";
-            }
+        - script.execute: toggle_selected_light
 
   - platform: gpio
     pin:
@@ -430,14 +290,14 @@ binary_sensor:
       mode:
         input: True
         pullup: True
-    name: "Switch FAN Mode"
+    name: "Previous Light"
     internal: True
     filters:
       - invert:
     on_press:
       then:
-        - script.execute: change_fan_speed
         - script.execute: reset_idle_timer
+        - script.execute: select_previous_light
 
   - platform: gpio
     pin:
@@ -445,19 +305,14 @@ binary_sensor:
       mode:
         input: True
         pullup: True
-    name: "Switch Mode"
+    name: "Next Light"
     internal: True
     filters:
       - invert:
     on_press:
       then:
         - script.execute: reset_idle_timer
-        - lambda: |-
-            id(selected_ac_mode_index)++;
-            if (id(selected_ac_mode_index) >= AC_MODES_COUNT) {
-              id(selected_ac_mode_index) = 0;
-            }
-        - script.execute: update_selected_mode
+        - script.execute: select_next_light
 
   - platform: gpio
     pin:
@@ -465,18 +320,14 @@ binary_sensor:
       mode:
         input: True
         pullup: True
-    name: "Temp Up"
+    name: "Brightness Up"
     internal: True
     filters:
       - invert:
     on_press:
       then:
         - script.execute: reset_idle_timer
-        - lambda: |-
-            if (id(selected_temp) < 30) id(selected_temp)++;
-            id(updated_ui) = true;
-        - script.execute: update_display
-        - script.execute: await
+        - script.execute: increase_brightness
 
   - platform: gpio
     pin:
@@ -484,29 +335,24 @@ binary_sensor:
       mode:
         input: True
         pullup: True
-    name: "Temp Down"
+    name: "Brightness Down"
     internal: True
     filters:
       - invert:
     on_press:
       then:
         - script.execute: reset_idle_timer
-        - lambda: |-
-            if (id(selected_temp) > 20) id(selected_temp)--;
-            id(updated_ui) = true;
-        - script.execute: update_display
-        - script.execute: reset_idle_timer
-        - script.execute: await
+        - script.execute: decrease_brightness
 
 script:
-
   - id: turn_off
     mode: single
     then:
       - lambda: |-
           auto it = id(oled_display);
           it->clear();
-          it->print(64, 32, id(basic), COLOR_ON, display::TextAlign::CENTER, "POWER OFF");
+          it->print(64, 24, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue8ac");
+          it->print(64, 48, id(small), COLOR_ON, display::TextAlign::CENTER, "POWER OFF");
           it->display();
       - delay: 1s
       - lambda: |-
@@ -518,308 +364,195 @@ script:
       - delay: 5ms
       - deep_sleep.enter: go_sleep
 
-  - id: boot_screen
-    then:
-      - lambda: |-
-          auto it = id(oled_display);
-          it->clear();
-          it->print(64, 24, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue88b");
-          it->print(64, 50, id(small), COLOR_ON, display::TextAlign::CENTER, "LOADING");
-          it->display();
-
-          id(is_booting) = true;
-
   - id: update_battery
     mode: single
     then:
-      - logger.log:
-          level: DEBUG
-          format: "Updating battery state"
       - component.update: battery_adc
       - delay: 50ms
-      - lambda: |-
-          ESP_LOGD("battery", "ADC has state: %d value: %.3f",
-            id(battery_adc).has_state(),
-            id(battery_adc).has_state() ? id(battery_adc).state : -1.0);
       - component.update: battery_voltage
       - component.update: battery_percent
       - lambda: |-
           id(last_battery_update) = millis();
+          id(updated_ui) = true;
+
+  - id: update_selected_light
+    then:
+      - lambda: |-
+          int idx = id(selected_light_index);
+          if (idx < 0) {
+            idx = 0;
+          }
+          if (idx >= LIGHT_LIST_COUNT) {
+            idx = 0;
+            id(selected_light_index) = 0;
+          }
+          id(selected_light_name) = LIGHT_LIST[idx].name;
+          id(selected_light_entity) = LIGHT_LIST[idx].entity_id;
+          id(current_light_state) = "unknown";
+          id(selected_brightness_pct) = 0;
+          id(updated_ui) = true;
+          request_selected_light_status(idx);
+      - script.execute: sync_selected_light_status
+      - script.execute: update_display
+
+  - id: sync_selected_light_status
+    then:
+      - lambda: |-
+          int idx = id(selected_light_index);
+          std::string state = selected_light_state(idx);
+          float brightness = selected_light_brightness(idx);
+
+          if (state == "on") {
+            id(current_light_state) = "on";
+            if (selected_light_has_brightness(idx) && !isnan(brightness) && brightness > 0) {
+              int pct = (int) roundf((brightness / 255.0f) * 100.0f);
+              if (pct < 1) pct = 1;
+              if (pct > 100) pct = 100;
+              id(selected_brightness_pct) = pct;
+            } else if (id(selected_brightness_pct) <= 0) {
+              id(selected_brightness_pct) = 100;
+            }
+            id(updated_ui) = true;
+          } else if (state == "off") {
+            id(current_light_state) = "off";
+            id(selected_brightness_pct) = 0;
+            id(updated_ui) = true;
+          } else {
+            id(current_light_state) = "unknown";
+            id(updated_ui) = true;
+            request_selected_light_status(idx);
+          }
+
+  - id: select_next_light
+    then:
+      - lambda: |-
+          id(selected_light_index)++;
+          if (id(selected_light_index) >= LIGHT_LIST_COUNT) {
+            id(selected_light_index) = 0;
+          }
+      - script.execute: update_selected_light
+
+  - id: select_previous_light
+    then:
+      - lambda: |-
+          id(selected_light_index)--;
+          if (id(selected_light_index) < 0) {
+            id(selected_light_index) = LIGHT_LIST_COUNT - 1;
+          }
+      - script.execute: update_selected_light
+
+  - id: toggle_selected_light
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(current_light_state) == "on";'
+          then:
+            - homeassistant.service:
+                service: light.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_light_entity);'
+            - lambda: |-
+                id(current_light_state) = "off";
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - homeassistant.service:
+                service: light.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_light_entity);'
+                  brightness_pct: !lambda |-
+                    if (id(selected_brightness_pct) <= 0) {
+                      return 100;
+                    }
+                    return id(selected_brightness_pct);
+            - lambda: |-
+                id(current_light_state) = "on";
+                if (id(selected_brightness_pct) <= 0) {
+                  id(selected_brightness_pct) = 100;
+                }
+                id(updated_ui) = true;
+            - script.execute: update_display
+
+  - id: increase_brightness
+    mode: queued
+    then:
+      - lambda: |-
+          int next = id(selected_brightness_pct) + 10;
+          if (next > 100) next = 100;
+          if (next < 10) next = 10;
+          id(selected_brightness_pct) = next;
+          id(current_light_state) = "on";
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: light.turn_on
+          data:
+            entity_id: !lambda 'return id(selected_light_entity);'
+            brightness_pct: !lambda 'return id(selected_brightness_pct);'
+      - script.execute: update_display
+
+  - id: decrease_brightness
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_brightness_pct) <= 10;'
+          then:
+            - homeassistant.service:
+                service: light.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_light_entity);'
+            - lambda: |-
+                id(selected_brightness_pct) = 0;
+                id(current_light_state) = "off";
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - lambda: |-
+                int next = id(selected_brightness_pct) - 10;
+                if (next < 1) next = 1;
+                id(selected_brightness_pct) = next;
+                id(current_light_state) = "on";
+                id(updated_ui) = true;
+            - homeassistant.service:
+                service: light.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_light_entity);'
+                  brightness_pct: !lambda 'return id(selected_brightness_pct);'
+            - script.execute: update_display
 
   - id: update_display
     then:
       - if:
           condition:
-              lambda: 'return id(updated_ui) == true;'
+            lambda: 'return id(updated_ui) == true;'
           then:
-            - logger.log:
-                format: "Screen Reloaded"
-                level: DEBUG
             - lambda: |-
                 auto it = id(oled_display);
+                char status_line[24];
+                char battery_line[24];
+
                 it->clear();
+                it->print(64, 6, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue518");
+                it->print(64, 18, id(small), COLOR_ON, display::TextAlign::CENTER, "SELECTED LIGHT");
+                it->print(64, 30, id(basic), COLOR_ON, display::TextAlign::CENTER, id(selected_light_name).c_str());
 
-                int idx = id(selected_ac_index);
-                auto mode = id(selected_ac_mode);
-                auto fan_mode = id(selected_fan_mode);
-                auto upper_selected_ac = id(selected_ac_name);
-                for (auto & c : upper_selected_ac) c = toupper(c);
-
-                if (mode == "off") {
-
-                  it->print(64, 22, id(symbols_big), COLOR_ON, display::TextAlign::CENTER, "\ue8ac");
-                  it->rectangle(0, 45, 128, 1);
-                  it->print(64, 57, id(basic), COLOR_ON, display::TextAlign::CENTER, upper_selected_ac.c_str());
-
-
-                } else if (mode == "cool") {
-                  
-                  // mode icon
-                  it->print(5, 8, id(symbols), "\ueb3b");
-
-                  // temperature
-                  it->print(64, 22, id(big), COLOR_ON, display::TextAlign::CENTER, std::to_string(id(selected_temp)).c_str());
-                  it->print(85, 4, id(basic), "C");
-                  
-                  if (fan_mode == "high") {
-                    it->filled_rectangle(110, 8, 20, 7);
-                  }
-                  if (fan_mode == "high" or fan_mode == "medium") {
-                    it->filled_rectangle(110, 18, 20, 7);
-                  }
-                  if (fan_mode == "high" or fan_mode == "medium" or fan_mode == "low") {
-                    it->filled_rectangle(110, 28, 20, 7);
-                  }
-
-                  if (fan_mode == "auto") {
-                    it->print(108, 8, id(bigger), "A");
-                  }
-
-                } else if (mode == "fan_only") {
-
-                  it->print(5, 8, id(symbols), "\uf168");
-                  
-                  auto p_fan_mode = fan_mode;
-                  if (p_fan_mode == "medium") {
-                    p_fan_mode = "mid";
-                  }
-
-                  for (auto & c : p_fan_mode) c = toupper(c);
-                  it->print(80, 22, id(bigger), COLOR_ON, display::TextAlign::CENTER, p_fan_mode.c_str());
-
-                } else if (mode == "dry") {
-
-                  it->print(5, 8, id(symbols), "\uf164");
-                  it->print(80, 22, id(bigger), COLOR_ON, display::TextAlign::CENTER, "DRY");
-
+                if (id(current_light_state) == "on") {
+                  snprintf(status_line, sizeof(status_line), "ON %d%%", id(selected_brightness_pct));
+                } else if (id(current_light_state) == "off") {
+                  snprintf(status_line, sizeof(status_line), "OFF");
+                } else {
+                  snprintf(status_line, sizeof(status_line), "UNKNOWN");
                 }
+                it->print(64, 44, id(basic), COLOR_ON, display::TextAlign::CENTER, status_line);
 
-                if (mode != "off") {
-                  
-                  if (fan_mode == "auto") {
-                    it->filled_rectangle(0, 38, 128, 14, COLOR_ON);
-                    it->print(64, 45, id(basic), COLOR_OFF, display::TextAlign::CENTER, upper_selected_ac.c_str());
-                    it->rectangle(42, 51, 44, 21);
-                  } else {
-                    it->rectangle(0, 38, 128, 1);
-                    it->print(64, 46, id(basic), COLOR_ON, display::TextAlign::CENTER, upper_selected_ac.c_str());
-
-                    // draw button guides on UI
-                    it->rectangle(0, 53, 128, 1);
-                    it->rectangle(42, 53, 44, 19);
-                  }
-                  
-                  
-
-                  it->print(21, 59, id(small), COLOR_ON, display::TextAlign::CENTER, "MODE");
-                  
-                  if (mode == "cool" or mode == "fan_only") {
-                    it->print(107, 59, id(small), COLOR_ON, display::TextAlign::CENTER, "FAN");
-                  }
+                if (id(battery_percent).has_state()) {
+                  snprintf(battery_line, sizeof(battery_line), "BAT %.0f%%", id(battery_percent).state);
+                  it->print(64, 58, id(small), COLOR_ON, display::TextAlign::CENTER, battery_line);
                 }
 
                 it->display();
-                
                 id(updated_ui) = false;
-
-  - id: set_current_states
-    mode: restart
-    then:
-      lambda: |-
-        int idx = id(selected_ac_index);
-        if (idx == 0) {
-          id(current_temp) = (int)id(living_room_ac_temp).state;
-          id(current_ac_mode) = id(living_room_ac_mode).state;
-          id(current_fan_mode) = id(living_room_fan_mode).state;
-        } else if (idx == 1) {
-          id(current_temp) = (int)id(office_ac_temp).state;
-          id(current_ac_mode) = id(office_ac_mode).state;
-          id(current_fan_mode) = id(office_fan_mode).state;
-        } else if (idx == 2) {
-          id(current_temp) = (int)id(bedroom_ac_temp).state;
-          id(current_ac_mode) = id(bedroom_ac_mode).state;
-          id(current_fan_mode) = id(bedroom_fan_mode).state;
-        }
-
-        if (id(current_ac_mode) == "") {
-          id(current_ac_mode) = "unknown";
-          id(current_fan_mode) = "unknown";
-          id(current_temp) = -1;
-        }
-
-  - id: set_selections
-    mode: restart
-    then:
-      lambda: |-
-        if (id(current_ac_mode) != "unknown" and id(current_ac_mode) != "") {
-
-          bool update = false;
-          if (id(selected_ac_mode) != id(current_ac_mode)) {
-            id(selected_ac_mode) = id(current_ac_mode);
-            for (int i = 0; i < AC_MODES_COUNT; i++) {
-              if (strcmp(AC_MODES[i], id(selected_ac_mode).c_str()) == 0) {
-                id(selected_ac_mode_index) = i;
-                break;
-              }
-            }
-
-            update = true;
-          }
-          
-
-          if (id(selected_temp) != id(current_temp)) {
-            id(selected_temp) = id(current_temp);
-            update = true;
-          }
-          
-          if (id(selected_fan_mode) != id(current_fan_mode)) {
-            id(selected_fan_mode) = id(current_fan_mode);
-            update = true;
-          }
-
-
-          if (id(selected_fan_mode) != id(current_fan_mode)) {
-            std::vector<std::string> fan_speeds;
-            if (id(selected_ac_index) == 0) {
-              fan_speeds = {"low", "high"};
-            } else {
-              fan_speeds = {"auto", "low", "medium", "high"};
-            }
-
-
-            for (int i = 0; i < AC_MODES_COUNT; i++) {
-              if (strcmp(AC_MODES[i], id(current_fan_mode).c_str()) == 0) {
-                id(selected_fan_index) = i;
-                break;
-              }
-            }
-            update = true;
-          }
-
-          id(updated_ui) = true;
-        }
-
-  - id: update_selected_ac
-    then:
-      - lambda: |-
-          int idx = id(selected_ac_index);
-          if (idx >= 0 && idx < AC_LIST_COUNT) {
-            id(selected_ac) = AC_LIST[idx].entity_id;
-            id(selected_ac_name) = AC_LIST[idx].name;
-          }
-      - script.execute: set_current_states
-      - script.execute: set_selections
-      - script.execute: update_display
-
-  - id: update_selected_mode
-    then:
-      - lambda: |-
-          int idx = id(selected_ac_mode_index);
-          if (idx >= 0 && idx < AC_MODES_COUNT) {
-            id(selected_ac_mode) = AC_MODES[idx];
-          }
-          id(updated_ui) = true;
-      - script.execute: await
-
-  - id: change_fan_speed
-    mode: restart
-    then:
-      - lambda: |-
-          std::vector<std::string> fan_speeds;
-          if (id(selected_ac_index) == 0) {
-            fan_speeds = {"low", "high"};
-          } else {
-            fan_speeds = {"auto", "low", "medium", "high"};
-          }
-
-          id(selected_fan_index)++;
-          if (id(selected_fan_index) >= fan_speeds.size()) {
-            id(selected_fan_index) = 0;
-          }
-
-          id(selected_fan_mode) = fan_speeds[id(selected_fan_index)];
-          id(updated_ui) = true;
-      - script.execute: update_display
-      - script.execute: await
-
-  - id: send_mode_update
-    mode: queued
-    then:
-      - logger.log:
-          format: "Change Mode for %s :: %s"
-          args: [ 'id(selected_ac).c_str()', 'id(selected_ac_mode).c_str()' ]
-          level: DEBUG
-      - homeassistant.service:
-          service: climate.set_hvac_mode
-          data:
-            entity_id: !lambda 'return id(selected_ac);'
-            hvac_mode: !lambda 'return id(selected_ac_mode);'
-
-  - id: send_temp_update
-    mode: queued
-    then:
-      - logger.log:
-          format: "Change Temp for %s :: %d"
-          args: [ 'id(selected_ac).c_str()', 'id(selected_temp)' ]
-          level: DEBUG
-      - homeassistant.service:
-          service: climate.set_temperature
-          data:
-            entity_id: !lambda 'return id(selected_ac);'
-            temperature: !lambda 'return id(selected_temp);'
-
-  - id: send_fan_update
-    mode: queued
-    then:
-      - logger.log:
-          format: "Change Fan Mode for %s :: %s"
-          args: [ 'id(selected_ac).c_str()', 'id(selected_fan_mode).c_str()' ]
-          level: DEBUG
-      - homeassistant.service:
-          service: climate.set_fan_mode
-          data:
-            entity_id: !lambda 'return id(selected_ac);'
-            fan_mode: !lambda 'return id(selected_fan_mode);'
-
-  - id: update_ac
-    then:
-      - if:
-          condition:
-              lambda: 'return id(debounce_active) == false and id(selected_ac_mode) != id(current_ac_mode);'
-          then:
-            - script.execute: send_mode_update
-      - if:
-          condition:
-              lambda: 'return id(debounce_active) == false and id(selected_fan_mode) != id(current_fan_mode);'
-          then:
-            - script.execute: send_fan_update
-      - if:
-          condition:
-              lambda: 'return id(debounce_active) == false and id(selected_temp) != id(current_temp);'
-          then:
-            - script.execute: send_temp_update
-      - script.execute: set_current_states
-      - script.execute: update_display
 
   - id: reset_idle_timer
     mode: restart
@@ -827,28 +560,19 @@ script:
       - lambda: |-
           id(last_active) = millis() / 1000;
 
-  - id: await
-    mode: restart
-    then:
-      - lambda: |-
-          id(debounce_active) = true;
-      - delay: 1s
-      - lambda: |-
-          id(debounce_active) = false;
-
 interval:
   - interval: 500ms
     then:
       - if:
           condition:
-              lambda: 'return (millis() / 1000) - id(last_active) >= 120;' # 2 minutes
+            lambda: 'return (millis() / 1000) - id(last_active) >= 120;'
           then:
             - script.execute: turn_off
           else:
+            - script.execute: sync_selected_light_status
             - if:
                 condition:
-                    lambda: 'return id(current_ac_mode) == "unknown";'
+                  lambda: 'return millis() - id(last_battery_update) >= 300000;'
                 then:
-                  - script.execute: boot_screen
-                else:
-                  - script.execute: update_ac
+                  - script.execute: update_battery
+            - script.execute: update_display
