@@ -449,8 +449,8 @@ script:
 
                 it->clear();
                 it->print(64, 8, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue518");
-                it->print(64, 21, id(small), COLOR_ON, display::TextAlign::CENTER, "SELECTED LIGHT");
-                it->print(64, 33, id(basic), COLOR_ON, display::TextAlign::CENTER, id(selected_light_name).c_str());
+                it->print(64, 22, id(small), COLOR_ON, display::TextAlign::CENTER, "SELECTED LIGHT");
+                it->print(64, 34, id(basic), COLOR_ON, display::TextAlign::CENTER, id(selected_light_name).c_str());
 
                 if (id(current_light_state) == "on") {
                   snprintf(status_line, sizeof(status_line), "ON %d%%", id(selected_brightness_pct));
@@ -461,8 +461,8 @@ script:
                 }
 
                 snprintf(brightness_line, sizeof(brightness_line), "[ << ]    [ Contrast ]     [ >> ]");
-                it->print(64, 47, id(basic), COLOR_ON, display::TextAlign::CENTER, status_line);
-                it->print(64, 58, id(small), COLOR_ON, display::TextAlign::CENTER, brightness_line);
+                it->print(64, 48, id(basic), COLOR_ON, display::TextAlign::CENTER, status_line);
+                it->print(64, 59, id(small), COLOR_ON, display::TextAlign::CENTER, brightness_line);
                 it->display();
                 id(updated_ui) = false;
 
