@@ -2,6 +2,7 @@ substitutions:
   BOARD: "esp32dev"
   DEVICE_NAME: "esp32_remote"
   FRIENDLY_NAME: "ESP32 Remote"
+  VERSION: "1.0"
   PIN_WAKE: "0"
   PIN_I2C_SDA: "27"
   PIN_I2C_SCL: "25"
