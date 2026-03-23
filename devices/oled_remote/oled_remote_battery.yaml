@@ -22,6 +22,7 @@ api:
 
 ota:
   - platform: esphome
+    password: !secret ota_password
 
 font:
   - file: "fonts/arial_bold.ttf"
