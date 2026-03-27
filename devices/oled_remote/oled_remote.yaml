@@ -8,15 +8,15 @@ substitutions:
   PIN_WAKE: "0"
   PIN_I2C_SDA: "27"
   PIN_I2C_SCL: "25"
-  PIN_BTN_CONTRAST: "32"
-  PIN_BTN_SWITCH: "14"
-  PIN_BTN_POWER_SWITCH: "26"
   PIN_BTN_NEXT: "33"
   PIN_BTN_PREV: "22"
-  PIN_BTN_DIMMER_UP: "23"
-  PIN_BTN_DIMMER_UP_2: "5"
-  PIN_BTN_DIMMER_DOWN: "19"
-  PIN_BTN_DIMMER_DOWN_2: "18"
+  PIN_BTN_CONTRAST: "32"
+  PIN_BTN_MODE: "14"
+  PIN_BTN_AUTOMATION: "26"
+  PIN_BTN_LIGHT_CONTROL: "23"
+  PIN_BTN_PLAY_PAUSE: "5"
+  PIN_BTN_DIMMER_UP: "19"
+  PIN_BTN_DIMMER_DOWN: "18"
 
 font:
   - file: "fonts/arial_bold.ttf"
@@ -85,7 +85,7 @@ ota:
     password: !secret ota_password
 
 logger:
-  level: INFO # DEBUG
+  level: DEBUG # INFO
 
 deep_sleep:
   id: go_sleep
@@ -232,11 +232,11 @@ binary_sensor:
 
   - platform: gpio
     pin:
-      number: ${PIN_BTN_SWITCH}
+      number: ${PIN_BTN_MODE}
       mode:
         input: True
         pullup: True
-    name: "No Function"
+    name: "Mode - No Function"
     internal: True
     filters:
       - invert:
@@ -246,7 +246,21 @@ binary_sensor:
 
   - platform: gpio
     pin:
-      number: ${PIN_BTN_POWER_SWITCH}
+      number: ${PIN_BTN_AUTOMATION}
+      mode:
+        input: True
+        pullup: True
+    name: "Automation - No Function"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_LIGHT_CONTROL}
       mode:
         input: True
         pullup: True
@@ -261,26 +275,25 @@ binary_sensor:
 
   - platform: gpio
     pin:
-      number: ${PIN_BTN_DIMMER_UP}
+      number: ${PIN_BTN_PLAY_PAUSE}
       mode:
         input: True
         pullup: True
-    name: "Light Brightness Up"
+    name: "Play/Pause - No Function"
     internal: True
     filters:
       - invert:
     on_press:
       then:
         - script.execute: reset_idle_timer
-        - script.execute: increase_brightness
 
   - platform: gpio
     pin:
-      number: ${PIN_BTN_DIMMER_UP_2}
+      number: ${PIN_BTN_DIMMER_UP}
       mode:
         input: True
         pullup: True
-    name: "Light Brightness Up 2"
+    name: "Light Brightness Up"
     internal: True
     filters:
       - invert:
@@ -302,22 +315,7 @@ binary_sensor:
     on_press:
       then:
         - script.execute: reset_idle_timer
-        - script.execute: decrease_brightness
-
-  - platform: gpio
-    pin:
-      number: ${PIN_BTN_DIMMER_DOWN_2}
-      mode:
-        input: True
-        pullup: True
-    name: "Light Brightness Down 2"
-    internal: True
-    filters:
-      - invert:
-    on_press:
-      then:
-        - script.execute: reset_idle_timer
-        - script.execute: decrease_brightness        
+        - script.execute: decrease_brightness 
 
 script:
   - id: turn_off
