@@ -155,10 +155,6 @@ globals:
     type: bool
     initial_value: 'true'
 
-  - id: show_boot_screen
-    type: bool
-    initial_value: 'true'
-
   - id: selected_light_index
     type: int
     initial_value: '0'
@@ -511,10 +507,6 @@ script:
             id(updated_ui) = true;
           }
 
-          if (next_state == "on" || next_state == "off") {
-            id(show_boot_screen) = false;
-          }
-
   - id: select_next_light
     then:
       - lambda: |-
@@ -706,7 +698,7 @@ interval:
                 }
             - if:
                 condition:
-                  lambda: 'return id(show_boot_screen) && id(current_light_state) == "unknown";'
+                  lambda: 'return id(current_light_state) == "unknown";'
                 then:
                   - script.execute: boot_screen
                   - script.execute: sync_selected_light_status
