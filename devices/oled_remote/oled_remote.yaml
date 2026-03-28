@@ -19,28 +19,51 @@ substitutions:
   PIN_BTN_DIMMER_DOWN: "18"
 
 font:
-  - file: "fonts/arial_bold.ttf"
-    id: basic
-    size: 13
-    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "%", "[", "]"]
-  - file: "fonts/arial_bold.ttf"
-    id: small
+  - file: "fonts/arial-bold.ttf"
+    id: tiny_font
+    size: 8
+    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]"]
+  - file: "fonts/arial-bold.ttf"
+    id: small_font
     size: 9
     glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]"]
-  - file: "fonts/arial_bold.ttf"
-    id: tiny
-    size: 8
+  - file: "fonts/arial-bold.ttf"
+    id: medium_font
+    size: 13
     glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]"]
   - file:
       type: gfonts
       family: Material+Symbols+Rounded
       weight: 400
     id: symbols
-    size: 16
+    size: 12
     glyphs: [
-      "\ue518", # lightbulb
-      "\ue8ac", # power off
-      "\ue88b", # loading
+      "\ue90f", # light_mode
+      "\ue1ac", # brightness_high
+      "\ue030", # library_music
+      "\ue3a1", # audiotrack
+      "\ue050", # volume_up
+      "\ue04d", # volume_down
+      "\ue04e", # volume_mute
+      "\ue80d", # share
+      "\uf076", # thermostat
+    ]
+  - file:
+      type: gfonts
+      family: Material+Symbols+Rounded
+      weight: 400
+    id: medium_symbols
+    size: 15
+    glyphs: [
+      "\ueac3", # keyboard_double_arrow_left
+      "\ueac9", # keyboard_double_arrow_right
+      "\ue5cb", # chevron_left
+      "\ue5cc", # chevron_right
+      "\ue045", # skip_previous
+      "\ue044", # skip_next
+      "\ue88b", # hourglass_empty
+      "\ue334", # watch
+      "\ue8ac", # power_settings_new
     ]
 
 esphome:
@@ -324,8 +347,8 @@ script:
       - lambda: |-
           auto it = id(oled_display);
           it->clear();
-          it->print(64, 24, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue8ac");
-          it->print(64, 48, id(small), COLOR_ON, display::TextAlign::CENTER, "POWER OFF");
+          it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue8ac");
+          it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "POWER OFF");
           it->display();
       - delay: 1s
       - lambda: |-
@@ -360,9 +383,9 @@ script:
       - lambda: |-
           auto it = id(oled_display);
           it->clear();
-          it->print(64, 16, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue88b");
-          it->print(64, 35, id(small), COLOR_ON, display::TextAlign::CENTER, "LOADING");
-          it->print(64, 50, id(small), COLOR_ON, display::TextAlign::CENTER, "V${VERSION}");
+          it->print(64, 16, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue334");
+          it->print(64, 35, id(small_font), COLOR_ON, display::TextAlign::CENTER, "LOADING");
+          it->print(64, 50, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "V${VERSION}");
           it->display();
 
   - id: sync_selected_light_status
@@ -514,7 +537,7 @@ script:
                 char status_line[16];
                 char footer_line[32];
                 const int bar_x = 14;
-                const int bar_y = 46;
+                const int bar_y = 45;
                 const int bar_w = 100;
                 const int bar_h = 8;
                 int bar_fill = 0;
@@ -522,9 +545,12 @@ script:
                 bool show_contrast_feedback = (millis() - id(last_contrast_interaction)) <= 3000;
 
                 it->clear();
-                it->print(20, 6, id(symbols), COLOR_ON, display::TextAlign::CENTER, "\ue518");
-                it->print(74, 6, id(small), COLOR_ON, display::TextAlign::CENTER, "SELECTED LIGHT");
-                it->print(64, 22, id(basic), COLOR_ON, display::TextAlign::CENTER, id(selected_light_name).c_str());
+                it->print(22, -3, id(symbols), COLOR_ON, display::TextAlign::LEFT, "\ue90f");
+                it->printf(64, 4, id(small_font), COLOR_ON, display::TextAlign::CENTER, "LIGHTING");
+                it->print(106, -3, id(symbols), COLOR_ON, display::TextAlign::RIGHT, "\ue90f");
+
+                it->filled_rectangle(0, 12, 128, 1, COLOR_ON);
+                it->printf(64, 22, id(medium_font), COLOR_ON, display::TextAlign::CENTER, id(selected_light_name).c_str());
 
                 if (id(current_light_state) == "on") {
                   snprintf(status_line, sizeof(status_line), "ON");
@@ -537,19 +563,27 @@ script:
                   snprintf(status_line, sizeof(status_line), "SYNCING");
                 }
 
-                it->print(64, 37, id(basic), COLOR_ON, display::TextAlign::CENTER, status_line);
+                it->print(64, 37, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
                 if (show_brightness_bar) {
                   it->rectangle(bar_x, bar_y, bar_w, bar_h, COLOR_ON);
                   if (bar_fill > 0) {
                     it->filled_rectangle(bar_x + 1, bar_y + 1, bar_fill, bar_h - 2, COLOR_ON);
                   }
                   snprintf(footer_line, sizeof(footer_line), "BRIGHTNESS %d%%", id(selected_brightness_pct));
+                  it->print(64, 58, id(small_font), COLOR_ON, display::TextAlign::CENTER, footer_line);
                 } else if (show_contrast_feedback) {
                   snprintf(footer_line, sizeof(footer_line), "CONTRAST %d%%", id(contrast) * 10);
+                  it->filled_rectangle(0, 51, 128, 1, COLOR_ON);
+                  it->print(64, 58, id(small_font), COLOR_ON, display::TextAlign::CENTER, footer_line);
                 } else {
-                  snprintf(footer_line, sizeof(footer_line), "[PREV]   [CONTRAST]   [NEXT]");
+                    it->filled_rectangle(0, 51, 128, 1, COLOR_ON);
+                    it->filled_rectangle(40, 52, 1, 12, COLOR_ON);
+                    it->filled_rectangle(88, 52, 1, 12, COLOR_ON);
+                    it->printf(10, 50, id(medium_symbols), COLOR_ON, "\ueac3");
+                    it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                    it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9"); 
                 }
-                it->print(64, 58, id(tiny), COLOR_ON, display::TextAlign::CENTER, footer_line);
                 it->display();
                 id(updated_ui) = false;
 
