@@ -62,7 +62,6 @@ font:
       "\ue045", # skip_previous
       "\ue044", # skip_next
       "\ue88b", # hourglass_empty
-      "\ue334", # watch
       "\ue8ac", # power_settings_new
     ]
 
@@ -383,7 +382,7 @@ script:
       - lambda: |-
           auto it = id(oled_display);
           it->clear();
-          it->print(64, 16, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue334");
+          it->print(64, 16, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue88b");
           it->print(64, 35, id(small_font), COLOR_ON, display::TextAlign::CENTER, "LOADING");
           it->print(64, 50, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "V${VERSION}");
           it->display();
