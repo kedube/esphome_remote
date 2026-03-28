@@ -550,9 +550,10 @@ script:
       - lambda: |-
           auto it = id(oled_display);
           it->clear();
-          it->print(64, 16, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ueb31");
-          it->print(64, 35, id(small_font), COLOR_ON, display::TextAlign::CENTER, "CONNECTING...");
-          it->print(64, 50, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "V${VERSION}");
+          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ueb31");
+          it->print(64, 26, id(small_font), COLOR_ON, display::TextAlign::CENTER, "CONNECTING TO");
+          it->print(64, 38, id(small_font), COLOR_ON, display::TextAlign::CENTER, "HOME ASSISTANT");
+          it->print(64, 56, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "V${VERSION}");
           it->display();
 
   - id: cycle_mode
@@ -1314,8 +1315,8 @@ script:
                     it->print(64, 58, id(small_font), COLOR_ON, display::TextAlign::CENTER, footer_line);
                   } else {
                     it->filled_rectangle(0, 52, 128, 1, COLOR_ON);
-                    it->filled_rectangle(40, 53, 1, 11, COLOR_ON);
-                    it->filled_rectangle(88, 54, 1, 11, COLOR_ON);
+                    it->filled_rectangle(38, 53, 1, 11, COLOR_ON);
+                    it->filled_rectangle(90, 54, 1, 11, COLOR_ON);
                     it->printf(10, 50, id(medium_symbols), COLOR_ON, "\ueac3");
                     it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
                     it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
@@ -1338,21 +1339,20 @@ script:
                     it->print(64, 58, id(small_font), COLOR_ON, display::TextAlign::CENTER, footer_line);
                   } else {
                     it->filled_rectangle(0, 52, 128, 1, COLOR_ON);
-                    it->filled_rectangle(40, 53, 1, 11, COLOR_ON);
-                    it->filled_rectangle(88, 53, 1, 11, COLOR_ON);
+                    it->filled_rectangle(38, 53, 1, 11, COLOR_ON);
+                    it->filled_rectangle(90, 53, 1, 11, COLOR_ON);
                     it->printf(10, 50, id(medium_symbols), COLOR_ON, "\ueac3");
-                    it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                    if (hvac_label != "SYNCING" && action_label != "UNKNOWN") {
+                      snprintf(status_line, sizeof(status_line), "%s", action_label.c_str());
+                      it->print(64, 58, id(small_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+                    } else {
+                      it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                    }
                     it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
                   }
 
-                  if (show_climate_feedback) {
-                    snprintf(detail_line, sizeof(detail_line), "TARGET");
-                    it->print(64, 46, id(small_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
-                  } else if (action_label != "UNKNOWN" && action_label != "OFF") {
+                  if (hvac_label == "SYNCING" || action_label == "UNKNOWN") {
                     snprintf(detail_line, sizeof(detail_line), "%s", action_label.c_str());
-                    it->print(64, 46, id(small_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
-                  } else if (hvac_label != "SYNCING") {
-                    snprintf(detail_line, sizeof(detail_line), "%s", hvac_label.c_str());
                     it->print(64, 46, id(small_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
                   }
 
@@ -1385,8 +1385,8 @@ script:
                       it->print(64, 58, id(small_font), COLOR_ON, display::TextAlign::CENTER, footer_line);
                     } else {
                       it->filled_rectangle(0, 52, 128, 1, COLOR_ON);
-                      it->filled_rectangle(40, 53, 1, 11, COLOR_ON);
-                      it->filled_rectangle(88, 53, 1, 11, COLOR_ON);
+                      it->filled_rectangle(38, 53, 1, 11, COLOR_ON);
+                      it->filled_rectangle(90, 53, 1, 11, COLOR_ON);
                       it->printf(10, 50, id(medium_symbols), COLOR_ON, "\ue045");
                       if (playback == "PAUSED") {
                         it->printf(64, 58, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "PAUSED");
@@ -1418,8 +1418,8 @@ script:
                       it->print(64, 58, id(small_font), COLOR_ON, display::TextAlign::CENTER, footer_line);
                     } else {
                       it->filled_rectangle(0, 52, 128, 1, COLOR_ON);
-                      it->filled_rectangle(40, 53, 1, 11, COLOR_ON);
-                      it->filled_rectangle(88, 53, 1, 11, COLOR_ON);
+                      it->filled_rectangle(38, 53, 1, 11, COLOR_ON);
+                      it->filled_rectangle(90, 53, 1, 11, COLOR_ON);
                       it->printf(10, 50, id(medium_symbols), COLOR_ON, "\ueac3");
                       it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
                       it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
