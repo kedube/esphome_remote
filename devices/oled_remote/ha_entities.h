@@ -171,6 +171,35 @@ static inline int mode_item_count(RemoteMode mode) {
   }
 }
 
+static inline bool mode_is_available(RemoteMode mode) {
+  return mode_item_count(mode) > 0;
+}
+
+static inline RemoteMode first_available_mode() {
+  for (int i = 0; i < REMOTE_MODE_COUNT; i++) {
+    RemoteMode mode = static_cast<RemoteMode>(i);
+    if (mode_is_available(mode)) {
+      return mode;
+    }
+  }
+  return REMOTE_MODE_TIME;
+}
+
+static inline RemoteMode next_available_mode(RemoteMode current, int step) {
+  if (step == 0) {
+    return mode_is_available(current) ? current : first_available_mode();
+  }
+
+  for (int i = 0; i < REMOTE_MODE_COUNT; i++) {
+    int next = (int(current) + step + (step > 0 ? i : -i) + REMOTE_MODE_COUNT * 2) % REMOTE_MODE_COUNT;
+    RemoteMode mode = static_cast<RemoteMode>(next);
+    if (mode_is_available(mode)) {
+      return mode;
+    }
+  }
+  return first_available_mode();
+}
+
 static inline std::string mode_item_name(RemoteMode mode, int idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:

@@ -21,8 +21,8 @@ substitutions:
 packages:
   select_pcb: !include 
     # Select the appropriate PCB file to include based on your remote control hardware revision.
-    file: pcb_proto.yaml
-    #file: pcb_rev31.yaml
+    #file: pcb_proto.yaml
+    file: pcb_rev31.yaml
 
 font:
   - file: "fonts/arial-bold.ttf"
@@ -1554,7 +1554,8 @@ script:
                   } else {
                     snprintf(status_line, sizeof(status_line), "SYNCING");
                   }
-                  it->print(64, 35, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                  it->print(64, 35, id(small_font), COLOR_ON, display::TextAlign::CENTER, status_line);
 
                   if (show_brightness_bar) {
                     it->rectangle(bar_x, bar_y, bar_w, bar_h, COLOR_ON);
@@ -1722,12 +1723,11 @@ script:
                   std::string date_label = format_date();
 
                   it->print(64, 20, id(medium_font), COLOR_ON, display::TextAlign::CENTER, time_label.c_str());
-                  it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, date_label.c_str());
+                  it->print(64, 34, id(small_font), COLOR_ON, display::TextAlign::CENTER, date_label.c_str());
                   if (id(battery_monitoring_available)) {
-                    snprintf(detail_line, sizeof(detail_line), "BATTERY: %d%% (%.2fV)", id(battery_percentage), id(battery_voltage));
+                    snprintf(detail_line, sizeof(detail_line), "BATTERY: %d%% (%.2fV)", id(battery_percentage),
+                             id(battery_voltage));
                     it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
-                  } else {
-                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "BATTERY: N/A");
                   }
 
                   if (show_contrast_feedback) {

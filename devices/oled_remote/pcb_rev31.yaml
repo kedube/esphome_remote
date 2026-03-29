@@ -4,6 +4,12 @@ substitutions:
     PIN_BTN_PLAY_PAUSE: "17"
     PIN_OLED_EN: "15"
 
+esphome:
+  on_boot:
+    - priority: -10
+      then:
+        - script.execute: update_battery
+
 output:
   - platform: gpio
     pin: ${PIN_OLED_EN}
@@ -19,7 +25,7 @@ sensor:
       - multiply: 1.68
 
   - platform: template
-    id: battery_voltage
+    id: battery_voltage_sensor
     name: "Battery Voltage"
     unit_of_measurement: "V"
     device_class: voltage
@@ -33,7 +39,7 @@ sensor:
       return id(battery_adc).state;
 
   - platform: template
-    id: battery_percent
+    id: battery_percent_sensor
     name: "Battery"
     unit_of_measurement: "%"
     accuracy_decimals: 0
@@ -99,7 +105,17 @@ script:
           ESP_LOGD("battery", "ADC has state: %d value: %.3f",
             id(battery_adc).has_state(),
             id(battery_adc).has_state() ? id(battery_adc).state : -1.0);
-      - component.update: battery_voltage
-      - component.update: battery_percent
+      - component.update: battery_voltage_sensor
+      - component.update: battery_percent_sensor
       - lambda: |-
+          id(battery_monitoring_available) = true;
+          id(battery_voltage) = id(battery_voltage_sensor).has_state() ? id(battery_voltage_sensor).state : NAN;
+          id(battery_percentage) =
+              id(battery_percent_sensor).has_state() ? int(roundf(id(battery_percent_sensor).state)) : 0;
           id(last_battery_update) = millis();
+          id(updated_ui) = true;
+
+interval:
+  - interval: 5min
+    then:
+      - script.execute: update_battery
