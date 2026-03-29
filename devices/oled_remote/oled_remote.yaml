@@ -192,6 +192,10 @@ globals:
     type: uint32_t
     initial_value: '0'
 
+  - id: last_media_volume_interaction
+    type: uint32_t
+    initial_value: '0'
+
   - id: last_automation_interaction
     type: uint32_t
     initial_value: '0'
@@ -558,6 +562,7 @@ script:
           id(last_brightness_interaction) = 0;
           id(last_climate_interaction) = 0;
           id(last_media_interaction) = 0;
+          id(last_media_volume_interaction) = 0;
           id(last_automation_interaction) = 0;
           id(updated_ui) = true;
       - script.execute: update_selected_item
@@ -1031,10 +1036,32 @@ script:
   - id: media_play_pause
     mode: queued
     then:
-      - homeassistant.service:
-          service: media_player.media_play_pause
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "playing";'
+          then:
+            - homeassistant.service:
+                service: media_player.media_pause
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "paused";
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(selected_item_state) == "paused";'
+                then:
+                  - homeassistant.service:
+                      service: media_player.media_play
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                  - lambda: |-
+                      id(selected_item_state) = "playing";
+                else:
+                  - homeassistant.service:
+                      service: media_player.media_play_pause
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
       - lambda: |-
           id(last_media_interaction) = millis();
           id(updated_ui) = true;
@@ -1072,6 +1099,7 @@ script:
           if (next > 100) next = 100;
           if (next < 0) next = 0;
           id(selected_media_volume_pct) = next;
+          id(last_media_volume_interaction) = millis();
           id(last_media_interaction) = millis();
           id(updated_ui) = true;
       - homeassistant.service:
@@ -1344,7 +1372,8 @@ script:
                     (now - id(last_climate_target_focus_interaction)) <= 5000 &&
                     id(climate_target_focus) != 0 && mode == REMOTE_MODE_CLIMATE;
                 bool show_media_feedback =
-                    id(last_media_interaction) > 0 && (now - id(last_media_interaction)) <= 3000 &&
+                    id(last_media_volume_interaction) > 0 &&
+                    (now - id(last_media_volume_interaction)) <= 3000 &&
                     mode == REMOTE_MODE_MUSIC;
                 bool show_automation_feedback =
                     id(last_automation_interaction) > 0 && (now - id(last_automation_interaction)) <= 5000 &&
@@ -1570,8 +1599,8 @@ interval:
                   id(last_climate_target_focus_interaction) = 0;
                   id(updated_ui) = true;
                 }
-                uint32_t media_elapsed = now - id(last_media_interaction);
-                if (id(last_media_interaction) > 0 && media_elapsed > 3000 && media_elapsed < 3500) {
+                uint32_t media_elapsed = now - id(last_media_volume_interaction);
+                if (id(last_media_volume_interaction) > 0 && media_elapsed > 3000 && media_elapsed < 3500) {
                   id(updated_ui) = true;
                 }
                 uint32_t automation_elapsed = now - id(last_automation_interaction);
