@@ -1564,7 +1564,9 @@ script:
                   }
                   if (show_climate_target_focus) {
                     if (!isnan(id(climate_target_focus_value))) {
-                      if (id(climate_target_focus) == 2) {
+                      if (!has_dual_target) {
+                        snprintf(status_line, sizeof(status_line), "TARGET: %.0f°F", id(climate_target_focus_value));
+                      } else if (id(climate_target_focus) == 2) {
                         snprintf(status_line, sizeof(status_line), "HIGH: %.0f°F", id(climate_target_focus_value));
                       } else {
                         snprintf(status_line, sizeof(status_line), "LOW: %.0f°F", id(climate_target_focus_value));
@@ -1602,11 +1604,6 @@ script:
                       it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
                     }
                     it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
-                  }
-
-                  if (hvac_label == "SYNCING" || action_label == "UNKNOWN") {
-                    snprintf(detail_line, sizeof(detail_line), "%s", action_label.c_str());
-                    it->print(64, 46, id(small_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
                   }
 
                 } else {
