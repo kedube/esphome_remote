@@ -118,7 +118,7 @@ static inline float ha_parse_float(esphome::StringRef state) {
   return ha_state_missing(value) ? NAN : strtof(value.c_str(), nullptr);
 }
 
-template<typename Entity>
+template <typename Entity>
 static inline int find_entity_index(const Entity *entities, int count, const std::string &entity_id) {
   for (int i = 0; i < count; i++) {
     if (entity_id == entities[i].entity_id) {
@@ -200,8 +200,8 @@ static inline AutomationKind automation_kind(int idx) {
   return (idx >= 0 && idx < AUTOMATION_LIST_COUNT) ? AUTOMATION_LIST[idx].kind : AUTOMATION_KIND_SCRIPT;
 }
 
-static inline int &selected_index_ref(RemoteMode mode, int &light_idx, int &climate_idx, int &media_idx,
-                                      int &automation_idx) {
+static inline int &selected_index_ref(
+    RemoteMode mode, int &light_idx, int &climate_idx, int &media_idx, int &automation_idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTING:
       return light_idx;
@@ -231,12 +231,23 @@ static inline int wrapped_mode_index(int idx, int count, int step) {
   return idx;
 }
 
+static inline const std::string &unknown_string() {
+  static const std::string unknown = "unknown";
+  return unknown;
+}
+
+static inline const std::string &empty_string() {
+  static const std::string empty;
+  return empty;
+}
+
 class LightStatusTracker : public esphome::api::CustomAPIDevice {
  public:
   void setup() {
     for (int i = 0; i < LIGHT_LIST_COUNT; i++) {
       this->subscribe_homeassistant_state(&LightStatusTracker::on_light_state_, LIGHT_LIST[i].entity_id);
-      this->subscribe_homeassistant_state(&LightStatusTracker::on_light_brightness_, LIGHT_LIST[i].entity_id, "brightness");
+      this->subscribe_homeassistant_state(
+          &LightStatusTracker::on_light_brightness_, LIGHT_LIST[i].entity_id, "brightness");
     }
     this->request_all_states();
   }
@@ -262,9 +273,8 @@ class LightStatusTracker : public esphome::api::CustomAPIDevice {
   bool has_state(int idx) const { return idx >= 0 && idx < LIGHT_LIST_COUNT && this->has_state_[idx]; }
 
   const std::string &state(int idx) const {
-    static const std::string unknown = "unknown";
     if (idx < 0 || idx >= LIGHT_LIST_COUNT) {
-      return unknown;
+      return unknown_string();
     }
     return this->state_[idx];
   }
@@ -363,25 +373,22 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   const std::string &state(int idx) const {
-    static const std::string unknown = "unknown";
     if (idx < 0 || idx >= CLIMATE_LIST_COUNT) {
-      return unknown;
+      return unknown_string();
     }
     return this->state_[idx];
   }
 
   const std::string &hvac_action(int idx) const {
-    static const std::string unknown = "unknown";
     if (idx < 0 || idx >= CLIMATE_LIST_COUNT) {
-      return unknown;
+      return unknown_string();
     }
     return this->hvac_action_[idx];
   }
 
   const std::string &preset_mode(int idx) const {
-    static const std::string none = "";
     if (idx < 0 || idx >= CLIMATE_LIST_COUNT) {
-      return none;
+      return empty_string();
     }
     return this->preset_mode_[idx];
   }
@@ -468,7 +475,9 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
     this->state_[idx] = ha_state_or_unknown(state);
   }
 
-  void store_target_temperature_(int idx, esphome::StringRef state) { this->target_temperature_[idx] = ha_parse_float(state); }
+  void store_target_temperature_(int idx, esphome::StringRef state) {
+    this->target_temperature_[idx] = ha_parse_float(state);
+  }
 
   void store_target_temperature_low_(int idx, esphome::StringRef state) {
     this->target_temperature_low_[idx] = ha_parse_float(state);
@@ -478,9 +487,13 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
     this->target_temperature_high_[idx] = ha_parse_float(state);
   }
 
-  void store_current_temperature_(int idx, esphome::StringRef state) { this->current_temperature_[idx] = ha_parse_float(state); }
+  void store_current_temperature_(int idx, esphome::StringRef state) {
+    this->current_temperature_[idx] = ha_parse_float(state);
+  }
 
-  void store_hvac_action_(int idx, esphome::StringRef state) { this->hvac_action_[idx] = ha_state_or_unknown(state); }
+  void store_hvac_action_(int idx, esphome::StringRef state) {
+    this->hvac_action_[idx] = ha_state_or_unknown(state);
+  }
 
   void store_preset_mode_(int idx, esphome::StringRef state) { this->preset_mode_[idx] = state.str(); }
 
@@ -536,33 +549,29 @@ class MediaStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   const std::string &state(int idx) const {
-    static const std::string unknown = "unknown";
     if (idx < 0 || idx >= MEDIA_PLAYER_LIST_COUNT) {
-      return unknown;
+      return unknown_string();
     }
     return this->state_[idx];
   }
 
   const std::string &title(int idx) const {
-    static const std::string empty = "";
     if (idx < 0 || idx >= MEDIA_PLAYER_LIST_COUNT) {
-      return empty;
+      return empty_string();
     }
     return this->title_[idx];
   }
 
   const std::string &artist(int idx) const {
-    static const std::string empty = "";
     if (idx < 0 || idx >= MEDIA_PLAYER_LIST_COUNT) {
-      return empty;
+      return empty_string();
     }
     return this->artist_[idx];
   }
 
   const std::string &source(int idx) const {
-    static const std::string empty = "";
     if (idx < 0 || idx >= MEDIA_PLAYER_LIST_COUNT) {
-      return empty;
+      return empty_string();
     }
     return this->source_[idx];
   }
@@ -661,9 +670,8 @@ class AutomationStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   const std::string &state(int idx) const {
-    static const std::string unknown = "unknown";
     if (idx < 0 || idx >= AUTOMATION_LIST_COUNT) {
-      return unknown;
+      return unknown_string();
     }
     return this->state_[idx];
   }
@@ -716,7 +724,7 @@ static inline bool selected_light_has_state(int idx) {
   return light_status_tracker_storage.has_state(idx);
 }
 
-static inline std::string selected_light_state(int idx) {
+static inline const std::string &selected_light_state(int idx) {
   ensure_remote_status_trackers();
   return light_status_tracker_storage.state(idx);
 }
@@ -736,17 +744,17 @@ static inline void request_selected_climate_status(int idx) {
   climate_status_tracker_storage.request_climate_state(idx);
 }
 
-static inline std::string selected_climate_state(int idx) {
+static inline const std::string &selected_climate_state(int idx) {
   ensure_remote_status_trackers();
   return climate_status_tracker_storage.state(idx);
 }
 
-static inline std::string climate_hvac_action_for_index(int idx) {
+static inline const std::string &climate_hvac_action_for_index(int idx) {
   ensure_remote_status_trackers();
   return climate_status_tracker_storage.hvac_action(idx);
 }
 
-static inline std::string selected_climate_preset_mode(int idx) {
+static inline const std::string &selected_climate_preset_mode(int idx) {
   ensure_remote_status_trackers();
   return climate_status_tracker_storage.preset_mode(idx);
 }
@@ -776,22 +784,22 @@ static inline void request_selected_media_status(int idx) {
   media_status_tracker_storage.request_media_state(idx);
 }
 
-static inline std::string selected_media_state(int idx) {
+static inline const std::string &selected_media_state(int idx) {
   ensure_remote_status_trackers();
   return media_status_tracker_storage.state(idx);
 }
 
-static inline std::string media_title_for_index(int idx) {
+static inline const std::string &media_title_for_index(int idx) {
   ensure_remote_status_trackers();
   return media_status_tracker_storage.title(idx);
 }
 
-static inline std::string media_artist_for_index(int idx) {
+static inline const std::string &media_artist_for_index(int idx) {
   ensure_remote_status_trackers();
   return media_status_tracker_storage.artist(idx);
 }
 
-static inline std::string media_source_for_index(int idx) {
+static inline const std::string &media_source_for_index(int idx) {
   ensure_remote_status_trackers();
   return media_status_tracker_storage.source(idx);
 }
@@ -806,7 +814,7 @@ static inline void request_selected_automation_status(int idx) {
   automation_status_tracker_storage.request_automation_state(idx);
 }
 
-static inline std::string automation_state_for_index(int idx) {
+static inline const std::string &automation_state_for_index(int idx) {
   ensure_remote_status_trackers();
   return automation_status_tracker_storage.state(idx);
 }

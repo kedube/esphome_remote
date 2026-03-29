@@ -29,22 +29,28 @@ esphome_remote/
 ### Setting Up a New Device
 
 1. **Clone Repository**
+
 ```
 git clone https://github.com/kedube/esphome_remote
 cd esphome_remote/devices/oled_remote
 ```
+
 2. **Configure settings** in your ESPHome secrets:
    - Copy `secrets-example.yaml` to `secrets.yaml` file in your ESPHome directory and configure settings:
+
      ```
      wifi_ssid: "YourWiFiName"
      wifi_password: "YourWiFiPassword"
      encryption_key: "YourAPIEncryptionKey"
      ota_password: "YourOTAPassword"
      ```
+
 3. **Update Home Assistant entities** (if needed):
    - Edit `ha_entities.h` to match your Home Assistant entities
    - The default configuration includes numerous lights: Living Room, Office, Master Bedroom, etc.
+
 4. **Compile and upload** to your ESP32
+
 ```
 esphome run oled_remote.yaml
 ```
