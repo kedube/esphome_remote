@@ -43,6 +43,8 @@ font:
       "\ue3a1", # audiotrack
       "\ue88a", # home
       "\uf076", # thermostat
+      "\uf537", # heat
+      "\ueb3b", # ac_unit
     ]
   - file:
       type: gfonts
@@ -55,7 +57,7 @@ font:
       "\ueac9", # keyboard_double_arrow_right
       "\ue045", # skip_previous
       "\ue044", # skip_next
-      "\ueb31", # connection
+      "\ue63e", # wifi
       "\ue8ac", # power_settings_new
     ]
 
@@ -242,6 +244,14 @@ globals:
   - id: selected_climate_target_temp
     type: float
     initial_value: '72.0'
+
+  - id: selected_climate_target_temp_low
+    type: float
+    initial_value: '72.0'
+
+  - id: selected_climate_target_temp_high
+    type: float
+    initial_value: '76.0'
 
   - id: selected_climate_current_temp
     type: float
@@ -521,6 +531,8 @@ script:
           id(selected_brightness_pct) = 0;
           id(selected_climate_hvac_action) = "unknown";
           id(selected_climate_preset) = "";
+          id(selected_climate_target_temp_low) = NAN;
+          id(selected_climate_target_temp_high) = NAN;
           id(selected_media_title) = "";
           id(selected_media_artist) = "";
           id(selected_media_source) = "";
@@ -550,7 +562,7 @@ script:
       - lambda: |-
           auto it = id(oled_display);
           it->clear();
-          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ueb31");
+          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue63e");
           it->print(64, 26, id(small_font), COLOR_ON, display::TextAlign::CENTER, "CONNECTING TO");
           it->print(64, 38, id(small_font), COLOR_ON, display::TextAlign::CENTER, "HOME ASSISTANT");
           it->print(64, 56, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "V${VERSION}");
@@ -608,6 +620,8 @@ script:
             std::string hvac_action = climate_hvac_action_for_index(idx);
             std::string preset = selected_climate_preset_mode(idx);
             float target = selected_climate_target_temperature(idx);
+            float target_low = selected_climate_target_temperature_low(idx);
+            float target_high = selected_climate_target_temperature_high(idx);
             float current = selected_climate_current_temperature(idx);
 
             if (state == "unknown") {
@@ -622,6 +636,12 @@ script:
               }
               if (!isnan(target)) {
                 id(selected_climate_target_temp) = target;
+              }
+              if (!isnan(target_low)) {
+                id(selected_climate_target_temp_low) = target_low;
+              }
+              if (!isnan(target_high)) {
+                id(selected_climate_target_temp_high) = target_high;
               }
               if (!isnan(current)) {
                 id(selected_climate_current_temp) = current;
@@ -883,40 +903,192 @@ script:
     mode: queued
     then:
       - lambda: |-
-          float next = id(selected_climate_target_temp);
-          if (isnan(next) || next < 40.0f) {
-            next = 72.0f;
+          bool dual_target = id(selected_item_state) == "heat_cool" &&
+                             !isnan(id(selected_climate_target_temp_low)) &&
+                             !isnan(id(selected_climate_target_temp_high));
+          if (dual_target) {
+            float next = id(selected_climate_target_temp_low);
+            if (isnan(next) || next < 40.0f) {
+              next = 68.0f;
+            }
+            next += 1.0f;
+            if (next > 85.0f) next = 85.0f;
+            if (!isnan(id(selected_climate_target_temp_high)) && next >= id(selected_climate_target_temp_high)) {
+              next = id(selected_climate_target_temp_high) - 1.0f;
+            }
+            id(selected_climate_target_temp_low) = next;
+          } else {
+            float next = id(selected_climate_target_temp);
+            if (isnan(next) || next < 40.0f) {
+              next = 72.0f;
+            }
+            next += 1.0f;
+            if (next > 85.0f) next = 85.0f;
+            id(selected_climate_target_temp) = next;
+            id(selected_climate_target_temp_low) = next;
           }
-          next += 1.0f;
-          if (next > 85.0f) next = 85.0f;
-          id(selected_climate_target_temp) = next;
           id(last_climate_interaction) = millis();
           id(updated_ui) = true;
-      - homeassistant.service:
-          service: climate.set_temperature
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-            temperature: !lambda 'return id(selected_climate_target_temp);'
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "heat_cool" && !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high));'
+          then:
+            - homeassistant.service:
+                service: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  target_temp_low: !lambda 'return id(selected_climate_target_temp_low);'
+                  target_temp_high: !lambda 'return id(selected_climate_target_temp_high);'
+          else:
+            - homeassistant.service:
+                service: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  temperature: !lambda 'return id(selected_climate_target_temp);'
       - script.execute: update_display
 
   - id: climate_temperature_down
     mode: queued
     then:
       - lambda: |-
-          float next = id(selected_climate_target_temp);
-          if (isnan(next) || next < 40.0f) {
-            next = 72.0f;
+          bool dual_target = id(selected_item_state) == "heat_cool" &&
+                             !isnan(id(selected_climate_target_temp_low)) &&
+                             !isnan(id(selected_climate_target_temp_high));
+          if (dual_target) {
+            float next = id(selected_climate_target_temp_low);
+            if (isnan(next) || next < 40.0f) {
+              next = 68.0f;
+            }
+            next -= 1.0f;
+            if (next < 55.0f) next = 55.0f;
+            if (!isnan(id(selected_climate_target_temp_high)) && next >= id(selected_climate_target_temp_high)) {
+              next = id(selected_climate_target_temp_high) - 1.0f;
+            }
+            id(selected_climate_target_temp_low) = next;
+          } else {
+            float next = id(selected_climate_target_temp);
+            if (isnan(next) || next < 40.0f) {
+              next = 72.0f;
+            }
+            next -= 1.0f;
+            if (next < 55.0f) next = 55.0f;
+            id(selected_climate_target_temp) = next;
+            id(selected_climate_target_temp_low) = next;
           }
-          next -= 1.0f;
-          if (next < 55.0f) next = 55.0f;
-          id(selected_climate_target_temp) = next;
           id(last_climate_interaction) = millis();
           id(updated_ui) = true;
-      - homeassistant.service:
-          service: climate.set_temperature
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-            temperature: !lambda 'return id(selected_climate_target_temp);'
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "heat_cool" && !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high));'
+          then:
+            - homeassistant.service:
+                service: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  target_temp_low: !lambda 'return id(selected_climate_target_temp_low);'
+                  target_temp_high: !lambda 'return id(selected_climate_target_temp_high);'
+          else:
+            - homeassistant.service:
+                service: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  temperature: !lambda 'return id(selected_climate_target_temp);'
+      - script.execute: update_display
+
+  - id: climate_temperature_high_up
+    mode: queued
+    then:
+      - lambda: |-
+          bool dual_target = id(selected_item_state) == "heat_cool" &&
+                             !isnan(id(selected_climate_target_temp_low)) &&
+                             !isnan(id(selected_climate_target_temp_high));
+          if (dual_target) {
+            float next = id(selected_climate_target_temp_high);
+            if (isnan(next) || next < 40.0f) {
+              next = 76.0f;
+            }
+            next += 1.0f;
+            if (next > 85.0f) next = 85.0f;
+            if (!isnan(id(selected_climate_target_temp_low)) && next <= id(selected_climate_target_temp_low)) {
+              next = id(selected_climate_target_temp_low) + 1.0f;
+            }
+            id(selected_climate_target_temp_high) = next;
+          } else {
+            float next = id(selected_climate_target_temp);
+            if (isnan(next) || next < 40.0f) {
+              next = 72.0f;
+            }
+            next += 1.0f;
+            if (next > 85.0f) next = 85.0f;
+            id(selected_climate_target_temp) = next;
+            id(selected_climate_target_temp_high) = next;
+          }
+          id(last_climate_interaction) = millis();
+          id(updated_ui) = true;
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "heat_cool" && !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high));'
+          then:
+            - homeassistant.service:
+                service: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  target_temp_low: !lambda 'return id(selected_climate_target_temp_low);'
+                  target_temp_high: !lambda 'return id(selected_climate_target_temp_high);'
+          else:
+            - homeassistant.service:
+                service: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  temperature: !lambda 'return id(selected_climate_target_temp);'
+      - script.execute: update_display
+
+  - id: climate_temperature_high_down
+    mode: queued
+    then:
+      - lambda: |-
+          bool dual_target = id(selected_item_state) == "heat_cool" &&
+                             !isnan(id(selected_climate_target_temp_low)) &&
+                             !isnan(id(selected_climate_target_temp_high));
+          if (dual_target) {
+            float next = id(selected_climate_target_temp_high);
+            if (isnan(next) || next < 40.0f) {
+              next = 76.0f;
+            }
+            next -= 1.0f;
+            if (next < 55.0f) next = 55.0f;
+            if (!isnan(id(selected_climate_target_temp_low)) && next <= id(selected_climate_target_temp_low)) {
+              next = id(selected_climate_target_temp_low) + 1.0f;
+            }
+            id(selected_climate_target_temp_high) = next;
+          } else {
+            float next = id(selected_climate_target_temp);
+            if (isnan(next) || next < 40.0f) {
+              next = 72.0f;
+            }
+            next -= 1.0f;
+            if (next < 55.0f) next = 55.0f;
+            id(selected_climate_target_temp) = next;
+            id(selected_climate_target_temp_high) = next;
+          }
+          id(last_climate_interaction) = millis();
+          id(updated_ui) = true;
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "heat_cool" && !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high));'
+          then:
+            - homeassistant.service:
+                service: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  target_temp_low: !lambda 'return id(selected_climate_target_temp_low);'
+                  target_temp_high: !lambda 'return id(selected_climate_target_temp_high);'
+          else:
+            - homeassistant.service:
+                service: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  temperature: !lambda 'return id(selected_climate_target_temp);'
       - script.execute: update_display
 
   - id: cycle_selected_climate_preset
@@ -1126,7 +1298,13 @@ script:
                 condition:
                   lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
                 then:
-                  - script.execute: toggle_selected_climate_power
+                  - if:
+                      condition:
+                        lambda: 'return !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) && (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));'
+                      then:
+                        - script.execute: climate_temperature_high_up
+                      else:
+                        - script.execute: toggle_selected_climate_power
                 else:
                   - if:
                       condition:
@@ -1168,7 +1346,13 @@ script:
                 condition:
                   lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
                 then:
-                  - script.execute: cycle_selected_climate_mode
+                  - if:
+                      condition:
+                        lambda: 'return !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) && (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));'
+                      then:
+                        - script.execute: climate_temperature_high_down
+                      else:
+                        - script.execute: cycle_selected_climate_mode
                 else:
                   - if:
                       condition:
@@ -1324,15 +1508,27 @@ script:
                 } else if (mode == REMOTE_MODE_CLIMATE) {
                   std::string hvac_label = upper(id(selected_item_state));
                   std::string action_label = upper(id(selected_climate_hvac_action));
+                  bool has_dual_target = !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) &&
+                                         (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));
                   if (hvac_label == "UNKNOWN") {
                     hvac_label = "SYNCING";
                   }
-                  if (!isnan(id(selected_climate_target_temp))) {
-                    snprintf(status_line, sizeof(status_line), "%.0f°F (T: %.0f°F)", id(selected_climate_current_temp), id(selected_climate_target_temp));
+                  if (!isnan(id(selected_climate_current_temp))) {
+                    snprintf(status_line, sizeof(status_line), "%.0f°F", id(selected_climate_current_temp));
                   } else {
                     snprintf(status_line, sizeof(status_line), "SYNCING");
                   }
-                  it->print(64, 35, id(small_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+                  it->print(64, 35, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                  if (has_dual_target) {
+                    snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°F   HIGH: %.0f°F",
+                             id(selected_climate_target_temp_low), id(selected_climate_target_temp_high));
+                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                  } else if (!isnan(id(selected_climate_target_temp))) {
+                    snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°F", id(selected_climate_target_temp));
+                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                  }
+
                   if (show_contrast_feedback) {
                     snprintf(footer_line, sizeof(footer_line), "CONTRAST %d%%", id(contrast) * 10);
                     it->filled_rectangle(0, 52, 128, 1, COLOR_ON);

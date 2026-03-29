@@ -282,6 +282,8 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
       const char *entity_id = CLIMATE_LIST[i].entity_id;
       this->subscribe_homeassistant_state(&ClimateStatusTracker::on_state_, entity_id);
       this->subscribe_homeassistant_state(&ClimateStatusTracker::on_target_temperature_, entity_id, "temperature");
+      this->subscribe_homeassistant_state(&ClimateStatusTracker::on_target_temperature_low_, entity_id, "target_temp_low");
+      this->subscribe_homeassistant_state(&ClimateStatusTracker::on_target_temperature_high_, entity_id, "target_temp_high");
       this->subscribe_homeassistant_state(&ClimateStatusTracker::on_current_temperature_, entity_id, "current_temperature");
       this->subscribe_homeassistant_state(&ClimateStatusTracker::on_hvac_action_, entity_id, "hvac_action");
       this->subscribe_homeassistant_state(&ClimateStatusTracker::on_preset_mode_, entity_id, "preset_mode");
@@ -300,6 +302,12 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
     esphome::api::global_api_server->get_home_assistant_state(
         entity_id, "temperature",
         [this, idx](esphome::StringRef state) { this->store_target_temperature_(idx, state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "target_temp_low",
+        [this, idx](esphome::StringRef state) { this->store_target_temperature_low_(idx, state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "target_temp_high",
+        [this, idx](esphome::StringRef state) { this->store_target_temperature_high_(idx, state); });
     esphome::api::global_api_server->get_home_assistant_state(
         entity_id, "current_temperature",
         [this, idx](esphome::StringRef state) { this->store_current_temperature_(idx, state); });
@@ -354,6 +362,20 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
     return this->current_temperature_[idx];
   }
 
+  float target_temperature_low(int idx) const {
+    if (idx < 0 || idx >= CLIMATE_LIST_COUNT) {
+      return NAN;
+    }
+    return this->target_temperature_low_[idx];
+  }
+
+  float target_temperature_high(int idx) const {
+    if (idx < 0 || idx >= CLIMATE_LIST_COUNT) {
+      return NAN;
+    }
+    return this->target_temperature_high_[idx];
+  }
+
  protected:
   void on_state_(const std::string &entity_id, esphome::StringRef state) {
     int idx = this->find_index_(entity_id);
@@ -373,6 +395,20 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
     int idx = this->find_index_(entity_id);
     if (idx >= 0) {
       this->store_current_temperature_(idx, state);
+    }
+  }
+
+  void on_target_temperature_low_(const std::string &entity_id, esphome::StringRef state) {
+    int idx = this->find_index_(entity_id);
+    if (idx >= 0) {
+      this->store_target_temperature_low_(idx, state);
+    }
+  }
+
+  void on_target_temperature_high_(const std::string &entity_id, esphome::StringRef state) {
+    int idx = this->find_index_(entity_id);
+    if (idx >= 0) {
+      this->store_target_temperature_high_(idx, state);
     }
   }
 
@@ -398,6 +434,14 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void store_target_temperature_(int idx, esphome::StringRef state) { this->target_temperature_[idx] = parse_float_(state); }
+
+  void store_target_temperature_low_(int idx, esphome::StringRef state) {
+    this->target_temperature_low_[idx] = parse_float_(state);
+  }
+
+  void store_target_temperature_high_(int idx, esphome::StringRef state) {
+    this->target_temperature_high_[idx] = parse_float_(state);
+  }
 
   void store_current_temperature_(int idx, esphome::StringRef state) { this->current_temperature_[idx] = parse_float_(state); }
 
@@ -431,6 +475,8 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
   std::string hvac_action_[CLIMATE_LIST_COUNT];
   std::string preset_mode_[CLIMATE_LIST_COUNT];
   float target_temperature_[CLIMATE_LIST_COUNT] = {NAN};
+  float target_temperature_low_[CLIMATE_LIST_COUNT] = {NAN};
+  float target_temperature_high_[CLIMATE_LIST_COUNT] = {NAN};
   float current_temperature_[CLIMATE_LIST_COUNT] = {NAN};
 };
 
@@ -712,6 +758,16 @@ static inline std::string selected_climate_preset_mode(int idx) {
 static inline float selected_climate_target_temperature(int idx) {
   ensure_remote_status_trackers();
   return climate_status_tracker_storage.target_temperature(idx);
+}
+
+static inline float selected_climate_target_temperature_low(int idx) {
+  ensure_remote_status_trackers();
+  return climate_status_tracker_storage.target_temperature_low(idx);
+}
+
+static inline float selected_climate_target_temperature_high(int idx) {
+  ensure_remote_status_trackers();
+  return climate_status_tracker_storage.target_temperature_high(idx);
 }
 
 static inline float selected_climate_current_temperature(int idx) {
