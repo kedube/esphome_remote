@@ -13,7 +13,7 @@ substitutions:
   PIN_BTN_PREV: "22"
   PIN_BTN_MODE: "14"
   PIN_BTN_AUTOMATION: "26"
-  PIN_BTN_LIGHTBULB: "23"
+  PIN_BTN_CIRCLE: "23"
   PIN_BTN_DIMMER_UP: "19"
   PIN_BTN_DIMMER_DOWN: "18"
   PIN_OLED_EN: "15"
@@ -484,7 +484,7 @@ binary_sensor:
 
   - platform: gpio
     pin:
-      number: ${PIN_BTN_LIGHTBULB}
+      number: ${PIN_BTN_CIRCLE}
       mode:
         input: True
         pullup: True
