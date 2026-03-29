@@ -184,6 +184,10 @@ globals:
     type: uint32_t
     initial_value: '0'
 
+  - id: last_climate_target_focus_interaction
+    type: uint32_t
+    initial_value: '0'
+
   - id: last_media_interaction
     type: uint32_t
     initial_value: '0'
@@ -243,7 +247,7 @@ globals:
 
   - id: selected_climate_target_temp
     type: float
-    initial_value: '72.0'
+    initial_value: 'NAN'
 
   - id: selected_climate_target_temp_low
     type: float
@@ -255,7 +259,7 @@ globals:
 
   - id: selected_climate_current_temp
     type: float
-    initial_value: '0.0'
+    initial_value: 'NAN'
 
   - id: selected_climate_hvac_action
     type: std::string
@@ -268,6 +272,14 @@ globals:
   - id: last_climate_mode
     type: std::string
     initial_value: '"heat"'
+
+  - id: climate_target_focus
+    type: int
+    initial_value: '0'
+
+  - id: climate_target_focus_value
+    type: float
+    initial_value: 'NAN'
 
   - id: selected_media_volume_pct
     type: int
@@ -529,10 +541,15 @@ script:
           id(selected_item_entity) = mode_item_entity(mode, idx);
           id(selected_item_state) = "unknown";
           id(selected_brightness_pct) = 0;
+          id(selected_climate_target_temp) = NAN;
           id(selected_climate_hvac_action) = "unknown";
           id(selected_climate_preset) = "";
           id(selected_climate_target_temp_low) = NAN;
           id(selected_climate_target_temp_high) = NAN;
+          id(selected_climate_current_temp) = NAN;
+          id(climate_target_focus) = 0;
+          id(climate_target_focus_value) = NAN;
+          id(last_climate_target_focus_interaction) = 0;
           id(selected_media_title) = "";
           id(selected_media_artist) = "";
           id(selected_media_source) = "";
@@ -926,7 +943,14 @@ script:
             if (next > 85.0f) next = 85.0f;
             id(selected_climate_target_temp) = next;
             id(selected_climate_target_temp_low) = next;
+            id(selected_climate_target_temp_high) = next;
+            id(climate_target_focus_value) = next;
           }
+          if (dual_target) {
+            id(climate_target_focus_value) = id(selected_climate_target_temp_low);
+          }
+          id(climate_target_focus) = 1;
+          id(last_climate_target_focus_interaction) = millis();
           id(last_climate_interaction) = millis();
           id(updated_ui) = true;
       - if:
@@ -974,7 +998,14 @@ script:
             if (next < 55.0f) next = 55.0f;
             id(selected_climate_target_temp) = next;
             id(selected_climate_target_temp_low) = next;
+            id(selected_climate_target_temp_high) = next;
+            id(climate_target_focus_value) = next;
           }
+          if (dual_target) {
+            id(climate_target_focus_value) = id(selected_climate_target_temp_low);
+          }
+          id(climate_target_focus) = 1;
+          id(last_climate_target_focus_interaction) = millis();
           id(last_climate_interaction) = millis();
           id(updated_ui) = true;
       - if:
@@ -1022,7 +1053,14 @@ script:
             if (next > 85.0f) next = 85.0f;
             id(selected_climate_target_temp) = next;
             id(selected_climate_target_temp_high) = next;
+            id(selected_climate_target_temp_low) = next;
+            id(climate_target_focus_value) = next;
           }
+          if (dual_target) {
+            id(climate_target_focus_value) = id(selected_climate_target_temp_high);
+          }
+          id(climate_target_focus) = 2;
+          id(last_climate_target_focus_interaction) = millis();
           id(last_climate_interaction) = millis();
           id(updated_ui) = true;
       - if:
@@ -1070,7 +1108,14 @@ script:
             if (next < 55.0f) next = 55.0f;
             id(selected_climate_target_temp) = next;
             id(selected_climate_target_temp_high) = next;
+            id(selected_climate_target_temp_low) = next;
+            id(climate_target_focus_value) = next;
           }
+          if (dual_target) {
+            id(climate_target_focus_value) = id(selected_climate_target_temp_high);
+          }
+          id(climate_target_focus) = 2;
+          id(last_climate_target_focus_interaction) = millis();
           id(last_climate_interaction) = millis();
           id(updated_ui) = true;
       - if:
@@ -1431,6 +1476,10 @@ script:
                 bool show_climate_feedback =
                     id(last_climate_interaction) > 0 && (now - id(last_climate_interaction)) <= 3000 &&
                     mode == REMOTE_MODE_CLIMATE;
+                bool show_climate_target_focus =
+                    id(last_climate_target_focus_interaction) > 0 &&
+                    (now - id(last_climate_target_focus_interaction)) <= 5000 &&
+                    id(climate_target_focus) != 0 && mode == REMOTE_MODE_CLIMATE;
                 bool show_media_feedback =
                     id(last_media_interaction) > 0 && (now - id(last_media_interaction)) <= 3000 &&
                     mode == REMOTE_MODE_MUSIC;
@@ -1513,18 +1562,26 @@ script:
                   if (hvac_label == "UNKNOWN") {
                     hvac_label = "SYNCING";
                   }
-                  if (!isnan(id(selected_climate_current_temp))) {
+                  if (show_climate_target_focus) {
+                    if (!isnan(id(climate_target_focus_value))) {
+                      if (id(climate_target_focus) == 2) {
+                        snprintf(status_line, sizeof(status_line), "HIGH: %.0f°F", id(climate_target_focus_value));
+                      } else {
+                        snprintf(status_line, sizeof(status_line), "LOW: %.0f°F", id(climate_target_focus_value));
+                      }
+                    }
+                  } else if (!isnan(id(selected_climate_current_temp))) {
                     snprintf(status_line, sizeof(status_line), "%.0f°F", id(selected_climate_current_temp));
                   } else {
                     snprintf(status_line, sizeof(status_line), "SYNCING");
                   }
                   it->print(64, 35, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
 
-                  if (has_dual_target) {
+                  if (!show_climate_target_focus && has_dual_target && action_label != "UNKNOWN") {
                     snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°F   HIGH: %.0f°F",
                              id(selected_climate_target_temp_low), id(selected_climate_target_temp_high));
                     it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
-                  } else if (!isnan(id(selected_climate_target_temp))) {
+                  } else if (!show_climate_target_focus && !isnan(id(selected_climate_target_temp)) && action_label != "UNKNOWN") {
                     snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°F", id(selected_climate_target_temp));
                     it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
                   }
@@ -1647,6 +1704,14 @@ interval:
                 }
                 uint32_t climate_elapsed = millis() - id(last_climate_interaction);
                 if (id(last_climate_interaction) > 0 && climate_elapsed > 3000 && climate_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t climate_target_focus_elapsed = millis() - id(last_climate_target_focus_interaction);
+                if (id(last_climate_target_focus_interaction) > 0 && climate_target_focus_elapsed > 5000 &&
+                    climate_target_focus_elapsed < 5500) {
+                  id(climate_target_focus) = 0;
+                  id(climate_target_focus_value) = NAN;
+                  id(last_climate_target_focus_interaction) = 0;
                   id(updated_ui) = true;
                 }
                 uint32_t media_elapsed = millis() - id(last_media_interaction);
