@@ -13,9 +13,9 @@ esphome_remote/
 ├── README.md                                    # This file
 └── devices/
     └── oled_remote/
-        ├── oled_remote.yaml                     # Basic OLED light remote for home Assistant
+        ├── oled_remote.yaml                     # Main multi-mode OLED remote for Home Assistant
         ├── oled_remote_battery.yaml             # Configuration for PCB v3.1 and newer with fixed voltage divider
-        └── light_entities.h                        # C++ header for light entities
+        └── ha_entities.h                        # C++ header for Home Assistant entity helpers
 ```
 
 ## Quick Start Guide
@@ -41,8 +41,8 @@ cd esphome_remote/devices/oled_remote
      encryption_key: "YourAPIEncryptionKey"
      ota_password: "YourOTAPassword"
      ```
-3. **Update light entities** (if needed):
-   - Edit `light_entities.h` to match your Home Assistant climate entities
+3. **Update Home Assistant entities** (if needed):
+   - Edit `ha_entities.h` to match your Home Assistant entities
    - The default configuration includes numerous lights: Living Room, Office, Master Bedroom, etc.
 4. **Compile and upload** to your ESP32
 ```
@@ -58,7 +58,7 @@ esphome run oled_remote.yaml
 - Deep sleep duration (default: 3 days)
 - Idle timeout (default: 2 minutes)
 - Display contrast settings
-- Light entity IDs in `light_entities.h`
+- Entity IDs in `ha_entities.h`
 
 **Leave unchanged (for Lolin board):**
 - `BOARD` setting

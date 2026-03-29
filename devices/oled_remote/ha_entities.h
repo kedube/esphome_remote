@@ -104,6 +104,30 @@ static const int CLIMATE_LIST_COUNT = sizeof(CLIMATE_LIST) / sizeof(CLIMATE_LIST
 static const int MEDIA_PLAYER_LIST_COUNT = sizeof(MEDIA_PLAYER_LIST) / sizeof(MEDIA_PLAYER_LIST[0]);
 static const int AUTOMATION_LIST_COUNT = sizeof(AUTOMATION_LIST) / sizeof(AUTOMATION_LIST[0]);
 
+static inline bool ha_state_missing(const std::string &value) {
+  return value.empty() || value == "unknown" || value == "unavailable" || value == "None";
+}
+
+static inline std::string ha_state_or_unknown(esphome::StringRef state) {
+  std::string value = state.str();
+  return ha_state_missing(value) ? "unknown" : value;
+}
+
+static inline float ha_parse_float(esphome::StringRef state) {
+  std::string value = state.str();
+  return ha_state_missing(value) ? NAN : strtof(value.c_str(), nullptr);
+}
+
+template<typename Entity>
+static inline int find_entity_index(const Entity *entities, int count, const std::string &entity_id) {
+  for (int i = 0; i < count; i++) {
+    if (entity_id == entities[i].entity_id) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 static inline const char *mode_title(RemoteMode mode) {
   switch (mode) {
     case REMOTE_MODE_LIGHTING:
@@ -176,6 +200,37 @@ static inline AutomationKind automation_kind(int idx) {
   return (idx >= 0 && idx < AUTOMATION_LIST_COUNT) ? AUTOMATION_LIST[idx].kind : AUTOMATION_KIND_SCRIPT;
 }
 
+static inline int &selected_index_ref(RemoteMode mode, int &light_idx, int &climate_idx, int &media_idx,
+                                      int &automation_idx) {
+  switch (mode) {
+    case REMOTE_MODE_LIGHTING:
+      return light_idx;
+    case REMOTE_MODE_CLIMATE:
+      return climate_idx;
+    case REMOTE_MODE_MUSIC:
+      return media_idx;
+    case REMOTE_MODE_AUTOMATION:
+    default:
+      return automation_idx;
+  }
+}
+
+static inline int clamp_mode_index(int idx, int count) {
+  if (count <= 0) {
+    return 0;
+  }
+  return (idx >= 0 && idx < count) ? idx : 0;
+}
+
+static inline int wrapped_mode_index(int idx, int count, int step) {
+  if (count <= 0) {
+    return 0;
+  }
+  idx = clamp_mode_index(idx, count);
+  idx = (idx + (step % count) + count) % count;
+  return idx;
+}
+
 class LightStatusTracker : public esphome::api::CustomAPIDevice {
  public:
   void setup() {
@@ -239,34 +294,17 @@ class LightStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void store_state_(int idx, esphome::StringRef state) {
-    this->state_[idx] = state.str();
-    if (this->state_[idx].empty()) {
-      this->state_[idx] = "unknown";
-      this->has_state_[idx] = false;
-    } else {
-      this->has_state_[idx] = true;
-    }
+    this->state_[idx] = ha_state_or_unknown(state);
+    this->has_state_[idx] = this->state_[idx] != "unknown";
   }
 
   void store_brightness_(int idx, esphome::StringRef state) {
-    std::string value = state.str();
-    if (value.empty() || value == "unknown" || value == "unavailable" || value == "None") {
-      this->brightness_[idx] = NAN;
-      this->has_brightness_[idx] = false;
-      return;
-    }
-
-    this->brightness_[idx] = strtof(value.c_str(), nullptr);
+    this->brightness_[idx] = ha_parse_float(state);
     this->has_brightness_[idx] = !std::isnan(this->brightness_[idx]);
   }
 
   int find_index_(const std::string &entity_id) const {
-    for (int i = 0; i < LIGHT_LIST_COUNT; i++) {
-      if (entity_id == LIGHT_LIST[i].entity_id) {
-        return i;
-      }
-    }
-    return -1;
+    return find_entity_index(LIGHT_LIST, LIGHT_LIST_COUNT, entity_id);
   }
 
   std::string state_[LIGHT_LIST_COUNT];
@@ -427,48 +465,27 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void store_state_(int idx, esphome::StringRef state) {
-    this->state_[idx] = state.str();
-    if (this->state_[idx].empty()) {
-      this->state_[idx] = "unknown";
-    }
+    this->state_[idx] = ha_state_or_unknown(state);
   }
 
-  void store_target_temperature_(int idx, esphome::StringRef state) { this->target_temperature_[idx] = parse_float_(state); }
+  void store_target_temperature_(int idx, esphome::StringRef state) { this->target_temperature_[idx] = ha_parse_float(state); }
 
   void store_target_temperature_low_(int idx, esphome::StringRef state) {
-    this->target_temperature_low_[idx] = parse_float_(state);
+    this->target_temperature_low_[idx] = ha_parse_float(state);
   }
 
   void store_target_temperature_high_(int idx, esphome::StringRef state) {
-    this->target_temperature_high_[idx] = parse_float_(state);
+    this->target_temperature_high_[idx] = ha_parse_float(state);
   }
 
-  void store_current_temperature_(int idx, esphome::StringRef state) { this->current_temperature_[idx] = parse_float_(state); }
+  void store_current_temperature_(int idx, esphome::StringRef state) { this->current_temperature_[idx] = ha_parse_float(state); }
 
-  void store_hvac_action_(int idx, esphome::StringRef state) {
-    this->hvac_action_[idx] = state.str();
-    if (this->hvac_action_[idx].empty()) {
-      this->hvac_action_[idx] = "unknown";
-    }
-  }
+  void store_hvac_action_(int idx, esphome::StringRef state) { this->hvac_action_[idx] = ha_state_or_unknown(state); }
 
   void store_preset_mode_(int idx, esphome::StringRef state) { this->preset_mode_[idx] = state.str(); }
 
-  float parse_float_(esphome::StringRef state) const {
-    std::string value = state.str();
-    if (value.empty() || value == "unknown" || value == "unavailable" || value == "None") {
-      return NAN;
-    }
-    return strtof(value.c_str(), nullptr);
-  }
-
   int find_index_(const std::string &entity_id) const {
-    for (int i = 0; i < CLIMATE_LIST_COUNT; i++) {
-      if (entity_id == CLIMATE_LIST[i].entity_id) {
-        return i;
-      }
-    }
-    return -1;
+    return find_entity_index(CLIMATE_LIST, CLIMATE_LIST_COUNT, entity_id);
   }
 
   std::string state_[CLIMATE_LIST_COUNT];
@@ -594,10 +611,7 @@ class MediaStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void store_state_(int idx, esphome::StringRef state) {
-    this->state_[idx] = state.str();
-    if (this->state_[idx].empty()) {
-      this->state_[idx] = "unknown";
-    }
+    this->state_[idx] = ha_state_or_unknown(state);
   }
 
   void store_title_(int idx, esphome::StringRef state) { this->title_[idx] = state.str(); }
@@ -607,21 +621,11 @@ class MediaStatusTracker : public esphome::api::CustomAPIDevice {
   void store_source_(int idx, esphome::StringRef state) { this->source_[idx] = state.str(); }
 
   void store_volume_(int idx, esphome::StringRef state) {
-    std::string value = state.str();
-    if (value.empty() || value == "unknown" || value == "unavailable" || value == "None") {
-      this->volume_[idx] = NAN;
-      return;
-    }
-    this->volume_[idx] = strtof(value.c_str(), nullptr);
+    this->volume_[idx] = ha_parse_float(state);
   }
 
   int find_index_(const std::string &entity_id) const {
-    for (int i = 0; i < MEDIA_PLAYER_LIST_COUNT; i++) {
-      if (entity_id == MEDIA_PLAYER_LIST[i].entity_id) {
-        return i;
-      }
-    }
-    return -1;
+    return find_entity_index(MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, entity_id);
   }
 
   std::string state_[MEDIA_PLAYER_LIST_COUNT];
@@ -673,19 +677,11 @@ class AutomationStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void store_state_(int idx, esphome::StringRef state) {
-    this->state_[idx] = state.str();
-    if (this->state_[idx].empty()) {
-      this->state_[idx] = "unknown";
-    }
+    this->state_[idx] = ha_state_or_unknown(state);
   }
 
   int find_index_(const std::string &entity_id) const {
-    for (int i = 0; i < AUTOMATION_LIST_COUNT; i++) {
-      if (entity_id == AUTOMATION_LIST[i].entity_id) {
-        return i;
-      }
-    }
-    return -1;
+    return find_entity_index(AUTOMATION_LIST, AUTOMATION_LIST_COUNT, entity_id);
   }
 
   std::string state_[AUTOMATION_LIST_COUNT];
@@ -813,4 +809,21 @@ static inline void request_selected_automation_status(int idx) {
 static inline std::string automation_state_for_index(int idx) {
   ensure_remote_status_trackers();
   return automation_status_tracker_storage.state(idx);
+}
+
+static inline void request_mode_status(RemoteMode mode, int idx) {
+  switch (mode) {
+    case REMOTE_MODE_LIGHTING:
+      request_selected_light_status(idx);
+      break;
+    case REMOTE_MODE_CLIMATE:
+      request_selected_climate_status(idx);
+      break;
+    case REMOTE_MODE_MUSIC:
+      request_selected_media_status(idx);
+      break;
+    case REMOTE_MODE_AUTOMATION:
+      request_selected_automation_status(idx);
+      break;
+  }
 }

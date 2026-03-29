@@ -424,6 +424,7 @@ binary_sensor:
   - platform: gpio
     pin:
       number: ${PIN_BTN_PLAY_PAUSE}
+      ignore_strapping_warning: true
       mode:
         input: True
         pullup: True
@@ -500,7 +501,6 @@ script:
       - lambda: |-
           RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
           int count = mode_item_count(mode);
-          int idx = 0;
 
           if (count <= 0) {
             id(selected_item_name) = "NO ITEMS";
@@ -510,32 +510,11 @@ script:
             return;
           }
 
-          switch (mode) {
-            case REMOTE_MODE_LIGHTING:
-              if (id(selected_light_index) < 0 || id(selected_light_index) >= count) {
-                id(selected_light_index) = 0;
-              }
-              idx = id(selected_light_index);
-              break;
-            case REMOTE_MODE_CLIMATE:
-              if (id(selected_climate_index) < 0 || id(selected_climate_index) >= count) {
-                id(selected_climate_index) = 0;
-              }
-              idx = id(selected_climate_index);
-              break;
-            case REMOTE_MODE_MUSIC:
-              if (id(selected_media_index) < 0 || id(selected_media_index) >= count) {
-                id(selected_media_index) = 0;
-              }
-              idx = id(selected_media_index);
-              break;
-            case REMOTE_MODE_AUTOMATION:
-              if (id(selected_automation_index) < 0 || id(selected_automation_index) >= count) {
-                id(selected_automation_index) = 0;
-              }
-              idx = id(selected_automation_index);
-              break;
-          }
+          int &selected_index = selected_index_ref(
+              mode, id(selected_light_index), id(selected_climate_index), id(selected_media_index),
+              id(selected_automation_index));
+          selected_index = clamp_mode_index(selected_index, count);
+          int idx = selected_index;
 
           id(selected_item_name) = mode_item_name(mode, idx);
           id(selected_item_entity) = mode_item_entity(mode, idx);
@@ -556,20 +535,7 @@ script:
           id(selected_automation_state) = "unknown";
           id(updated_ui) = true;
 
-          switch (mode) {
-            case REMOTE_MODE_LIGHTING:
-              request_selected_light_status(idx);
-              break;
-            case REMOTE_MODE_CLIMATE:
-              request_selected_climate_status(idx);
-              break;
-            case REMOTE_MODE_MUSIC:
-              request_selected_media_status(idx);
-              break;
-            case REMOTE_MODE_AUTOMATION:
-              request_selected_automation_status(idx);
-              break;
-          }
+          request_mode_status(mode, idx);
       - script.execute: persist_ui_state
       - script.execute: sync_current_mode_status
       - script.execute: update_display
@@ -600,9 +566,12 @@ script:
     then:
       - lambda: |-
           RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          int idx = selected_index_ref(
+              mode, id(selected_light_index), id(selected_climate_index), id(selected_media_index),
+              id(selected_automation_index));
+          idx = clamp_mode_index(idx, mode_item_count(mode));
 
           if (mode == REMOTE_MODE_LIGHTING) {
-            int idx = id(selected_light_index);
             std::string state = selected_light_state(idx);
             float brightness = selected_light_brightness(idx);
             std::string next_state = id(selected_item_state);
@@ -632,7 +601,6 @@ script:
               id(updated_ui) = true;
             }
           } else if (mode == REMOTE_MODE_CLIMATE) {
-            int idx = id(selected_climate_index);
             std::string state = selected_climate_state(idx);
             std::string hvac_action = climate_hvac_action_for_index(idx);
             std::string preset = selected_climate_preset_mode(idx);
@@ -667,7 +635,6 @@ script:
               id(updated_ui) = true;
             }
           } else if (mode == REMOTE_MODE_MUSIC) {
-            int idx = id(selected_media_index);
             std::string state = selected_media_state(idx);
             std::string title = media_title_for_index(idx);
             std::string artist = media_artist_for_index(idx);
@@ -690,7 +657,6 @@ script:
               id(updated_ui) = true;
             }
           } else if (mode == REMOTE_MODE_AUTOMATION) {
-            int idx = id(selected_automation_index);
             std::string state = automation_state_for_index(idx);
             if (automation_supports_enabled_state(idx)) {
               id(selected_automation_state) = state;
@@ -714,20 +680,10 @@ script:
             return;
           }
 
-          switch (mode) {
-            case REMOTE_MODE_LIGHTING:
-              id(selected_light_index) = (id(selected_light_index) + 1) % count;
-              break;
-            case REMOTE_MODE_CLIMATE:
-              id(selected_climate_index) = (id(selected_climate_index) + 1) % count;
-              break;
-            case REMOTE_MODE_MUSIC:
-              id(selected_media_index) = (id(selected_media_index) + 1) % count;
-              break;
-            case REMOTE_MODE_AUTOMATION:
-              id(selected_automation_index) = (id(selected_automation_index) + 1) % count;
-              break;
-          }
+          int &selected_index = selected_index_ref(
+              mode, id(selected_light_index), id(selected_climate_index), id(selected_media_index),
+              id(selected_automation_index));
+          selected_index = wrapped_mode_index(selected_index, count, 1);
       - script.execute: update_selected_item
 
   - id: select_previous_item
@@ -739,20 +695,10 @@ script:
             return;
           }
 
-          switch (mode) {
-            case REMOTE_MODE_LIGHTING:
-              id(selected_light_index) = (id(selected_light_index) + count - 1) % count;
-              break;
-            case REMOTE_MODE_CLIMATE:
-              id(selected_climate_index) = (id(selected_climate_index) + count - 1) % count;
-              break;
-            case REMOTE_MODE_MUSIC:
-              id(selected_media_index) = (id(selected_media_index) + count - 1) % count;
-              break;
-            case REMOTE_MODE_AUTOMATION:
-              id(selected_automation_index) = (id(selected_automation_index) + count - 1) % count;
-              break;
-          }
+          int &selected_index = selected_index_ref(
+              mode, id(selected_light_index), id(selected_climate_index), id(selected_media_index),
+              id(selected_automation_index));
+          selected_index = wrapped_mode_index(selected_index, count, -1);
       - script.execute: update_selected_item
 
   - id: previous_button_action
@@ -1498,25 +1444,25 @@ script:
                   }
                   return text;
                 };
+                auto has_dual_climate_target = [&]() {
+                  return !isnan(id(selected_climate_target_temp_low)) &&
+                         !isnan(id(selected_climate_target_temp_high)) &&
+                         (id(selected_item_state) == "heat_cool" ||
+                          id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));
+                };
 
                 it->clear();
+                const char *header_icon = "\ue90f";
                 if (mode == REMOTE_MODE_CLIMATE) {
-                  it->print(14, -3, id(symbols), COLOR_ON, display::TextAlign::LEFT, "\uf076");
-                  it->printf(64, 4, id(small_font), COLOR_ON, display::TextAlign::CENTER, "CLIMATE");
-                  it->print(114, -3, id(symbols), COLOR_ON, display::TextAlign::RIGHT, "\uf076");
+                  header_icon = "\uf076";
                 } else if (mode == REMOTE_MODE_MUSIC) {
-                  it->print(14, -3, id(symbols), COLOR_ON, display::TextAlign::LEFT, "\ue3a1");
-                  it->printf(64, 4, id(small_font), COLOR_ON, display::TextAlign::CENTER, "MUSIC");
-                  it->print(114, -3, id(symbols), COLOR_ON, display::TextAlign::RIGHT, "\ue3a1");
+                  header_icon = "\ue3a1";
                 } else if (mode == REMOTE_MODE_AUTOMATION) {
-                  it->print(14, -3, id(symbols), COLOR_ON, display::TextAlign::LEFT, "\ue88a");
-                  it->printf(64, 4, id(small_font), COLOR_ON, display::TextAlign::CENTER, "AUTOMATIONS");
-                  it->print(114, -3, id(symbols), COLOR_ON, display::TextAlign::RIGHT, "\ue88a");
-                } else {
-                  it->print(14, -3, id(symbols), COLOR_ON, display::TextAlign::LEFT, "\ue90f");
-                  it->printf(64, 4, id(small_font), COLOR_ON, display::TextAlign::CENTER, "LIGHTING");
-                  it->print(114, -3, id(symbols), COLOR_ON, display::TextAlign::RIGHT, "\ue90f");
+                  header_icon = "\ue88a";
                 }
+                it->print(14, -3, id(symbols), COLOR_ON, display::TextAlign::LEFT, header_icon);
+                it->printf(64, 4, id(small_font), COLOR_ON, display::TextAlign::CENTER, mode_title(mode));
+                it->print(114, -3, id(symbols), COLOR_ON, display::TextAlign::RIGHT, header_icon);
 
                 it->filled_rectangle(0, 12, 128, 1, COLOR_ON);
                 it->printf(64, 20, id(medium_font), COLOR_ON, display::TextAlign::CENTER, id(selected_item_name).c_str());
@@ -1557,8 +1503,7 @@ script:
                 } else if (mode == REMOTE_MODE_CLIMATE) {
                   std::string hvac_label = upper(id(selected_item_state));
                   std::string action_label = upper(id(selected_climate_hvac_action));
-                  bool has_dual_target = !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) &&
-                                         (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));
+                  bool has_dual_target = has_dual_climate_target();
                   if (hvac_label == "UNKNOWN") {
                     hvac_label = "SYNCING";
                   }
