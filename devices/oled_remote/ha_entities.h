@@ -5,19 +5,22 @@
 #include <string>
 
 #include "esphome/components/api/custom_api_device.h"
+#include "esphome/components/json/json_util.h"
 #include "esphome/core/application.h"
 #include "esphome/core/component.h"
 #include "esphome/core/log.h"
 #include "esphome/core/string_ref.h"
 
 enum RemoteMode {
-  REMOTE_MODE_LIGHTING = 0,
+  REMOTE_MODE_LIGHTS = 0,
   REMOTE_MODE_CLIMATE = 1,
   REMOTE_MODE_MUSIC = 2,
   REMOTE_MODE_AUTOMATION = 3,
+  REMOTE_MODE_WEATHER = 4,
+  REMOTE_MODE_TIME = 5,
 };
 
-static constexpr int REMOTE_MODE_COUNT = 4;
+static constexpr int REMOTE_MODE_COUNT = 6;
 
 struct LightEntity {
   const char *name;
@@ -27,7 +30,6 @@ struct LightEntity {
 struct ClimateEntity {
   const char *name;
   const char *entity_id;
-  bool supports_preset;
 };
 
 struct MediaEntity {
@@ -35,17 +37,14 @@ struct MediaEntity {
   const char *entity_id;
 };
 
-enum AutomationKind {
-  AUTOMATION_KIND_AUTOMATION = 0,
-  AUTOMATION_KIND_SCRIPT = 1,
-  AUTOMATION_KIND_SCENE = 2,
-};
-
 struct AutomationEntity {
   const char *name;
   const char *entity_id;
-  AutomationKind kind;
-  bool supports_enabled_state;
+};
+
+struct WeatherEntity {
+  const char *name;
+  const char *entity_id;
 };
 
 static const LightEntity LIGHT_LIST[] = {
@@ -76,13 +75,13 @@ static const LightEntity LIGHT_LIST[] = {
 };
 
 static const ClimateEntity CLIMATE_LIST[] = {
-    {"Living Room", "climate.living_room_thermostat", true},
-    {"Den", "climate.den_thermostat", true},
-    {"Entryway", "climate.entryway_thermostat", true},
-    {"Master Bedroom", "climate.master_bedroom_thermostat", true},
-    {"Master Bathroom", "climate.bathroom_thermostat", true},
-    {"2nd Floor Hallway", "climate.hallway_thermostat", true},
-    {"Garage", "climate.garage_thermostat", true},
+    {"Living Room", "climate.living_room_thermostat"},
+    {"Den", "climate.den_thermostat"},
+    {"Entryway", "climate.entryway_thermostat"},
+    {"Master Bedroom", "climate.master_bedroom_thermostat"},
+    {"Master Bathroom", "climate.bathroom_thermostat"},
+    {"2nd Floor Hallway", "climate.hallway_thermostat"},
+    {"Garage", "climate.garage_thermostat"},
 };
 
 static const MediaEntity MEDIA_PLAYER_LIST[] = {
@@ -94,15 +93,21 @@ static const MediaEntity MEDIA_PLAYER_LIST[] = {
   };
 
 static const AutomationEntity AUTOMATION_LIST[] = {
-    {"Christmas Lights", "script.christmas_lights", AUTOMATION_KIND_SCRIPT, false},
-    {"Exterior Lights On", "script.turn_on_exterior_lights", AUTOMATION_KIND_SCRIPT, false},
-    {"Exterior Lights Off", "script.turn_off_exterior_lights", AUTOMATION_KIND_SCRIPT, false},
+    {"Christmas Lights", "script.christmas_lights"},
+    {"Exterior Lights On", "script.turn_on_exterior_lights"},
+    {"Exterior Lights Off", "script.turn_off_exterior_lights"},
+};
+
+static const WeatherEntity WEATHER_LIST[] = {
+    {"PirateWeather", "weather.pirateweather"},
+    {"WeatherFlow", "weather.weatherflow_forecast"},
 };
 
 static const int LIGHT_LIST_COUNT = sizeof(LIGHT_LIST) / sizeof(LIGHT_LIST[0]);
 static const int CLIMATE_LIST_COUNT = sizeof(CLIMATE_LIST) / sizeof(CLIMATE_LIST[0]);
 static const int MEDIA_PLAYER_LIST_COUNT = sizeof(MEDIA_PLAYER_LIST) / sizeof(MEDIA_PLAYER_LIST[0]);
 static const int AUTOMATION_LIST_COUNT = sizeof(AUTOMATION_LIST) / sizeof(AUTOMATION_LIST[0]);
+static const int WEATHER_LIST_COUNT = sizeof(WEATHER_LIST) / sizeof(WEATHER_LIST[0]);
 
 static inline bool ha_state_missing(const std::string &value) {
   return value.empty() || value == "unknown" || value == "unavailable" || value == "None";
@@ -130,14 +135,18 @@ static inline int find_entity_index(const Entity *entities, int count, const std
 
 static inline const char *mode_title(RemoteMode mode) {
   switch (mode) {
-    case REMOTE_MODE_LIGHTING:
-      return "LIGHTING";
+    case REMOTE_MODE_LIGHTS:
+      return "LIGHTS";
     case REMOTE_MODE_CLIMATE:
       return "CLIMATE";
     case REMOTE_MODE_MUSIC:
       return "MUSIC";
     case REMOTE_MODE_AUTOMATION:
       return "AUTOMATIONS";
+    case REMOTE_MODE_WEATHER:
+      return "WEATHER";
+    case REMOTE_MODE_TIME:
+      return "TIME";
     default:
       return "MODE";
   }
@@ -145,7 +154,7 @@ static inline const char *mode_title(RemoteMode mode) {
 
 static inline int mode_item_count(RemoteMode mode) {
   switch (mode) {
-    case REMOTE_MODE_LIGHTING:
+    case REMOTE_MODE_LIGHTS:
       return LIGHT_LIST_COUNT;
     case REMOTE_MODE_CLIMATE:
       return CLIMATE_LIST_COUNT;
@@ -153,6 +162,10 @@ static inline int mode_item_count(RemoteMode mode) {
       return MEDIA_PLAYER_LIST_COUNT;
     case REMOTE_MODE_AUTOMATION:
       return AUTOMATION_LIST_COUNT;
+    case REMOTE_MODE_WEATHER:
+      return WEATHER_LIST_COUNT;
+    case REMOTE_MODE_TIME:
+      return 1;
     default:
       return 0;
   }
@@ -160,7 +173,7 @@ static inline int mode_item_count(RemoteMode mode) {
 
 static inline std::string mode_item_name(RemoteMode mode, int idx) {
   switch (mode) {
-    case REMOTE_MODE_LIGHTING:
+    case REMOTE_MODE_LIGHTS:
       return (idx >= 0 && idx < LIGHT_LIST_COUNT) ? LIGHT_LIST[idx].name : "";
     case REMOTE_MODE_CLIMATE:
       return (idx >= 0 && idx < CLIMATE_LIST_COUNT) ? CLIMATE_LIST[idx].name : "";
@@ -168,6 +181,10 @@ static inline std::string mode_item_name(RemoteMode mode, int idx) {
       return (idx >= 0 && idx < MEDIA_PLAYER_LIST_COUNT) ? MEDIA_PLAYER_LIST[idx].name : "";
     case REMOTE_MODE_AUTOMATION:
       return (idx >= 0 && idx < AUTOMATION_LIST_COUNT) ? AUTOMATION_LIST[idx].name : "";
+    case REMOTE_MODE_WEATHER:
+      return (idx >= 0 && idx < WEATHER_LIST_COUNT) ? WEATHER_LIST[idx].name : "";
+    case REMOTE_MODE_TIME:
+      return "";
     default:
       return "";
   }
@@ -175,7 +192,7 @@ static inline std::string mode_item_name(RemoteMode mode, int idx) {
 
 static inline std::string mode_item_entity(RemoteMode mode, int idx) {
   switch (mode) {
-    case REMOTE_MODE_LIGHTING:
+    case REMOTE_MODE_LIGHTS:
       return (idx >= 0 && idx < LIGHT_LIST_COUNT) ? LIGHT_LIST[idx].entity_id : "";
     case REMOTE_MODE_CLIMATE:
       return (idx >= 0 && idx < CLIMATE_LIST_COUNT) ? CLIMATE_LIST[idx].entity_id : "";
@@ -183,35 +200,72 @@ static inline std::string mode_item_entity(RemoteMode mode, int idx) {
       return (idx >= 0 && idx < MEDIA_PLAYER_LIST_COUNT) ? MEDIA_PLAYER_LIST[idx].entity_id : "";
     case REMOTE_MODE_AUTOMATION:
       return (idx >= 0 && idx < AUTOMATION_LIST_COUNT) ? AUTOMATION_LIST[idx].entity_id : "";
+    case REMOTE_MODE_WEATHER:
+      return (idx >= 0 && idx < WEATHER_LIST_COUNT) ? WEATHER_LIST[idx].entity_id : "";
+    case REMOTE_MODE_TIME:
+      return "";
     default:
       return "";
   }
 }
 
-static inline bool climate_supports_preset(int idx) {
-  return idx >= 0 && idx < CLIMATE_LIST_COUNT && CLIMATE_LIST[idx].supports_preset;
+enum AutomationKind {
+  AUTOMATION_KIND_AUTOMATION = 0,
+  AUTOMATION_KIND_SCRIPT = 1,
+  AUTOMATION_KIND_SCENE = 2,
+};
+
+static inline AutomationKind automation_kind(int idx) {
+  if (idx < 0 || idx >= AUTOMATION_LIST_COUNT) {
+    return AUTOMATION_KIND_SCRIPT;
+  }
+
+  std::string entity_id = AUTOMATION_LIST[idx].entity_id;
+  size_t separator = entity_id.find('.');
+  std::string domain = separator == std::string::npos ? entity_id : entity_id.substr(0, separator);
+
+  if (domain == "automation") {
+    return AUTOMATION_KIND_AUTOMATION;
+  }
+  if (domain == "scene") {
+    return AUTOMATION_KIND_SCENE;
+  }
+  return AUTOMATION_KIND_SCRIPT;
 }
 
 static inline bool automation_supports_enabled_state(int idx) {
-  return idx >= 0 && idx < AUTOMATION_LIST_COUNT && AUTOMATION_LIST[idx].supports_enabled_state;
+  return automation_kind(idx) == AUTOMATION_KIND_AUTOMATION;
 }
 
-static inline AutomationKind automation_kind(int idx) {
-  return (idx >= 0 && idx < AUTOMATION_LIST_COUNT) ? AUTOMATION_LIST[idx].kind : AUTOMATION_KIND_SCRIPT;
+static inline const char *automation_kind_label(int idx) {
+  switch (automation_kind(idx)) {
+    case AUTOMATION_KIND_AUTOMATION:
+      return "AUTOMATION";
+    case AUTOMATION_KIND_SCENE:
+      return "SCENE";
+    case AUTOMATION_KIND_SCRIPT:
+    default:
+      return "SCRIPT";
+  }
 }
 
 static inline int &selected_index_ref(
-    RemoteMode mode, int &light_idx, int &climate_idx, int &media_idx, int &automation_idx) {
+    RemoteMode mode, int &light_idx, int &climate_idx, int &media_idx, int &automation_idx, int &weather_idx,
+    int &time_idx) {
   switch (mode) {
-    case REMOTE_MODE_LIGHTING:
+    case REMOTE_MODE_LIGHTS:
       return light_idx;
     case REMOTE_MODE_CLIMATE:
       return climate_idx;
     case REMOTE_MODE_MUSIC:
       return media_idx;
     case REMOTE_MODE_AUTOMATION:
-    default:
       return automation_idx;
+    case REMOTE_MODE_WEATHER:
+      return weather_idx;
+    case REMOTE_MODE_TIME:
+    default:
+      return time_idx;
   }
 }
 
@@ -335,6 +389,7 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
       this->subscribe_homeassistant_state(&ClimateStatusTracker::on_current_temperature_, entity_id, "current_temperature");
       this->subscribe_homeassistant_state(&ClimateStatusTracker::on_hvac_action_, entity_id, "hvac_action");
       this->subscribe_homeassistant_state(&ClimateStatusTracker::on_preset_mode_, entity_id, "preset_mode");
+      this->subscribe_homeassistant_state(&ClimateStatusTracker::on_preset_modes_, entity_id, "preset_modes");
     }
     this->request_all_states();
   }
@@ -364,6 +419,8 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
         [this, idx](esphome::StringRef state) { this->store_hvac_action_(idx, state); });
     esphome::api::global_api_server->get_home_assistant_state(
         entity_id, "preset_mode", [this, idx](esphome::StringRef state) { this->store_preset_mode_(idx, state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "preset_modes", [this, idx](esphome::StringRef state) { this->store_preset_modes_(idx, state); });
   }
 
   void request_all_states() {
@@ -391,6 +448,10 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
       return empty_string();
     }
     return this->preset_mode_[idx];
+  }
+
+  bool supports_preset(int idx) const {
+    return idx >= 0 && idx < CLIMATE_LIST_COUNT && this->supports_preset_[idx];
   }
 
   float target_temperature(int idx) const {
@@ -471,6 +532,13 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
     }
   }
 
+  void on_preset_modes_(const std::string &entity_id, esphome::StringRef state) {
+    int idx = this->find_index_(entity_id);
+    if (idx >= 0) {
+      this->store_preset_modes_(idx, state);
+    }
+  }
+
   void store_state_(int idx, esphome::StringRef state) {
     this->state_[idx] = ha_state_or_unknown(state);
   }
@@ -497,6 +565,24 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
 
   void store_preset_mode_(int idx, esphome::StringRef state) { this->preset_mode_[idx] = state.str(); }
 
+  void store_preset_modes_(int idx, esphome::StringRef state) {
+    this->supports_preset_[idx] = false;
+
+    std::string payload = state.str();
+    if (ha_state_missing(payload)) {
+      return;
+    }
+
+    JsonDocument doc = esphome::json::parse_json(payload);
+    if (doc.is<JsonArray>()) {
+      JsonArray preset_modes = doc.as<JsonArray>();
+      this->supports_preset_[idx] = !preset_modes.isNull() && preset_modes.size() > 0;
+      return;
+    }
+
+    this->supports_preset_[idx] = payload != "[]" && !payload.empty();
+  }
+
   int find_index_(const std::string &entity_id) const {
     return find_entity_index(CLIMATE_LIST, CLIMATE_LIST_COUNT, entity_id);
   }
@@ -508,6 +594,7 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
   float target_temperature_low_[CLIMATE_LIST_COUNT] = {NAN};
   float target_temperature_high_[CLIMATE_LIST_COUNT] = {NAN};
   float current_temperature_[CLIMATE_LIST_COUNT] = {NAN};
+  bool supports_preset_[CLIMATE_LIST_COUNT] = {false};
 };
 
 class MediaStatusTracker : public esphome::api::CustomAPIDevice {
@@ -695,10 +782,190 @@ class AutomationStatusTracker : public esphome::api::CustomAPIDevice {
   std::string state_[AUTOMATION_LIST_COUNT];
 };
 
+class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
+ public:
+  void setup() {
+    for (int i = 0; i < WEATHER_LIST_COUNT; i++) {
+      const char *entity_id = WEATHER_LIST[i].entity_id;
+      this->subscribe_homeassistant_state(&WeatherStatusTracker::on_state_, entity_id);
+      this->subscribe_homeassistant_state(&WeatherStatusTracker::on_temperature_, entity_id, "temperature");
+      this->subscribe_homeassistant_state(&WeatherStatusTracker::on_humidity_, entity_id, "humidity");
+      this->subscribe_homeassistant_state(&WeatherStatusTracker::on_forecast_, entity_id, "forecast");
+    }
+    this->request_all_states();
+  }
+
+  void request_weather_state(int idx) {
+    if (idx < 0 || idx >= WEATHER_LIST_COUNT) {
+      return;
+    }
+
+    const char *entity_id = WEATHER_LIST[idx].entity_id;
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "temperature",
+        [this, idx](esphome::StringRef state) { this->store_temperature_(idx, state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "humidity", [this, idx](esphome::StringRef state) { this->store_humidity_(idx, state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "forecast", [this, idx](esphome::StringRef state) { this->store_forecast_(idx, state); });
+  }
+
+  void request_all_states() {
+    for (int i = 0; i < WEATHER_LIST_COUNT; i++) {
+      this->request_weather_state(i);
+    }
+  }
+
+  const std::string &state(int idx) const {
+    if (idx < 0 || idx >= WEATHER_LIST_COUNT) {
+      return unknown_string();
+    }
+    return this->state_[idx];
+  }
+
+  float temperature(int idx) const {
+    if (idx < 0 || idx >= WEATHER_LIST_COUNT) {
+      return NAN;
+    }
+    return this->temperature_[idx];
+  }
+
+  float humidity(int idx) const {
+    if (idx < 0 || idx >= WEATHER_LIST_COUNT) {
+      return NAN;
+    }
+    return this->humidity_[idx];
+  }
+
+  float high_temperature(int idx) const {
+    if (idx < 0 || idx >= WEATHER_LIST_COUNT) {
+      return NAN;
+    }
+    return this->high_temperature_[idx];
+  }
+
+  float low_temperature(int idx) const {
+    if (idx < 0 || idx >= WEATHER_LIST_COUNT) {
+      return NAN;
+    }
+    return this->low_temperature_[idx];
+  }
+
+ protected:
+  void on_state_(const std::string &entity_id, esphome::StringRef state) {
+    int idx = this->find_index_(entity_id);
+    if (idx >= 0) {
+      this->store_state_(idx, state);
+    }
+  }
+
+  void on_temperature_(const std::string &entity_id, esphome::StringRef state) {
+    int idx = this->find_index_(entity_id);
+    if (idx >= 0) {
+      this->store_temperature_(idx, state);
+    }
+  }
+
+  void on_humidity_(const std::string &entity_id, esphome::StringRef state) {
+    int idx = this->find_index_(entity_id);
+    if (idx >= 0) {
+      this->store_humidity_(idx, state);
+    }
+  }
+
+  void on_forecast_(const std::string &entity_id, esphome::StringRef state) {
+    int idx = this->find_index_(entity_id);
+    if (idx >= 0) {
+      this->store_forecast_(idx, state);
+    }
+  }
+
+  void store_state_(int idx, esphome::StringRef state) {
+    this->state_[idx] = ha_state_or_unknown(state);
+  }
+
+  void store_temperature_(int idx, esphome::StringRef state) {
+    this->temperature_[idx] = ha_parse_float(state);
+  }
+
+  void store_humidity_(int idx, esphome::StringRef state) {
+    this->humidity_[idx] = ha_parse_float(state);
+  }
+
+  void store_forecast_(int idx, esphome::StringRef state) {
+    this->high_temperature_[idx] = NAN;
+    this->low_temperature_[idx] = NAN;
+
+    std::string payload = state.str();
+    if (ha_state_missing(payload)) {
+      return;
+    }
+
+    JsonDocument doc = esphome::json::parse_json(payload);
+    JsonArray forecast;
+    if (doc.is<JsonArray>()) {
+      forecast = doc.as<JsonArray>();
+    } else if (doc.is<JsonObject>()) {
+      JsonObject root = doc.as<JsonObject>();
+      forecast = root["forecast"].as<JsonArray>();
+    } else {
+      return;
+    }
+
+    if (forecast.isNull() || forecast.size() == 0) {
+      return;
+    }
+
+    JsonObject today = forecast[0].as<JsonObject>();
+    if (today.isNull()) {
+      return;
+    }
+
+    auto read_number = [&](JsonObject obj, const char *key) -> float {
+      if (obj[key].is<float>() || obj[key].is<int>()) {
+        return obj[key].as<float>();
+      }
+      if (obj[key].is<const char *>()) {
+        const char *value = obj[key].as<const char *>();
+        if (value != nullptr && value[0] != '\0') {
+          return strtof(value, nullptr);
+        }
+      }
+      return NAN;
+    };
+
+    float high = read_number(today, "temperature");
+    if (std::isnan(high)) high = read_number(today, "temperature_high");
+    if (std::isnan(high)) high = read_number(today, "native_temperature");
+    if (std::isnan(high)) high = read_number(today, "native_temperature_high");
+
+    float low = read_number(today, "templow");
+    if (std::isnan(low)) low = read_number(today, "temperature_low");
+    if (std::isnan(low)) low = read_number(today, "native_templow");
+    if (std::isnan(low)) low = read_number(today, "native_temperature_low");
+
+    this->high_temperature_[idx] = high;
+    this->low_temperature_[idx] = low;
+  }
+
+  int find_index_(const std::string &entity_id) const {
+    return find_entity_index(WEATHER_LIST, WEATHER_LIST_COUNT, entity_id);
+  }
+
+  std::string state_[WEATHER_LIST_COUNT];
+  float temperature_[WEATHER_LIST_COUNT] = {NAN};
+  float humidity_[WEATHER_LIST_COUNT] = {NAN};
+  float high_temperature_[WEATHER_LIST_COUNT] = {NAN};
+  float low_temperature_[WEATHER_LIST_COUNT] = {NAN};
+};
+
 static LightStatusTracker light_status_tracker_storage;
 static ClimateStatusTracker climate_status_tracker_storage;
 static MediaStatusTracker media_status_tracker_storage;
 static AutomationStatusTracker automation_status_tracker_storage;
+static WeatherStatusTracker weather_status_tracker_storage;
 static bool remote_status_trackers_initialized = false;
 
 static inline void ensure_remote_status_trackers() {
@@ -709,6 +976,7 @@ static inline void ensure_remote_status_trackers() {
   climate_status_tracker_storage.setup();
   media_status_tracker_storage.setup();
   automation_status_tracker_storage.setup();
+  weather_status_tracker_storage.setup();
   remote_status_trackers_initialized = true;
 }
 
@@ -757,6 +1025,11 @@ static inline const std::string &climate_hvac_action_for_index(int idx) {
 static inline const std::string &selected_climate_preset_mode(int idx) {
   ensure_remote_status_trackers();
   return climate_status_tracker_storage.preset_mode(idx);
+}
+
+static inline bool climate_supports_preset(int idx) {
+  ensure_remote_status_trackers();
+  return climate_status_tracker_storage.supports_preset(idx);
 }
 
 static inline float selected_climate_target_temperature(int idx) {
@@ -819,9 +1092,44 @@ static inline const std::string &automation_state_for_index(int idx) {
   return automation_status_tracker_storage.state(idx);
 }
 
+static inline void request_selected_weather_status(int idx) {
+  ensure_remote_status_trackers();
+  weather_status_tracker_storage.request_weather_state(idx);
+}
+
+static inline void request_all_weather_status() {
+  ensure_remote_status_trackers();
+  weather_status_tracker_storage.request_all_states();
+}
+
+static inline const std::string &weather_state_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.state(idx);
+}
+
+static inline float weather_temperature_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.temperature(idx);
+}
+
+static inline float weather_humidity_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.humidity(idx);
+}
+
+static inline float weather_high_temperature_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.high_temperature(idx);
+}
+
+static inline float weather_low_temperature_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.low_temperature(idx);
+}
+
 static inline void request_mode_status(RemoteMode mode, int idx) {
   switch (mode) {
-    case REMOTE_MODE_LIGHTING:
+    case REMOTE_MODE_LIGHTS:
       request_selected_light_status(idx);
       break;
     case REMOTE_MODE_CLIMATE:
@@ -832,6 +1140,11 @@ static inline void request_mode_status(RemoteMode mode, int idx) {
       break;
     case REMOTE_MODE_AUTOMATION:
       request_selected_automation_status(idx);
+      break;
+    case REMOTE_MODE_WEATHER:
+      request_selected_weather_status(idx);
+      break;
+    case REMOTE_MODE_TIME:
       break;
   }
 }

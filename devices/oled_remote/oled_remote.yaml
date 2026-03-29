@@ -2,7 +2,7 @@ substitutions:
   BOARD: "esp32dev"
   DEVICE_NAME: "esp32-remote"
   FRIENDLY_NAME: "ESP32 OLED Remote"
-  CLIMATE_TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
+  TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
   SLEEP_DURATION: "120" # seconds until auto-sleep
   DEEP_SLEEP_DURATION: "360min"
   VERSION: "2.0 beta"
@@ -28,15 +28,15 @@ font:
   - file: "fonts/arial-bold.ttf"
     id: tiny_font
     size: 9
-    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]", "(", ")", "'", "!", "?", "\u00B0"]
+    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]", "(", ")", "'", "!", "?", "/", "+", "-", "\u00B0"]
   - file: "fonts/arial-bold.ttf"
     id: small_font
     size: 10
-    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]", "(", ")", "'", "!", "?", "\u00B0"]
+    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]", "(", ")", "'", "!", "?", "/", "+", "-", "\u00B0"]
   - file: "fonts/arial-bold.ttf"
     id: medium_font
     size: 13
-    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]", "(", ")", "'", "!", "?", "\u00B0"]
+    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]", "(", ")", "'", "!", "?", "/", "+", "-", "\u00B0"]
   - file:
       type: gfonts
       family: Material+Symbols+Rounded
@@ -48,9 +48,12 @@ font:
       "\ue1ac", # brightness_high
       "\ue3a1", # audiotrack
       "\ue88a", # home
+      "\uf159", # partly_cloudy_day
       "\uf076", # thermostat
       "\uf537", # heat
       "\ueb3b", # ac_unit
+      "\ue81a", # sunny
+      "\ue8b5", # schedule
     ]
   - file:
       type: gfonts
@@ -80,13 +83,15 @@ esphome:
         - lambda: |-
             ensure_light_status_tracker();
             id(last_active) = millis() / 1000;
-            uint32_t state = id(persisted_ui_state);
+            uint64_t state = id(persisted_ui_state);
             int restored_contrast = state & 0x0F;
-            int restored_mode = (state >> 4) & 0x03;
-            id(selected_light_index) = (state >> 6) & 0x3F;
-            id(selected_climate_index) = (state >> 12) & 0x3F;
-            id(selected_media_index) = (state >> 18) & 0x3F;
-            id(selected_automation_index) = (state >> 24) & 0x3F;
+            int restored_mode = (state >> 4) & 0x07;
+            id(selected_light_index) = (state >> 7) & 0x3F;
+            id(selected_climate_index) = (state >> 13) & 0x3F;
+            id(selected_media_index) = (state >> 19) & 0x3F;
+            id(selected_automation_index) = (state >> 25) & 0x3F;
+            id(selected_weather_index) = (state >> 31) & 0x3F;
+            id(selected_time_index) = (state >> 37) & 0x3F;
 
             if (restored_contrast >= 1 && restored_contrast <= 10) {
               id(contrast) = restored_contrast;
@@ -96,7 +101,7 @@ esphome:
             id(oled_display).set_contrast(id(contrast) * 1.0f / 10.0f);
 
             if (restored_mode < 0 || restored_mode >= REMOTE_MODE_COUNT) {
-              id(current_mode) = REMOTE_MODE_LIGHTING;
+              id(current_mode) = REMOTE_MODE_LIGHTS;
             } else {
               id(current_mode) = restored_mode;
             }
@@ -137,6 +142,22 @@ api:
                 id(show_boot_screen) = false;
                 id(updated_ui) = true;
               }
+
+json:
+
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+    on_time_sync:
+      then:
+        - lambda: |-
+            id(updated_ui) = true;
+    on_time:
+      - seconds: 0
+        minutes: /1
+        then:
+          - lambda: |-
+              id(updated_ui) = true;
 
 ota:
   - platform: esphome
@@ -215,7 +236,7 @@ globals:
     initial_value: 'true'
 
   - id: persisted_ui_state
-    type: uint32_t
+    type: uint64_t
     initial_value: '0'
     restore_value: True
 
@@ -236,6 +257,14 @@ globals:
     initial_value: '0'
 
   - id: selected_automation_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_weather_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_time_index
     type: int
     initial_value: '0'
 
@@ -314,6 +343,26 @@ globals:
   - id: last_automation_feedback
     type: std::string
     initial_value: '""'
+
+  - id: selected_weather_temperature
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_humidity
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_high_temp
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_low_temp
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_condition
+    type: std::string
+    initial_value: '"unknown"'
 
 binary_sensor:
   - platform: gpio
@@ -482,12 +531,14 @@ script:
     then:
       - lambda: |-
           id(persisted_ui_state) =
-              (uint32_t(id(selected_automation_index) & 0x3F) << 24) |
-              (uint32_t(id(selected_media_index) & 0x3F) << 18) |
-              (uint32_t(id(selected_climate_index) & 0x3F) << 12) |
-              (uint32_t(id(selected_light_index) & 0x3F) << 6) |
-              (uint32_t(id(current_mode) & 0x03) << 4) |
-              uint32_t(id(contrast) & 0x0F);
+              (uint64_t(id(selected_time_index) & 0x3F) << 37) |
+              (uint64_t(id(selected_weather_index) & 0x3F) << 31) |
+              (uint64_t(id(selected_automation_index) & 0x3F) << 25) |
+              (uint64_t(id(selected_media_index) & 0x3F) << 19) |
+              (uint64_t(id(selected_climate_index) & 0x3F) << 13) |
+              (uint64_t(id(selected_light_index) & 0x3F) << 7) |
+              (uint64_t(id(current_mode) & 0x07) << 4) |
+              uint64_t(id(contrast) & 0x0F);
 
   - id: update_selected_item
     then:
@@ -505,7 +556,7 @@ script:
 
           int &selected_index = selected_index_ref(
               mode, id(selected_light_index), id(selected_climate_index), id(selected_media_index),
-              id(selected_automation_index));
+              id(selected_automation_index), id(selected_weather_index), id(selected_time_index));
           selected_index = clamp_mode_index(selected_index, count);
           int idx = selected_index;
 
@@ -526,6 +577,11 @@ script:
           id(selected_media_artist) = "";
           id(selected_media_source) = "";
           id(selected_automation_state) = "unknown";
+          id(selected_weather_temperature) = NAN;
+          id(selected_weather_humidity) = NAN;
+          id(selected_weather_high_temp) = NAN;
+          id(selected_weather_low_temp) = NAN;
+          id(selected_weather_condition) = "unknown";
           id(updated_ui) = true;
 
           request_mode_status(mode, idx);
@@ -562,10 +618,10 @@ script:
           RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
           int idx = selected_index_ref(
               mode, id(selected_light_index), id(selected_climate_index), id(selected_media_index),
-              id(selected_automation_index));
+              id(selected_automation_index), id(selected_weather_index), id(selected_time_index));
           idx = clamp_mode_index(idx, mode_item_count(mode));
 
-          if (mode == REMOTE_MODE_LIGHTING) {
+          if (mode == REMOTE_MODE_LIGHTS) {
             const std::string &state = selected_light_state(idx);
             float brightness = selected_light_brightness(idx);
             std::string next_state = id(selected_item_state);
@@ -706,6 +762,51 @@ script:
             if (changed) {
               id(updated_ui) = true;
             }
+          } else if (mode == REMOTE_MODE_WEATHER) {
+            const std::string &condition = weather_state_for_index(idx);
+            float temperature = weather_temperature_for_index(idx);
+            float humidity = weather_humidity_for_index(idx);
+            float high = weather_high_temperature_for_index(idx);
+            float low = weather_low_temperature_for_index(idx);
+            bool changed = false;
+
+            if (condition == "unknown" && std::isnan(temperature) && std::isnan(humidity) &&
+                std::isnan(high) && std::isnan(low)) {
+              request_mode_status(mode, idx);
+            } else {
+              if (id(selected_item_state) != condition) {
+                id(selected_item_state) = condition;
+                changed = true;
+              }
+              if (id(selected_weather_condition) != condition) {
+                id(selected_weather_condition) = condition;
+                changed = true;
+              }
+              if (id(selected_weather_temperature) != temperature) {
+                id(selected_weather_temperature) = temperature;
+                changed = true;
+              }
+              if (id(selected_weather_humidity) != humidity) {
+                id(selected_weather_humidity) = humidity;
+                changed = true;
+              }
+              if (id(selected_weather_high_temp) != high) {
+                id(selected_weather_high_temp) = high;
+                changed = true;
+              }
+              if (id(selected_weather_low_temp) != low) {
+                id(selected_weather_low_temp) = low;
+                changed = true;
+              }
+              if (changed) {
+                id(updated_ui) = true;
+              }
+            }
+          } else if (mode == REMOTE_MODE_TIME) {
+            if (id(selected_item_state) != "time") {
+              id(selected_item_state) = "time";
+              id(updated_ui) = true;
+            }
           }
 
   - id: shift_selected_item
@@ -721,7 +822,7 @@ script:
 
           int &selected_index = selected_index_ref(
               mode, id(selected_light_index), id(selected_climate_index), id(selected_media_index),
-              id(selected_automation_index));
+              id(selected_automation_index), id(selected_weather_index), id(selected_time_index));
           selected_index = wrapped_mode_index(selected_index, count, step);
       - script.execute: update_selected_item
 
@@ -1168,160 +1269,144 @@ script:
           id(updated_ui) = true;
       - script.execute: update_display
 
-  - id: toggle_selected_automation_enabled
-    mode: queued
-    then:
-      - if:
-          condition:
-            lambda: 'return automation_supports_enabled_state(id(selected_automation_index));'
-          then:
-            - if:
-                condition:
-                  lambda: 'return id(selected_automation_state) == "on";'
-                then:
-                  - homeassistant.service:
-                      service: automation.turn_off
-                      data:
-                        entity_id: !lambda 'return id(selected_item_entity);'
-                  - lambda: |-
-                      id(selected_automation_state) = "off";
-                      id(selected_item_state) = "off";
-                      id(last_automation_feedback) = "DISABLED";
-                      id(last_automation_interaction) = millis();
-                      id(updated_ui) = true;
-                else:
-                  - homeassistant.service:
-                      service: automation.turn_on
-                      data:
-                        entity_id: !lambda 'return id(selected_item_entity);'
-                  - lambda: |-
-                      id(selected_automation_state) = "on";
-                      id(selected_item_state) = "on";
-                      id(last_automation_feedback) = "ENABLED";
-                      id(last_automation_interaction) = millis();
-                      id(updated_ui) = true;
-          else:
-            - lambda: |-
-                id(last_automation_feedback) = "TRIGGER ONLY";
-                id(last_automation_interaction) = millis();
-                id(updated_ui) = true;
-      - script.execute: update_display
-
   - id: primary_mode_action
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTING;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_TIME;'
           then:
-            - script.execute: toggle_selected_light
+            - lambda: |-
+                id(updated_ui) = true;
           else:
             - if:
                 condition:
-                  lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
+                  lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS;'
                 then:
-                  - if:
-                      condition:
-                        lambda: 'return !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) && (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));'
-                      then:
-                        - script.execute: climate_temperature_high_up
-                      else:
-                        - script.execute: toggle_selected_climate_power
+                  - script.execute: toggle_selected_light
                 else:
                   - if:
                       condition:
-                        lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                        lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
                       then:
-                        - script.execute: media_previous_track
+                        - if:
+                            condition:
+                              lambda: 'return !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) && (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));'
+                            then:
+                              - script.execute: climate_temperature_high_up
+                            else:
+                              - script.execute: toggle_selected_climate_power
                       else:
-                        - script.execute: trigger_selected_automation
+                        - if:
+                            condition:
+                              lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                            then:
+                              - script.execute: select_next_item
+                            else:
+                              - script.execute: trigger_selected_automation
 
   - id: secondary_mode_action
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS || id(current_mode) == REMOTE_MODE_AUTOMATION || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_TIME;'
           then:
-            - script.execute: cycle_selected_climate_preset
+            - lambda: |-
+                id(updated_ui) = true;
           else:
             - if:
                 condition:
-                  lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                  lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
                 then:
-                  - script.execute: select_next_item
-                else:
-                  - if:
-                      condition:
-                        lambda: 'return id(current_mode) == REMOTE_MODE_AUTOMATION;'
-                      then:
-                        - script.execute: toggle_selected_automation_enabled
+                  - script.execute: cycle_selected_climate_preset
 
   - id: play_pause_mode_action
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTING;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_TIME;'
           then:
-            - script.execute: toggle_selected_light
+            - lambda: |-
+                id(updated_ui) = true;
           else:
             - if:
                 condition:
-                  lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
+                  lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS;'
                 then:
-                  - if:
-                      condition:
-                        lambda: 'return !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) && (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));'
-                      then:
-                        - script.execute: climate_temperature_high_down
-                      else:
-                        - script.execute: cycle_selected_climate_mode
+                  - script.execute: toggle_selected_light
                 else:
                   - if:
                       condition:
-                        lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                        lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
                       then:
-                        - script.execute: media_play_pause
+                        - if:
+                            condition:
+                              lambda: 'return !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) && (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));'
+                            then:
+                              - script.execute: climate_temperature_high_down
+                            else:
+                              - script.execute: cycle_selected_climate_mode
                       else:
-                        - script.execute: trigger_selected_automation
+                        - if:
+                            condition:
+                              lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                            then:
+                              - script.execute: media_play_pause
+                            else:
+                              - script.execute: trigger_selected_automation
 
   - id: increase_mode_value
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTING;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_TIME;'
           then:
-            - script.execute: increase_brightness
+            - lambda: |-
+                id(updated_ui) = true;
           else:
             - if:
                 condition:
-                  lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
+                  lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS;'
                 then:
-                  - script.execute: climate_temperature_up
+                  - script.execute: increase_brightness
                 else:
                   - if:
                       condition:
-                        lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                        lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
                       then:
-                        - script.execute: media_volume_up
+                        - script.execute: climate_temperature_up
+                      else:
+                        - if:
+                            condition:
+                              lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                            then:
+                              - script.execute: media_volume_up
 
   - id: decrease_mode_value
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTING;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_TIME;'
           then:
-            - script.execute: decrease_brightness
+            - lambda: |-
+                id(updated_ui) = true;
           else:
             - if:
                 condition:
-                  lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
+                  lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS;'
                 then:
-                  - script.execute: climate_temperature_down
+                  - script.execute: decrease_brightness
                 else:
                   - if:
                       condition:
-                        lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                        lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
                       then:
-                        - script.execute: media_volume_down
+                        - script.execute: climate_temperature_down
+                      else:
+                        - if:
+                            condition:
+                              lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                            then:
+                              - script.execute: media_volume_down
 
   - id: update_display
     then:
@@ -1346,7 +1431,7 @@ script:
                 detail_line[0] = '\0';
                 bool show_brightness_bar =
                     id(last_brightness_interaction) > 0 && (now - id(last_brightness_interaction)) <= 3000 &&
-                    id(selected_item_state) == "on" && mode == REMOTE_MODE_LIGHTING;
+                    id(selected_item_state) == "on" && mode == REMOTE_MODE_LIGHTS;
                 bool show_contrast_feedback =
                     id(last_contrast_interaction) > 0 && (now - id(last_contrast_interaction)) <= 3000;
                 bool show_climate_feedback =
@@ -1390,6 +1475,32 @@ script:
                   it->filled_rectangle(0, 52, 128, 1, COLOR_ON);
                   it->print(64, 58, id(small_font), COLOR_ON, display::TextAlign::CENTER, footer_line);
                 };
+                auto format_time = [&]() -> std::string {
+                  auto time_now = id(homeassistant_time).now();
+                  if (!time_now.is_valid()) {
+                    return "--:--";
+                  }
+                  int hour = time_now.hour % 12;
+                  if (hour == 0) {
+                    hour = 12;
+                  }
+                  char time_buffer[9];
+                  snprintf(
+                      time_buffer, sizeof(time_buffer), "%d:%02d %s", hour, time_now.minute,
+                      time_now.hour >= 12 ? "PM" : "AM");
+                  return std::string(time_buffer);
+                };
+                auto format_date = [&]() -> std::string {
+                  auto time_now = id(homeassistant_time).now();
+                  if (!time_now.is_valid()) {
+                    return "--/--/----";
+                  }
+                  char date_buffer[11];
+                  snprintf(
+                      date_buffer, sizeof(date_buffer), "%02d/%02d/%04d", time_now.month, time_now.day_of_month,
+                      time_now.year);
+                  return std::string(date_buffer);
+                };
 
                 it->clear();
                 const char *header_icon = "\ue90f";
@@ -1399,6 +1510,10 @@ script:
                   header_icon = "\ue3a1";
                 } else if (mode == REMOTE_MODE_AUTOMATION) {
                   header_icon = "\ue88a";
+                } else if (mode == REMOTE_MODE_WEATHER) {
+                  header_icon = "\ue81a";
+                } else if (mode == REMOTE_MODE_TIME) {
+                  header_icon = "\ue8b5";
                 }
                 it->print(14, -3, id(symbols), COLOR_ON, display::TextAlign::LEFT, header_icon);
                 it->printf(64, 4, id(small_font), COLOR_ON, display::TextAlign::CENTER, mode_title(mode));
@@ -1407,7 +1522,7 @@ script:
                 it->filled_rectangle(0, 12, 128, 1, COLOR_ON);
                 it->printf(64, 20, id(medium_font), COLOR_ON, display::TextAlign::CENTER, id(selected_item_name).c_str());
 
-                if (mode == REMOTE_MODE_LIGHTING) {
+                if (mode == REMOTE_MODE_LIGHTS) {
                   if (id(selected_item_state) == "on") {
                     snprintf(status_line, sizeof(status_line), "ON");
                     if (show_brightness_bar) {
@@ -1447,28 +1562,28 @@ script:
                   if (show_climate_target_focus) {
                     if (!isnan(id(climate_target_focus_value))) {
                       if (!has_dual_target) {
-                        snprintf(status_line, sizeof(status_line), "TARGET: %.0f°${CLIMATE_TEMPERATURE_UNIT}", id(climate_target_focus_value));
+                        snprintf(status_line, sizeof(status_line), "TARGET: %.0f°${TEMPERATURE_UNIT}", id(climate_target_focus_value));
                       } else if (id(climate_target_focus) == 2) {
-                        snprintf(status_line, sizeof(status_line), "HIGH: %.0f°${CLIMATE_TEMPERATURE_UNIT}", id(climate_target_focus_value));
+                        snprintf(status_line, sizeof(status_line), "HIGH: %.0f°${TEMPERATURE_UNIT}", id(climate_target_focus_value));
                       } else {
-                        snprintf(status_line, sizeof(status_line), "LOW: %.0f°${CLIMATE_TEMPERATURE_UNIT}", id(climate_target_focus_value));
+                        snprintf(status_line, sizeof(status_line), "LOW: %.0f°${TEMPERATURE_UNIT}", id(climate_target_focus_value));
                       }
                     }
                   } else if (!isnan(id(selected_climate_current_temp))) {
-                    snprintf(status_line, sizeof(status_line), "%.0f°${CLIMATE_TEMPERATURE_UNIT}", id(selected_climate_current_temp));
+                    snprintf(status_line, sizeof(status_line), "%.0f°${TEMPERATURE_UNIT}", id(selected_climate_current_temp));
                   } else {
                     snprintf(status_line, sizeof(status_line), "SYNCING");
                   }
                   it->print(64, 35, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
 
                   if (!show_climate_target_focus && has_dual_target && action_label != "UNKNOWN") {
-                    snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°${CLIMATE_TEMPERATURE_UNIT}   HIGH: %.0f°${CLIMATE_TEMPERATURE_UNIT}",
+                    snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°${TEMPERATURE_UNIT}   HIGH: %.0f°${TEMPERATURE_UNIT}",
                              id(selected_climate_target_temp_low), id(selected_climate_target_temp_high));
                     it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
                   } else if (
                       !show_climate_target_focus && !isnan(id(selected_climate_target_temp)) &&
                       action_label != "UNKNOWN") {
-                    snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°${CLIMATE_TEMPERATURE_UNIT}", id(selected_climate_target_temp));
+                    snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°${TEMPERATURE_UNIT}", id(selected_climate_target_temp));
                     it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
                   }
 
@@ -1486,7 +1601,7 @@ script:
                     it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
                   }
 
-                } else {
+                } else if (mode == REMOTE_MODE_MUSIC || mode == REMOTE_MODE_AUTOMATION) {
                   if (mode == REMOTE_MODE_MUSIC) {
                     std::string playback = upper(id(selected_item_state));
                     if (playback == "UNKNOWN") {
@@ -1528,6 +1643,7 @@ script:
                   } else {
                     std::string automation_state = upper(id(selected_item_state));
                     std::string automation_feedback = upper(id(last_automation_feedback));
+                    const char *automation_type = automation_kind_label(id(selected_automation_index));
                     if (automation_state == "UNKNOWN" || automation_state == "") {
                       automation_state = "READY";
                     }
@@ -1536,8 +1652,9 @@ script:
                     } else {
                       snprintf(status_line, sizeof(status_line), "%s", automation_state.c_str());
                     }
-                    it->print(64, 35, id(small_font), COLOR_ON, display::TextAlign::CENTER, status_line);
-
+                    it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, automation_type);
+                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+                    
                     if (show_contrast_feedback) {
                       draw_contrast_footer();
                     } else {
@@ -1546,6 +1663,52 @@ script:
                       it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
                       it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
                     }
+                  }
+                } else if (mode == REMOTE_MODE_WEATHER) {
+                  std::string condition = upper(id(selected_weather_condition));
+                  if (condition == "UNKNOWN") {
+                    condition = "SYNCING";
+                  }
+
+                  if (!isnan(id(selected_weather_temperature))) {
+                    snprintf(status_line, sizeof(status_line), "%.0f°${TEMPERATURE_UNIT}", id(selected_weather_temperature));
+                  } else {
+                    snprintf(status_line, sizeof(status_line), "SYNCING");
+                  }
+                  it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                  if (!isnan(id(selected_weather_high_temp)) && !isnan(id(selected_weather_low_temp))) {
+                    snprintf(detail_line, sizeof(detail_line), "H: %.0f°${TEMPERATURE_UNIT}  L: %.0f°${TEMPERATURE_UNIT}", id(selected_weather_high_temp), id(selected_weather_low_temp));
+                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                  } else if (!isnan(id(selected_weather_humidity))) {
+                    snprintf(detail_line, sizeof(detail_line), "HUMIDITY: %.0f%%", id(selected_weather_humidity));
+                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                  }
+
+                  if (show_contrast_feedback) {
+                    draw_contrast_footer();
+                  } else {
+                    draw_footer_dividers();
+                    it->printf(10, 50, id(medium_symbols), COLOR_ON, "\ueac3");
+                    if (condition != "SYNCING" && condition != "") {
+                      it->print(64, 58, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, condition.c_str());
+                    } else {
+                      it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                    }
+                    it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
+                  }
+                } else {
+                  std::string time_label = format_time();
+                  std::string date_label = format_date();
+
+                  it->print(64, 20, id(medium_font), COLOR_ON, display::TextAlign::CENTER, time_label.c_str());
+                  it->print(64, 34, id(small_font), COLOR_ON, display::TextAlign::CENTER, date_label.c_str());
+
+                  if (show_contrast_feedback) {
+                    draw_contrast_footer();
+                  } else {
+                    draw_footer_dividers();
+                    it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
                   }
                 }
                 it->display();
@@ -1617,3 +1780,7 @@ interval:
                 else:
                   - script.execute: sync_current_mode_status
                   - script.execute: update_display
+  - interval: 30min
+    then:
+      - lambda: |-
+          request_all_weather_status();
