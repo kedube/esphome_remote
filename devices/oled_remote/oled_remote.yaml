@@ -2,6 +2,7 @@ substitutions:
   BOARD: "esp32dev"
   DEVICE_NAME: "esp32-remote"
   FRIENDLY_NAME: "ESP32 OLED Remote"
+  CLIMATE_TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
   SLEEP_DURATION: "120" # seconds until auto-sleep
   DEEP_SLEEP_DURATION: "360min"
   VERSION: "2.0 beta"
@@ -10,13 +11,18 @@ substitutions:
   PIN_I2C_SCL: "25"
   PIN_BTN_NEXT: "33"
   PIN_BTN_PREV: "22"
-  PIN_BTN_CONTRAST: "32"
   PIN_BTN_MODE: "14"
   PIN_BTN_AUTOMATION: "26"
   PIN_BTN_LIGHTBULB: "23"
-  PIN_BTN_PLAY_PAUSE: "5"
   PIN_BTN_DIMMER_UP: "19"
   PIN_BTN_DIMMER_DOWN: "18"
+  PIN_OLED_EN: "15"
+
+packages:
+  select_pcb: !include 
+    # Select the appropriate PCB file to include based on your remote control hardware revision.
+    file: pcb_proto.yaml
+    #file: pcb_rev31.yaml
 
 font:
   - file: "fonts/arial-bold.ttf"
@@ -255,11 +261,11 @@ globals:
 
   - id: selected_climate_target_temp_low
     type: float
-    initial_value: '72.0'
+    initial_value: 'NAN'
 
   - id: selected_climate_target_temp_high
     type: float
-    initial_value: '76.0'
+    initial_value: 'NAN'
 
   - id: selected_climate_current_temp
     type: float
@@ -472,23 +478,6 @@ binary_sensor:
         - script.execute: decrease_mode_value
 
 script:
-  - id: turn_off
-    mode: single
-    then:
-      - lambda: |-
-          auto it = id(oled_display);
-          it->clear();
-          it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue8ac");
-          it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "POWERING OFF");
-          it->display();
-      - delay: 1s
-      - lambda: |-
-          auto it = id(oled_display);
-          it->clear();
-          it->display();
-      - delay: 500ms
-      - deep_sleep.enter: go_sleep
-
   - id: persist_ui_state
     then:
       - lambda: |-
@@ -924,13 +913,11 @@ script:
                            ? (high_focus ? id(selected_climate_target_temp_high) : id(selected_climate_target_temp_low))
                            : id(selected_climate_target_temp);
 
-          if (isnan(next) || next < 40.0f) {
-            next = high_focus ? 76.0f : (dual_target ? 68.0f : 72.0f);
+          if (isnan(next)) {
+            return;
           }
 
           next += delta;
-          if (next > 85.0f) next = 85.0f;
-          if (next < 55.0f) next = 55.0f;
 
           if (dual_target) {
             if (high_focus) {
@@ -947,8 +934,6 @@ script:
             id(climate_target_focus_value) = next;
             id(climate_target_focus) = target_focus;
           } else {
-            if (next > 85.0f) next = 85.0f;
-            if (next < 55.0f) next = 55.0f;
             id(selected_climate_target_temp) = next;
             id(selected_climate_target_temp_low) = next;
             id(selected_climate_target_temp_high) = next;
@@ -1462,28 +1447,28 @@ script:
                   if (show_climate_target_focus) {
                     if (!isnan(id(climate_target_focus_value))) {
                       if (!has_dual_target) {
-                        snprintf(status_line, sizeof(status_line), "TARGET: %.0f°F", id(climate_target_focus_value));
+                        snprintf(status_line, sizeof(status_line), "TARGET: %.0f°${CLIMATE_TEMPERATURE_UNIT}", id(climate_target_focus_value));
                       } else if (id(climate_target_focus) == 2) {
-                        snprintf(status_line, sizeof(status_line), "HIGH: %.0f°F", id(climate_target_focus_value));
+                        snprintf(status_line, sizeof(status_line), "HIGH: %.0f°${CLIMATE_TEMPERATURE_UNIT}", id(climate_target_focus_value));
                       } else {
-                        snprintf(status_line, sizeof(status_line), "LOW: %.0f°F", id(climate_target_focus_value));
+                        snprintf(status_line, sizeof(status_line), "LOW: %.0f°${CLIMATE_TEMPERATURE_UNIT}", id(climate_target_focus_value));
                       }
                     }
                   } else if (!isnan(id(selected_climate_current_temp))) {
-                    snprintf(status_line, sizeof(status_line), "%.0f°F", id(selected_climate_current_temp));
+                    snprintf(status_line, sizeof(status_line), "%.0f°${CLIMATE_TEMPERATURE_UNIT}", id(selected_climate_current_temp));
                   } else {
                     snprintf(status_line, sizeof(status_line), "SYNCING");
                   }
                   it->print(64, 35, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
 
                   if (!show_climate_target_focus && has_dual_target && action_label != "UNKNOWN") {
-                    snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°F   HIGH: %.0f°F",
+                    snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°${CLIMATE_TEMPERATURE_UNIT}   HIGH: %.0f°${CLIMATE_TEMPERATURE_UNIT}",
                              id(selected_climate_target_temp_low), id(selected_climate_target_temp_high));
                     it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
                   } else if (
                       !show_climate_target_focus && !isnan(id(selected_climate_target_temp)) &&
                       action_label != "UNKNOWN") {
-                    snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°F", id(selected_climate_target_temp));
+                    snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°${CLIMATE_TEMPERATURE_UNIT}", id(selected_climate_target_temp));
                     it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
                   }
 

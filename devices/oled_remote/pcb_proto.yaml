@@ -1,0 +1,21 @@
+substitutions:
+  PIN_BTN_CONTRAST: "32"
+  PIN_BTN_PLAY_PAUSE: "5"
+
+script:
+  - id: turn_off
+    mode: single
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue8ac");
+          it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "POWERING OFF");
+          it->display();
+      - delay: 1s
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->display();
+      - delay: 500ms
+      - deep_sleep.enter: go_sleep

@@ -1,5 +1,13 @@
 substitutions:
     PIN_BAT_ADC: "32"
+    PIN_BTN_CONTRAST: "5"
+    PIN_BTN_PLAY_PAUSE: "17"
+    PIN_OLED_EN: "15"
+
+output:
+  - platform: gpio
+    pin: ${PIN_OLED_EN}
+    id: oled_power
 
 sensor:
   - platform: adc
@@ -60,13 +68,38 @@ sensor:
       return (int)roundf(pct);
 
 script:
+  - id: turn_off
+    mode: single
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue8ac");
+          it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "POWERING OFF");
+          it->display();
+      - delay: 1s
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->display();
+      - delay: 500ms
+      - output.turn_off: oled_power
+      - delay: 5ms
+      - deep_sleep.enter: go_sleep
+
   - id: update_battery
     mode: single
     then:
+      - logger.log:
+          level: DEBUG
+          format: "Updating battery state"
       - component.update: battery_adc
       - delay: 50ms
+      - lambda: |-
+          ESP_LOGD("battery", "ADC has state: %d value: %.3f",
+            id(battery_adc).has_state(),
+            id(battery_adc).has_state() ? id(battery_adc).state : -1.0);
       - component.update: battery_voltage
       - component.update: battery_percent
       - lambda: |-
           id(last_battery_update) = millis();
-          id(updated_ui) = true;
