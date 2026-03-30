@@ -28,7 +28,7 @@ font:
   - file: "fonts/arial-bold.ttf"
     id: tiny_font
     size: 9
-    glyphs: &arial_glyphs ['0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_ :<>%[]()''!?/+-&*=$#@^°']
+    glyphs: &arial_glyphs ['0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_ :<>%[](){}|''!?/+-&*=$#@^°']
   - file: "fonts/arial-bold.ttf"
     id: small_font
     size: 10
