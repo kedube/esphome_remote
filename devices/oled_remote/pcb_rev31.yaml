@@ -77,17 +77,9 @@ script:
   - id: turn_off
     mode: single
     then:
-      - lambda: |-
-          auto it = id(oled_display);
-          it->clear();
-          it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue8ac");
-          it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "POWERING OFF");
-          it->display();
+      - script.execute: show_powering_off_screen
       - delay: 1s
-      - lambda: |-
-          auto it = id(oled_display);
-          it->clear();
-          it->display();
+      - script.execute: clear_display_for_sleep
       - delay: 500ms
       - output.turn_off: oled_power
       - delay: 5ms

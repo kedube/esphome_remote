@@ -141,6 +141,9 @@ static const int LOCK_LIST_COUNT = sizeof(LOCK_LIST) / sizeof(LOCK_LIST[0]);
 static const int MEDIA_PLAYER_LIST_COUNT = sizeof(MEDIA_PLAYER_LIST) / sizeof(MEDIA_PLAYER_LIST[0]);
 static const int AUTOMATION_LIST_COUNT = sizeof(AUTOMATION_LIST) / sizeof(AUTOMATION_LIST[0]);
 static const int WEATHER_LIST_COUNT = sizeof(WEATHER_LIST) / sizeof(WEATHER_LIST[0]);
+static const char *const INFO_ITEM_NAMES[] = {"Time & Date", "Version"};
+static const char *const INFO_ITEM_ENTITIES[] = {"info.date", "info.version"};
+static const int INFO_ITEM_COUNT = sizeof(INFO_ITEM_NAMES) / sizeof(INFO_ITEM_NAMES[0]);
 
 static inline bool ha_state_missing(const std::string &value) {
   return value.empty() || value == "unknown" || value == "unavailable" || value == "None";
@@ -164,6 +167,27 @@ static inline int find_entity_index(const Entity *entities, int count, const std
     }
   }
   return -1;
+}
+
+template <typename RequestFn>
+static inline void request_all_states_by_count(int count, RequestFn request_fn) {
+  for (int i = 0; i < count; i++) {
+    request_fn(i);
+  }
+}
+
+template <typename Entity>
+static inline std::string indexed_entity_name(const Entity *entities, int count, int idx) {
+  return (idx >= 0 && idx < count) ? entities[idx].name : "";
+}
+
+template <typename Entity>
+static inline std::string indexed_entity_id(const Entity *entities, int count, int idx) {
+  return (idx >= 0 && idx < count) ? entities[idx].entity_id : "";
+}
+
+static inline std::string indexed_value(const char *const *values, int count, int idx) {
+  return (idx >= 0 && idx < count) ? values[idx] : "";
 }
 
 static inline const char *mode_title(RemoteMode mode) {
@@ -206,7 +230,7 @@ static inline int mode_item_count(RemoteMode mode) {
     case REMOTE_MODE_WEATHER:
       return WEATHER_LIST_COUNT;
     case REMOTE_MODE_INFO:
-      return 2;
+      return INFO_ITEM_COUNT;
     default:
       return 0;
   }
@@ -244,28 +268,21 @@ static inline RemoteMode next_available_mode(RemoteMode current, int step) {
 static inline std::string mode_item_name(RemoteMode mode, int idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
-      return (idx >= 0 && idx < LIGHT_LIST_COUNT) ? LIGHT_LIST[idx].name : "";
+      return indexed_entity_name(LIGHT_LIST, LIGHT_LIST_COUNT, idx);
     case REMOTE_MODE_SWITCHES:
-      return (idx >= 0 && idx < SWITCH_LIST_COUNT) ? SWITCH_LIST[idx].name : "";
+      return indexed_entity_name(SWITCH_LIST, SWITCH_LIST_COUNT, idx);
     case REMOTE_MODE_CLIMATE:
-      return (idx >= 0 && idx < CLIMATE_LIST_COUNT) ? CLIMATE_LIST[idx].name : "";
+      return indexed_entity_name(CLIMATE_LIST, CLIMATE_LIST_COUNT, idx);
     case REMOTE_MODE_LOCKS:
-      return (idx >= 0 && idx < LOCK_LIST_COUNT) ? LOCK_LIST[idx].name : "";
+      return indexed_entity_name(LOCK_LIST, LOCK_LIST_COUNT, idx);
     case REMOTE_MODE_MUSIC:
-      return (idx >= 0 && idx < MEDIA_PLAYER_LIST_COUNT) ? MEDIA_PLAYER_LIST[idx].name : "";
+      return indexed_entity_name(MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, idx);
     case REMOTE_MODE_AUTOMATION:
-      return (idx >= 0 && idx < AUTOMATION_LIST_COUNT) ? AUTOMATION_LIST[idx].name : "";
+      return indexed_entity_name(AUTOMATION_LIST, AUTOMATION_LIST_COUNT, idx);
     case REMOTE_MODE_WEATHER:
-      return (idx >= 0 && idx < WEATHER_LIST_COUNT) ? WEATHER_LIST[idx].name : "";
+      return indexed_entity_name(WEATHER_LIST, WEATHER_LIST_COUNT, idx);
     case REMOTE_MODE_INFO:
-      switch (idx) {
-        case 0:
-          return "Time & Date";
-        case 1:
-          return "Version";
-        default:
-          return "";
-      }
+      return indexed_value(INFO_ITEM_NAMES, INFO_ITEM_COUNT, idx);
     default:
       return "";
   }
@@ -274,28 +291,21 @@ static inline std::string mode_item_name(RemoteMode mode, int idx) {
 static inline std::string mode_item_entity(RemoteMode mode, int idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
-      return (idx >= 0 && idx < LIGHT_LIST_COUNT) ? LIGHT_LIST[idx].entity_id : "";
+      return indexed_entity_id(LIGHT_LIST, LIGHT_LIST_COUNT, idx);
     case REMOTE_MODE_SWITCHES:
-      return (idx >= 0 && idx < SWITCH_LIST_COUNT) ? SWITCH_LIST[idx].entity_id : "";
+      return indexed_entity_id(SWITCH_LIST, SWITCH_LIST_COUNT, idx);
     case REMOTE_MODE_CLIMATE:
-      return (idx >= 0 && idx < CLIMATE_LIST_COUNT) ? CLIMATE_LIST[idx].entity_id : "";
+      return indexed_entity_id(CLIMATE_LIST, CLIMATE_LIST_COUNT, idx);
     case REMOTE_MODE_LOCKS:
-      return (idx >= 0 && idx < LOCK_LIST_COUNT) ? LOCK_LIST[idx].entity_id : "";
+      return indexed_entity_id(LOCK_LIST, LOCK_LIST_COUNT, idx);
     case REMOTE_MODE_MUSIC:
-      return (idx >= 0 && idx < MEDIA_PLAYER_LIST_COUNT) ? MEDIA_PLAYER_LIST[idx].entity_id : "";
+      return indexed_entity_id(MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, idx);
     case REMOTE_MODE_AUTOMATION:
-      return (idx >= 0 && idx < AUTOMATION_LIST_COUNT) ? AUTOMATION_LIST[idx].entity_id : "";
+      return indexed_entity_id(AUTOMATION_LIST, AUTOMATION_LIST_COUNT, idx);
     case REMOTE_MODE_WEATHER:
-      return (idx >= 0 && idx < WEATHER_LIST_COUNT) ? WEATHER_LIST[idx].entity_id : "";
+      return indexed_entity_id(WEATHER_LIST, WEATHER_LIST_COUNT, idx);
     case REMOTE_MODE_INFO:
-      switch (idx) {
-        case 0:
-          return "info.date";
-        case 1:
-          return "info.version";
-        default:
-          return "";
-      }
+      return indexed_value(INFO_ITEM_ENTITIES, INFO_ITEM_COUNT, idx);
     default:
       return "";
   }
@@ -391,6 +401,55 @@ static inline const std::string &empty_string() {
   return empty;
 }
 
+template <typename Entity, int Count>
+class SingleStateTracker : public esphome::api::CustomAPIDevice {
+ public:
+  explicit SingleStateTracker(const Entity (&entities)[Count]) : entities_(entities) {}
+
+  void setup() {
+    for (int i = 0; i < Count; i++) {
+      this->subscribe_homeassistant_state(&SingleStateTracker::on_state_, this->entities_[i].entity_id);
+    }
+    this->request_all_states();
+  }
+
+  void request_state(int idx) {
+    if (idx < 0 || idx >= Count) {
+      return;
+    }
+
+    const char *entity_id = this->entities_[idx].entity_id;
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
+  }
+
+  void request_all_states() { request_all_states_by_count(Count, [this](int i) { this->request_state(i); }); }
+
+  const std::string &state(int idx) const {
+    if (idx < 0 || idx >= Count) {
+      return unknown_string();
+    }
+    return this->state_[idx];
+  }
+
+ protected:
+  void on_state_(const std::string &entity_id, esphome::StringRef state) {
+    int idx = this->find_index_(entity_id);
+    if (idx >= 0) {
+      this->store_state_(idx, state);
+    }
+  }
+
+  void store_state_(int idx, esphome::StringRef state) { this->state_[idx] = ha_state_or_unknown(state); }
+
+  int find_index_(const std::string &entity_id) const {
+    return find_entity_index(this->entities_, Count, entity_id);
+  }
+
+  const Entity (&entities_)[Count];
+  std::string state_[Count];
+};
+
 class LightStatusTracker : public esphome::api::CustomAPIDevice {
  public:
   void setup() {
@@ -415,9 +474,7 @@ class LightStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void request_all_states() {
-    for (int i = 0; i < LIGHT_LIST_COUNT; i++) {
-      this->request_light_state(i);
-    }
+    request_all_states_by_count(LIGHT_LIST_COUNT, [this](int i) { this->request_light_state(i); });
   }
 
   bool has_state(int idx) const { return idx >= 0 && idx < LIGHT_LIST_COUNT && this->has_state_[idx]; }
@@ -473,56 +530,7 @@ class LightStatusTracker : public esphome::api::CustomAPIDevice {
   bool has_brightness_[LIGHT_LIST_COUNT] = {false};
 };
 
-class SwitchStatusTracker : public esphome::api::CustomAPIDevice {
- public:
-  void setup() {
-    for (int i = 0; i < SWITCH_LIST_COUNT; i++) {
-      this->subscribe_homeassistant_state(&SwitchStatusTracker::on_state_, SWITCH_LIST[i].entity_id);
-    }
-    this->request_all_states();
-  }
-
-  void request_switch_state(int idx) {
-    if (idx < 0 || idx >= SWITCH_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = SWITCH_LIST[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-  }
-
-  void request_all_states() {
-    for (int i = 0; i < SWITCH_LIST_COUNT; i++) {
-      this->request_switch_state(i);
-    }
-  }
-
-  const std::string &state(int idx) const {
-    if (idx < 0 || idx >= SWITCH_LIST_COUNT) {
-      return unknown_string();
-    }
-    return this->state_[idx];
-  }
-
- protected:
-  void on_state_(const std::string &entity_id, esphome::StringRef state) {
-    int idx = this->find_index_(entity_id);
-    if (idx >= 0) {
-      this->store_state_(idx, state);
-    }
-  }
-
-  void store_state_(int idx, esphome::StringRef state) {
-    this->state_[idx] = ha_state_or_unknown(state);
-  }
-
-  int find_index_(const std::string &entity_id) const {
-    return find_entity_index(SWITCH_LIST, SWITCH_LIST_COUNT, entity_id);
-  }
-
-  std::string state_[SWITCH_LIST_COUNT];
-};
+using SwitchStatusTracker = SingleStateTracker<SwitchEntity, SWITCH_LIST_COUNT>;
 
 class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
  public:
@@ -571,9 +579,7 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void request_all_states() {
-    for (int i = 0; i < CLIMATE_LIST_COUNT; i++) {
-      this->request_climate_state(i);
-    }
+    request_all_states_by_count(CLIMATE_LIST_COUNT, [this](int i) { this->request_climate_state(i); });
   }
 
   const std::string &state(int idx) const {
@@ -744,56 +750,7 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
   bool supports_preset_[CLIMATE_LIST_COUNT] = {false};
 };
 
-class LockStatusTracker : public esphome::api::CustomAPIDevice {
- public:
-  void setup() {
-    for (int i = 0; i < LOCK_LIST_COUNT; i++) {
-      this->subscribe_homeassistant_state(&LockStatusTracker::on_state_, LOCK_LIST[i].entity_id);
-    }
-    this->request_all_states();
-  }
-
-  void request_lock_state(int idx) {
-    if (idx < 0 || idx >= LOCK_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = LOCK_LIST[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-  }
-
-  void request_all_states() {
-    for (int i = 0; i < LOCK_LIST_COUNT; i++) {
-      this->request_lock_state(i);
-    }
-  }
-
-  const std::string &state(int idx) const {
-    if (idx < 0 || idx >= LOCK_LIST_COUNT) {
-      return unknown_string();
-    }
-    return this->state_[idx];
-  }
-
- protected:
-  void on_state_(const std::string &entity_id, esphome::StringRef state) {
-    int idx = this->find_index_(entity_id);
-    if (idx >= 0) {
-      this->store_state_(idx, state);
-    }
-  }
-
-  void store_state_(int idx, esphome::StringRef state) {
-    this->state_[idx] = ha_state_or_unknown(state);
-  }
-
-  int find_index_(const std::string &entity_id) const {
-    return find_entity_index(LOCK_LIST, LOCK_LIST_COUNT, entity_id);
-  }
-
-  std::string state_[LOCK_LIST_COUNT];
-};
+using LockStatusTracker = SingleStateTracker<LockEntity, LOCK_LIST_COUNT>;
 
 class MediaStatusTracker : public esphome::api::CustomAPIDevice {
  public:
@@ -828,9 +785,7 @@ class MediaStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void request_all_states() {
-    for (int i = 0; i < MEDIA_PLAYER_LIST_COUNT; i++) {
-      this->request_media_state(i);
-    }
+    request_all_states_by_count(MEDIA_PLAYER_LIST_COUNT, [this](int i) { this->request_media_state(i); });
   }
 
   const std::string &state(int idx) const {
@@ -929,56 +884,7 @@ class MediaStatusTracker : public esphome::api::CustomAPIDevice {
   float volume_[MEDIA_PLAYER_LIST_COUNT] = {NAN};
 };
 
-class AutomationStatusTracker : public esphome::api::CustomAPIDevice {
- public:
-  void setup() {
-    for (int i = 0; i < AUTOMATION_LIST_COUNT; i++) {
-      this->subscribe_homeassistant_state(&AutomationStatusTracker::on_state_, AUTOMATION_LIST[i].entity_id);
-    }
-    this->request_all_states();
-  }
-
-  void request_automation_state(int idx) {
-    if (idx < 0 || idx >= AUTOMATION_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = AUTOMATION_LIST[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-  }
-
-  void request_all_states() {
-    for (int i = 0; i < AUTOMATION_LIST_COUNT; i++) {
-      this->request_automation_state(i);
-    }
-  }
-
-  const std::string &state(int idx) const {
-    if (idx < 0 || idx >= AUTOMATION_LIST_COUNT) {
-      return unknown_string();
-    }
-    return this->state_[idx];
-  }
-
- protected:
-  void on_state_(const std::string &entity_id, esphome::StringRef state) {
-    int idx = this->find_index_(entity_id);
-    if (idx >= 0) {
-      this->store_state_(idx, state);
-    }
-  }
-
-  void store_state_(int idx, esphome::StringRef state) {
-    this->state_[idx] = ha_state_or_unknown(state);
-  }
-
-  int find_index_(const std::string &entity_id) const {
-    return find_entity_index(AUTOMATION_LIST, AUTOMATION_LIST_COUNT, entity_id);
-  }
-
-  std::string state_[AUTOMATION_LIST_COUNT];
-};
+using AutomationStatusTracker = SingleStateTracker<AutomationEntity, AUTOMATION_LIST_COUNT>;
 
 class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
  public:
@@ -1011,9 +917,7 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void request_all_states() {
-    for (int i = 0; i < WEATHER_LIST_COUNT; i++) {
-      this->request_weather_state(i);
-    }
+    request_all_states_by_count(WEATHER_LIST_COUNT, [this](int i) { this->request_weather_state(i); });
   }
 
   const std::string &state(int idx) const {
@@ -1160,11 +1064,11 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
 };
 
 static LightStatusTracker light_status_tracker_storage;
-static SwitchStatusTracker switch_status_tracker_storage;
+static SwitchStatusTracker switch_status_tracker_storage(SWITCH_LIST);
 static ClimateStatusTracker climate_status_tracker_storage;
-static LockStatusTracker lock_status_tracker_storage;
+static LockStatusTracker lock_status_tracker_storage(LOCK_LIST);
 static MediaStatusTracker media_status_tracker_storage;
-static AutomationStatusTracker automation_status_tracker_storage;
+static AutomationStatusTracker automation_status_tracker_storage(AUTOMATION_LIST);
 static WeatherStatusTracker weather_status_tracker_storage;
 static bool remote_status_trackers_initialized = false;
 
@@ -1211,7 +1115,7 @@ static inline float selected_light_brightness(int idx) {
 
 static inline void request_selected_switch_status(int idx) {
   ensure_remote_status_trackers();
-  switch_status_tracker_storage.request_switch_state(idx);
+  switch_status_tracker_storage.request_state(idx);
 }
 
 static inline const std::string &selected_switch_state(int idx) {
@@ -1266,7 +1170,7 @@ static inline float selected_climate_current_temperature(int idx) {
 
 static inline void request_selected_lock_status(int idx) {
   ensure_remote_status_trackers();
-  lock_status_tracker_storage.request_lock_state(idx);
+  lock_status_tracker_storage.request_state(idx);
 }
 
 static inline const std::string &selected_lock_state(int idx) {
@@ -1306,7 +1210,7 @@ static inline float selected_media_volume(int idx) {
 
 static inline void request_selected_automation_status(int idx) {
   ensure_remote_status_trackers();
-  automation_status_tracker_storage.request_automation_state(idx);
+  automation_status_tracker_storage.request_state(idx);
 }
 
 static inline const std::string &automation_state_for_index(int idx) {

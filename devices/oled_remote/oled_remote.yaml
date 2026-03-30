@@ -568,6 +568,64 @@ binary_sensor:
         - script.execute: decrease_mode_value
 
 script:
+  - id: show_powering_off_screen
+    mode: single
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue8ac");
+          it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "POWERING OFF");
+          it->display();
+
+  - id: clear_display_for_sleep
+    mode: single
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->display();
+
+  - id: reset_mode_feedback_timers
+    then:
+      - lambda: |-
+          id(last_brightness_interaction) = 0;
+          id(last_switch_interaction) = 0;
+          id(last_climate_interaction) = 0;
+          id(last_lock_interaction) = 0;
+          id(last_media_interaction) = 0;
+          id(last_media_volume_interaction) = 0;
+          id(last_automation_interaction) = 0;
+
+  - id: reset_selected_item_state
+    then:
+      - lambda: |-
+          id(selected_item_state) = "unknown";
+          id(selected_brightness_pct) = 0;
+          id(last_switch_feedback) = "";
+          id(last_switch_interaction) = 0;
+          id(selected_climate_target_temp) = NAN;
+          id(selected_climate_hvac_action) = "unknown";
+          id(selected_climate_preset) = "";
+          id(selected_climate_target_temp_low) = NAN;
+          id(selected_climate_target_temp_high) = NAN;
+          id(selected_climate_current_temp) = NAN;
+          id(climate_target_focus) = 0;
+          id(climate_target_focus_value) = NAN;
+          id(last_climate_target_focus_interaction) = 0;
+          id(selected_media_title) = "";
+          id(selected_media_artist) = "";
+          id(selected_media_source) = "";
+          id(selected_automation_state) = "unknown";
+          id(last_lock_feedback) = "";
+          id(last_lock_interaction) = 0;
+          id(selected_weather_temperature) = NAN;
+          id(selected_weather_humidity) = NAN;
+          id(selected_weather_high_temp) = NAN;
+          id(selected_weather_low_temp) = NAN;
+          id(selected_weather_condition) = "unknown";
+          id(updated_ui) = true;
+
   - id: persist_ui_state
     then:
       - lambda: |-
@@ -609,32 +667,13 @@ script:
 
           id(selected_item_name) = mode_item_name(mode, idx);
           id(selected_item_entity) = mode_item_entity(mode, idx);
-          id(selected_item_state) = "unknown";
-          id(selected_brightness_pct) = 0;
-          id(last_switch_feedback) = "";
-          id(last_switch_interaction) = 0;
-          id(selected_climate_target_temp) = NAN;
-          id(selected_climate_hvac_action) = "unknown";
-          id(selected_climate_preset) = "";
-          id(selected_climate_target_temp_low) = NAN;
-          id(selected_climate_target_temp_high) = NAN;
-          id(selected_climate_current_temp) = NAN;
-          id(climate_target_focus) = 0;
-          id(climate_target_focus_value) = NAN;
-          id(last_climate_target_focus_interaction) = 0;
-          id(selected_media_title) = "";
-          id(selected_media_artist) = "";
-          id(selected_media_source) = "";
-          id(selected_automation_state) = "unknown";
-          id(last_lock_feedback) = "";
-          id(last_lock_interaction) = 0;
-          id(selected_weather_temperature) = NAN;
-          id(selected_weather_humidity) = NAN;
-          id(selected_weather_high_temp) = NAN;
-          id(selected_weather_low_temp) = NAN;
-          id(selected_weather_condition) = "unknown";
-          id(updated_ui) = true;
-
+      - script.execute: reset_selected_item_state
+      - lambda: |-
+          RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          int idx = selected_index_ref(
+              mode, id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index), id(selected_media_index),
+              id(selected_automation_index), id(selected_weather_index), id(selected_time_index));
+          idx = clamp_mode_index(idx, mode_item_count(mode));
           request_mode_status(mode, idx);
       - script.execute: persist_ui_state
       - script.execute: sync_current_mode_status
@@ -656,14 +695,8 @@ script:
       - lambda: |-
           RemoteMode current = static_cast<RemoteMode>(id(current_mode));
           id(current_mode) = next_available_mode(current, 1);
-          id(last_brightness_interaction) = 0;
-          id(last_switch_interaction) = 0;
-          id(last_climate_interaction) = 0;
-          id(last_lock_interaction) = 0;
-          id(last_media_interaction) = 0;
-          id(last_media_volume_interaction) = 0;
-          id(last_automation_interaction) = 0;
           id(updated_ui) = true;
+      - script.execute: reset_mode_feedback_timers
       - script.execute: update_selected_item
 
   - id: sync_current_mode_status
@@ -878,6 +911,103 @@ script:
             const char *state = idx == 0 ? "date" : "version";
             if (id(selected_item_state) != state) {
               id(selected_item_state) = state;
+              id(updated_ui) = true;
+            }
+          }
+
+  - id: dispatch_mode_action
+    parameters:
+      action: int
+    then:
+      - lambda: |-
+          const int MODE_ACTION_PRIMARY = 0;
+          const int MODE_ACTION_SECONDARY = 1;
+          const int MODE_ACTION_PLAY_PAUSE = 2;
+          const int MODE_ACTION_INCREASE = 3;
+          const int MODE_ACTION_DECREASE = 4;
+          RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          bool dual_climate_target =
+              !isnan(id(selected_climate_target_temp_low)) &&
+              !isnan(id(selected_climate_target_temp_high)) &&
+              (id(selected_item_state) == "heat_cool" ||
+               id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));
+
+          if (action == MODE_ACTION_SECONDARY) {
+            if (mode == REMOTE_MODE_CLIMATE) {
+              id(cycle_selected_climate_preset).execute();
+            } else {
+              id(updated_ui) = true;
+            }
+            return;
+          }
+
+          if (action == MODE_ACTION_PRIMARY) {
+            if (mode == REMOTE_MODE_LIGHTS) {
+              id(toggle_selected_light).execute();
+            } else if (mode == REMOTE_MODE_SWITCHES) {
+              id(turn_on_selected_switch).execute();
+            } else if (mode == REMOTE_MODE_CLIMATE) {
+              if (dual_climate_target) {
+                id(climate_temperature_high_up).execute();
+              } else {
+                id(toggle_selected_climate_power).execute();
+              }
+            } else if (mode == REMOTE_MODE_LOCKS) {
+              id(lock_selected_lock).execute();
+            } else if (mode == REMOTE_MODE_MUSIC) {
+              id(select_next_item).execute();
+            } else if (mode == REMOTE_MODE_AUTOMATION) {
+              id(trigger_selected_automation).execute();
+            } else {
+              id(updated_ui) = true;
+            }
+            return;
+          }
+
+          if (action == MODE_ACTION_PLAY_PAUSE) {
+            if (mode == REMOTE_MODE_LIGHTS) {
+              id(toggle_selected_light).execute();
+            } else if (mode == REMOTE_MODE_SWITCHES) {
+              id(turn_off_selected_switch).execute();
+            } else if (mode == REMOTE_MODE_CLIMATE) {
+              if (dual_climate_target) {
+                id(climate_temperature_high_down).execute();
+              } else {
+                id(cycle_selected_climate_mode).execute();
+              }
+            } else if (mode == REMOTE_MODE_LOCKS) {
+              id(unlock_selected_lock).execute();
+            } else if (mode == REMOTE_MODE_MUSIC) {
+              id(media_play_pause).execute();
+            } else if (mode == REMOTE_MODE_AUTOMATION) {
+              id(trigger_selected_automation).execute();
+            } else {
+              id(updated_ui) = true;
+            }
+            return;
+          }
+
+          if (action == MODE_ACTION_INCREASE) {
+            if (mode == REMOTE_MODE_LIGHTS) {
+              id(increase_brightness).execute();
+            } else if (mode == REMOTE_MODE_CLIMATE) {
+              id(climate_temperature_up).execute();
+            } else if (mode == REMOTE_MODE_MUSIC) {
+              id(media_volume_up).execute();
+            } else {
+              id(updated_ui) = true;
+            }
+            return;
+          }
+
+          if (action == MODE_ACTION_DECREASE) {
+            if (mode == REMOTE_MODE_LIGHTS) {
+              id(decrease_brightness).execute();
+            } else if (mode == REMOTE_MODE_CLIMATE) {
+              id(climate_temperature_down).execute();
+            } else if (mode == REMOTE_MODE_MUSIC) {
+              id(media_volume_down).execute();
+            } else {
               id(updated_ui) = true;
             }
           }
@@ -1464,166 +1594,33 @@ script:
 
   - id: primary_mode_action
     then:
-      - if:
-          condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
-          then:
-            - lambda: |-
-                id(updated_ui) = true;
-          else:
-            - if:
-                condition:
-                  lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS;'
-                then:
-                  - script.execute: toggle_selected_light
-                else:
-                  - if:
-                      condition:
-                        lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES;'
-                      then:
-                        - script.execute: turn_on_selected_switch
-                      else:
-                        - if:
-                            condition:
-                              lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
-                            then:
-                              - if:
-                                  condition:
-                                    lambda: 'return !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) && (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));'
-                                  then:
-                                    - script.execute: climate_temperature_high_up
-                                  else:
-                                    - script.execute: toggle_selected_climate_power
-                            else:
-                              - if:
-                                  condition:
-                                    lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS;'
-                                  then:
-                                    - script.execute: lock_selected_lock
-                                  else:
-                                    - if:
-                                        condition:
-                                          lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
-                                        then:
-                                          - script.execute: select_next_item
-                                        else:
-                                          - script.execute: trigger_selected_automation
+      - script.execute:
+          id: dispatch_mode_action
+          action: 0
 
   - id: secondary_mode_action
     then:
-      - if:
-          condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS || id(current_mode) == REMOTE_MODE_SWITCHES || id(current_mode) == REMOTE_MODE_LOCKS || id(current_mode) == REMOTE_MODE_AUTOMATION || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
-          then:
-            - lambda: |-
-                id(updated_ui) = true;
-          else:
-            - if:
-                condition:
-                  lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
-                then:
-                  - script.execute: cycle_selected_climate_preset
+      - script.execute:
+          id: dispatch_mode_action
+          action: 1
 
   - id: play_pause_mode_action
     then:
-      - if:
-          condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
-          then:
-            - lambda: |-
-                id(updated_ui) = true;
-          else:
-            - if:
-                condition:
-                  lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS;'
-                then:
-                  - script.execute: toggle_selected_light
-                else:
-                  - if:
-                      condition:
-                        lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES;'
-                      then:
-                        - script.execute: turn_off_selected_switch
-                      else:
-                        - if:
-                            condition:
-                              lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
-                            then:
-                              - if:
-                                  condition:
-                                    lambda: 'return !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) && (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));'
-                                  then:
-                                    - script.execute: climate_temperature_high_down
-                                  else:
-                                    - script.execute: cycle_selected_climate_mode
-                            else:
-                              - if:
-                                  condition:
-                                    lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS;'
-                                  then:
-                                    - script.execute: unlock_selected_lock
-                                  else:
-                                    - if:
-                                        condition:
-                                          lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
-                                        then:
-                                          - script.execute: media_play_pause
-                                        else:
-                                          - script.execute: trigger_selected_automation
+      - script.execute:
+          id: dispatch_mode_action
+          action: 2
 
   - id: increase_mode_value
     then:
-      - if:
-          condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES || id(current_mode) == REMOTE_MODE_LOCKS || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
-          then:
-            - lambda: |-
-                id(updated_ui) = true;
-          else:
-            - if:
-                condition:
-                  lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS;'
-                then:
-                  - script.execute: increase_brightness
-                else:
-                  - if:
-                      condition:
-                        lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
-                      then:
-                        - script.execute: climate_temperature_up
-                      else:
-                        - if:
-                            condition:
-                              lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
-                            then:
-                              - script.execute: media_volume_up
+      - script.execute:
+          id: dispatch_mode_action
+          action: 3
 
   - id: decrease_mode_value
     then:
-      - if:
-          condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES || id(current_mode) == REMOTE_MODE_LOCKS || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
-          then:
-            - lambda: |-
-                id(updated_ui) = true;
-          else:
-            - if:
-                condition:
-                  lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS;'
-                then:
-                  - script.execute: decrease_brightness
-                else:
-                  - if:
-                      condition:
-                        lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
-                      then:
-                        - script.execute: climate_temperature_down
-                      else:
-                        - if:
-                            condition:
-                              lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
-                            then:
-                              - script.execute: media_volume_down
+      - script.execute:
+          id: dispatch_mode_action
+          action: 4
 
   - id: update_display
     then:
@@ -1790,7 +1787,7 @@ script:
                     switch_state = "SYNCING";
                   }
                   snprintf(status_line, sizeof(status_line), "%s", switch_state.c_str());
-                  it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+                  it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
 
                   if (show_switch_feedback && !switch_feedback.empty()) {
                     snprintf(detail_line, sizeof(detail_line), "%s", switch_feedback.c_str());
