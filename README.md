@@ -58,7 +58,7 @@ cd esphome_remote/devices/oled_remote
 
 3. **Update Home Assistant entities** (if needed):
    - Edit `ha_entities.h` to match your Home Assistant entities
-   - The default configuration includes numerous entities for several classification of devices: Lights, Climate, Music, Automations, & Weather
+   - The default configuration includes numerous entities for several classification of devices: Lights, Switches, Climate, Locks, Music, Automations, & Weather
 
 4. **Compile and upload** to your ESP32
 
