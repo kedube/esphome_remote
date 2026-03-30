@@ -13,15 +13,16 @@
 
 enum RemoteMode {
   REMOTE_MODE_LIGHTS = 0,
-  REMOTE_MODE_CLIMATE = 1,
-  REMOTE_MODE_LOCKS = 2,
-  REMOTE_MODE_MUSIC = 3,
-  REMOTE_MODE_AUTOMATION = 4,
-  REMOTE_MODE_WEATHER = 5,
-  REMOTE_MODE_INFO = 6,
+  REMOTE_MODE_SWITCHES = 1,
+  REMOTE_MODE_CLIMATE = 2,
+  REMOTE_MODE_LOCKS = 3,
+  REMOTE_MODE_MUSIC = 4,
+  REMOTE_MODE_AUTOMATION = 5,
+  REMOTE_MODE_WEATHER = 6,
+  REMOTE_MODE_INFO = 7,
 };
 
-static constexpr int REMOTE_MODE_COUNT = 7;
+static constexpr int REMOTE_MODE_COUNT = 8;
 
 struct LightEntity {
   const char *name;
@@ -29,6 +30,11 @@ struct LightEntity {
 };
 
 struct ClimateEntity {
+  const char *name;
+  const char *entity_id;
+};
+
+struct SwitchEntity {
   const char *name;
   const char *entity_id;
 };
@@ -90,6 +96,16 @@ static const ClimateEntity CLIMATE_LIST[] = {
     {"Garage", "climate.garage_thermostat"},
 };
 
+static const SwitchEntity SWITCH_LIST[] = {
+    {"Shower Left", "switch.shower_left_plug"},
+    {"Shower Right", "switch.shower_right_plug"},
+    {"Island Faucet", "switch.kitchen_island_faucet_plug"},
+    {"Bambu 3D Printer", "switch.bambu_3d_printer"},
+    {"Stereo Lamp", "switch.stereo_lamp"},
+    {"1st Dehumidifier", "switch.basement_dehumidifier"},
+    {"2nd Dehumidifier", "switch.backup_dehumidifier"},
+};
+
 static const LockEntity LOCK_LIST[] = {
     {"Front Door", "lock.front_door"},
     {"Front Side Door", "lock.front_side_door_lock"},
@@ -119,6 +135,7 @@ static const WeatherEntity WEATHER_LIST[] = {
 };
 
 static const int LIGHT_LIST_COUNT = sizeof(LIGHT_LIST) / sizeof(LIGHT_LIST[0]);
+static const int SWITCH_LIST_COUNT = sizeof(SWITCH_LIST) / sizeof(SWITCH_LIST[0]);
 static const int CLIMATE_LIST_COUNT = sizeof(CLIMATE_LIST) / sizeof(CLIMATE_LIST[0]);
 static const int LOCK_LIST_COUNT = sizeof(LOCK_LIST) / sizeof(LOCK_LIST[0]);
 static const int MEDIA_PLAYER_LIST_COUNT = sizeof(MEDIA_PLAYER_LIST) / sizeof(MEDIA_PLAYER_LIST[0]);
@@ -153,6 +170,8 @@ static inline const char *mode_title(RemoteMode mode) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return "LIGHTS";
+    case REMOTE_MODE_SWITCHES:
+      return "SWITCHES";
     case REMOTE_MODE_CLIMATE:
       return "CLIMATE";
     case REMOTE_MODE_LOCKS:
@@ -174,6 +193,8 @@ static inline int mode_item_count(RemoteMode mode) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return LIGHT_LIST_COUNT;
+    case REMOTE_MODE_SWITCHES:
+      return SWITCH_LIST_COUNT;
     case REMOTE_MODE_CLIMATE:
       return CLIMATE_LIST_COUNT;
     case REMOTE_MODE_LOCKS:
@@ -224,6 +245,8 @@ static inline std::string mode_item_name(RemoteMode mode, int idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return (idx >= 0 && idx < LIGHT_LIST_COUNT) ? LIGHT_LIST[idx].name : "";
+    case REMOTE_MODE_SWITCHES:
+      return (idx >= 0 && idx < SWITCH_LIST_COUNT) ? SWITCH_LIST[idx].name : "";
     case REMOTE_MODE_CLIMATE:
       return (idx >= 0 && idx < CLIMATE_LIST_COUNT) ? CLIMATE_LIST[idx].name : "";
     case REMOTE_MODE_LOCKS:
@@ -252,6 +275,8 @@ static inline std::string mode_item_entity(RemoteMode mode, int idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return (idx >= 0 && idx < LIGHT_LIST_COUNT) ? LIGHT_LIST[idx].entity_id : "";
+    case REMOTE_MODE_SWITCHES:
+      return (idx >= 0 && idx < SWITCH_LIST_COUNT) ? SWITCH_LIST[idx].entity_id : "";
     case REMOTE_MODE_CLIMATE:
       return (idx >= 0 && idx < CLIMATE_LIST_COUNT) ? CLIMATE_LIST[idx].entity_id : "";
     case REMOTE_MODE_LOCKS:
@@ -317,11 +342,13 @@ static inline const char *automation_kind_label(int idx) {
 }
 
 static inline int &selected_index_ref(
-    RemoteMode mode, int &light_idx, int &climate_idx, int &lock_idx, int &media_idx, int &automation_idx,
-    int &weather_idx, int &time_idx) {
+    RemoteMode mode, int &light_idx, int &switch_idx, int &climate_idx, int &lock_idx, int &media_idx,
+    int &automation_idx, int &weather_idx, int &time_idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return light_idx;
+    case REMOTE_MODE_SWITCHES:
+      return switch_idx;
     case REMOTE_MODE_CLIMATE:
       return climate_idx;
     case REMOTE_MODE_LOCKS:
@@ -444,6 +471,57 @@ class LightStatusTracker : public esphome::api::CustomAPIDevice {
   float brightness_[LIGHT_LIST_COUNT] = {NAN};
   bool has_state_[LIGHT_LIST_COUNT] = {false};
   bool has_brightness_[LIGHT_LIST_COUNT] = {false};
+};
+
+class SwitchStatusTracker : public esphome::api::CustomAPIDevice {
+ public:
+  void setup() {
+    for (int i = 0; i < SWITCH_LIST_COUNT; i++) {
+      this->subscribe_homeassistant_state(&SwitchStatusTracker::on_state_, SWITCH_LIST[i].entity_id);
+    }
+    this->request_all_states();
+  }
+
+  void request_switch_state(int idx) {
+    if (idx < 0 || idx >= SWITCH_LIST_COUNT) {
+      return;
+    }
+
+    const char *entity_id = SWITCH_LIST[idx].entity_id;
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
+  }
+
+  void request_all_states() {
+    for (int i = 0; i < SWITCH_LIST_COUNT; i++) {
+      this->request_switch_state(i);
+    }
+  }
+
+  const std::string &state(int idx) const {
+    if (idx < 0 || idx >= SWITCH_LIST_COUNT) {
+      return unknown_string();
+    }
+    return this->state_[idx];
+  }
+
+ protected:
+  void on_state_(const std::string &entity_id, esphome::StringRef state) {
+    int idx = this->find_index_(entity_id);
+    if (idx >= 0) {
+      this->store_state_(idx, state);
+    }
+  }
+
+  void store_state_(int idx, esphome::StringRef state) {
+    this->state_[idx] = ha_state_or_unknown(state);
+  }
+
+  int find_index_(const std::string &entity_id) const {
+    return find_entity_index(SWITCH_LIST, SWITCH_LIST_COUNT, entity_id);
+  }
+
+  std::string state_[SWITCH_LIST_COUNT];
 };
 
 class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
@@ -1082,6 +1160,7 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
 };
 
 static LightStatusTracker light_status_tracker_storage;
+static SwitchStatusTracker switch_status_tracker_storage;
 static ClimateStatusTracker climate_status_tracker_storage;
 static LockStatusTracker lock_status_tracker_storage;
 static MediaStatusTracker media_status_tracker_storage;
@@ -1094,6 +1173,7 @@ static inline void ensure_remote_status_trackers() {
     return;
   }
   light_status_tracker_storage.setup();
+  switch_status_tracker_storage.setup();
   climate_status_tracker_storage.setup();
   lock_status_tracker_storage.setup();
   media_status_tracker_storage.setup();
@@ -1127,6 +1207,16 @@ static inline bool selected_light_has_brightness(int idx) {
 static inline float selected_light_brightness(int idx) {
   ensure_remote_status_trackers();
   return light_status_tracker_storage.brightness(idx);
+}
+
+static inline void request_selected_switch_status(int idx) {
+  ensure_remote_status_trackers();
+  switch_status_tracker_storage.request_switch_state(idx);
+}
+
+static inline const std::string &selected_switch_state(int idx) {
+  ensure_remote_status_trackers();
+  return switch_status_tracker_storage.state(idx);
 }
 
 static inline void request_selected_climate_status(int idx) {
@@ -1263,6 +1353,9 @@ static inline void request_mode_status(RemoteMode mode, int idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       request_selected_light_status(idx);
+      break;
+    case REMOTE_MODE_SWITCHES:
+      request_selected_switch_status(idx);
       break;
     case REMOTE_MODE_CLIMATE:
       request_selected_climate_status(idx);

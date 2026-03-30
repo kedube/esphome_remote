@@ -3,6 +3,7 @@
 This repository contains ESPHome YAML configuration files for remote devices and sensors, specifically designed for Home Assistant entity control using ESP32 boards with OLED displays. It supports the control of:
 - Lights
 - Climate (Thermostats)
+- Door Locks
 - Music Players
 - Triggering Automations, Scripts, or Scenes
 - Weather Reports

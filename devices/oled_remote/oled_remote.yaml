@@ -52,6 +52,7 @@ font:
       "\ue81a", # sunny
       "\ue88e", # info
       "\ue897", # lock 
+      "\ue1f4", # switch
     ]
   - file:
       type: gfonts
@@ -85,12 +86,13 @@ esphome:
             int restored_contrast = state & 0x0F;
             int restored_mode = (state >> 4) & 0x07;
             id(selected_light_index) = (state >> 7) & 0x3F;
-            id(selected_climate_index) = (state >> 13) & 0x3F;
-            id(selected_lock_index) = (state >> 19) & 0x3F;
-            id(selected_media_index) = (state >> 25) & 0x3F;
-            id(selected_automation_index) = (state >> 31) & 0x3F;
-            id(selected_weather_index) = (state >> 37) & 0x3F;
-            id(selected_time_index) = (state >> 43) & 0x3F;
+            id(selected_switch_index) = (state >> 13) & 0x3F;
+            id(selected_climate_index) = (state >> 19) & 0x3F;
+            id(selected_lock_index) = (state >> 25) & 0x3F;
+            id(selected_media_index) = (state >> 31) & 0x3F;
+            id(selected_automation_index) = (state >> 37) & 0x3F;
+            id(selected_weather_index) = (state >> 43) & 0x3F;
+            id(selected_time_index) = (state >> 49) & 0x3F;
 
             if (restored_contrast >= 1 && restored_contrast <= 10) {
               id(contrast) = restored_contrast;
@@ -203,6 +205,10 @@ globals:
     type: uint32_t
     initial_value: '0'
 
+  - id: last_switch_interaction
+    type: uint32_t
+    initial_value: '0'
+
   - id: last_contrast_interaction
     type: uint32_t
     initial_value: '0'
@@ -249,6 +255,10 @@ globals:
     initial_value: '0'
 
   - id: selected_light_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_switch_index
     type: int
     initial_value: '0'
 
@@ -349,6 +359,10 @@ globals:
     initial_value: '"unknown"'
 
   - id: last_automation_feedback
+    type: std::string
+    initial_value: '""'
+
+  - id: last_switch_feedback
     type: std::string
     initial_value: '""'
 
@@ -558,12 +572,13 @@ script:
     then:
       - lambda: |-
           id(persisted_ui_state) =
-              (uint64_t(id(selected_time_index) & 0x3F) << 43) |
-              (uint64_t(id(selected_weather_index) & 0x3F) << 37) |
-              (uint64_t(id(selected_automation_index) & 0x3F) << 31) |
-              (uint64_t(id(selected_media_index) & 0x3F) << 25) |
-              (uint64_t(id(selected_lock_index) & 0x3F) << 19) |
-              (uint64_t(id(selected_climate_index) & 0x3F) << 13) |
+              (uint64_t(id(selected_time_index) & 0x3F) << 49) |
+              (uint64_t(id(selected_weather_index) & 0x3F) << 43) |
+              (uint64_t(id(selected_automation_index) & 0x3F) << 37) |
+              (uint64_t(id(selected_media_index) & 0x3F) << 31) |
+              (uint64_t(id(selected_lock_index) & 0x3F) << 25) |
+              (uint64_t(id(selected_climate_index) & 0x3F) << 19) |
+              (uint64_t(id(selected_switch_index) & 0x3F) << 13) |
               (uint64_t(id(selected_light_index) & 0x3F) << 7) |
               (uint64_t(id(current_mode) & 0x07) << 4) |
               uint64_t(id(contrast) & 0x0F);
@@ -587,7 +602,7 @@ script:
           }
 
           int &selected_index = selected_index_ref(
-              mode, id(selected_light_index), id(selected_climate_index), id(selected_lock_index), id(selected_media_index),
+              mode, id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index), id(selected_media_index),
               id(selected_automation_index), id(selected_weather_index), id(selected_time_index));
           selected_index = clamp_mode_index(selected_index, count);
           int idx = selected_index;
@@ -596,6 +611,8 @@ script:
           id(selected_item_entity) = mode_item_entity(mode, idx);
           id(selected_item_state) = "unknown";
           id(selected_brightness_pct) = 0;
+          id(last_switch_feedback) = "";
+          id(last_switch_interaction) = 0;
           id(selected_climate_target_temp) = NAN;
           id(selected_climate_hvac_action) = "unknown";
           id(selected_climate_preset) = "";
@@ -640,6 +657,7 @@ script:
           RemoteMode current = static_cast<RemoteMode>(id(current_mode));
           id(current_mode) = next_available_mode(current, 1);
           id(last_brightness_interaction) = 0;
+          id(last_switch_interaction) = 0;
           id(last_climate_interaction) = 0;
           id(last_lock_interaction) = 0;
           id(last_media_interaction) = 0;
@@ -653,7 +671,7 @@ script:
       - lambda: |-
           RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
           int idx = selected_index_ref(
-              mode, id(selected_light_index), id(selected_climate_index), id(selected_lock_index), id(selected_media_index),
+              mode, id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index), id(selected_media_index),
               id(selected_automation_index), id(selected_weather_index), id(selected_time_index));
           idx = clamp_mode_index(idx, mode_item_count(mode));
 
@@ -684,6 +702,15 @@ script:
             if (next_state != id(selected_item_state) || next_brightness_pct != id(selected_brightness_pct)) {
               id(selected_item_state) = next_state;
               id(selected_brightness_pct) = next_brightness_pct;
+              id(updated_ui) = true;
+            }
+          } else if (mode == REMOTE_MODE_SWITCHES) {
+            const std::string &state = selected_switch_state(idx);
+
+            if (state == "unknown") {
+              request_mode_status(mode, idx);
+            } else if (id(selected_item_state) != state) {
+              id(selected_item_state) = state;
               id(updated_ui) = true;
             }
           } else if (mode == REMOTE_MODE_CLIMATE) {
@@ -867,7 +894,7 @@ script:
           }
 
           int &selected_index = selected_index_ref(
-              mode, id(selected_light_index), id(selected_climate_index), id(selected_lock_index), id(selected_media_index),
+              mode, id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index), id(selected_media_index),
               id(selected_automation_index), id(selected_weather_index), id(selected_time_index));
           selected_index = wrapped_mode_index(selected_index, count, step);
       - script.execute: update_selected_item
@@ -936,6 +963,56 @@ script:
                 }
                 id(updated_ui) = true;
             - script.execute: update_display
+
+  - id: turn_on_selected_switch
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_switch_feedback) = "";
+          id(selected_item_state) = "turning_on";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - homeassistant.action:
+          action: switch.turn_on
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - script.execute:
+                id: set_switch_feedback
+                feedback: "SUCCESS"
+            - lambda: |-
+                request_selected_switch_status(id(selected_switch_index));
+          on_error:
+            - script.execute:
+                id: set_switch_feedback
+                feedback: "FAILED"
+            - lambda: |-
+                request_selected_switch_status(id(selected_switch_index));
+
+  - id: turn_off_selected_switch
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_switch_feedback) = "";
+          id(selected_item_state) = "turning_off";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - homeassistant.action:
+          action: switch.turn_off
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - script.execute:
+                id: set_switch_feedback
+                feedback: "SUCCESS"
+            - lambda: |-
+                request_selected_switch_status(id(selected_switch_index));
+          on_error:
+            - script.execute:
+                id: set_switch_feedback
+                feedback: "FAILED"
+            - lambda: |-
+                request_selected_switch_status(id(selected_switch_index));
 
   - id: lock_selected_lock
     mode: queued
@@ -1365,6 +1442,16 @@ script:
           id(updated_ui) = true;
       - script.execute: update_display
 
+  - id: set_switch_feedback
+    parameters:
+      feedback: std::string
+    then:
+      - lambda: |-
+          id(last_switch_feedback) = feedback;
+          id(last_switch_interaction) = millis();
+          id(updated_ui) = true;
+      - script.execute: update_display
+
   - id: set_lock_feedback
     parameters:
       feedback: std::string
@@ -1392,35 +1479,41 @@ script:
                 else:
                   - if:
                       condition:
-                        lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
+                        lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES;'
                       then:
-                        - if:
-                            condition:
-                              lambda: 'return !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) && (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));'
-                            then:
-                              - script.execute: climate_temperature_high_up
-                            else:
-                              - script.execute: toggle_selected_climate_power
+                        - script.execute: turn_on_selected_switch
                       else:
                         - if:
                             condition:
-                              lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS;'
+                              lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
                             then:
-                              - script.execute: lock_selected_lock
+                              - if:
+                                  condition:
+                                    lambda: 'return !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) && (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));'
+                                  then:
+                                    - script.execute: climate_temperature_high_up
+                                  else:
+                                    - script.execute: toggle_selected_climate_power
                             else:
                               - if:
                                   condition:
-                                    lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                                    lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS;'
                                   then:
-                                    - script.execute: select_next_item
+                                    - script.execute: lock_selected_lock
                                   else:
-                                    - script.execute: trigger_selected_automation
+                                    - if:
+                                        condition:
+                                          lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                                        then:
+                                          - script.execute: select_next_item
+                                        else:
+                                          - script.execute: trigger_selected_automation
 
   - id: secondary_mode_action
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS || id(current_mode) == REMOTE_MODE_LOCKS || id(current_mode) == REMOTE_MODE_AUTOMATION || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS || id(current_mode) == REMOTE_MODE_SWITCHES || id(current_mode) == REMOTE_MODE_LOCKS || id(current_mode) == REMOTE_MODE_AUTOMATION || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
           then:
             - lambda: |-
                 id(updated_ui) = true;
@@ -1448,35 +1541,41 @@ script:
                 else:
                   - if:
                       condition:
-                        lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
+                        lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES;'
                       then:
-                        - if:
-                            condition:
-                              lambda: 'return !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) && (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));'
-                            then:
-                              - script.execute: climate_temperature_high_down
-                            else:
-                              - script.execute: cycle_selected_climate_mode
+                        - script.execute: turn_off_selected_switch
                       else:
                         - if:
                             condition:
-                              lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS;'
+                              lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
                             then:
-                              - script.execute: unlock_selected_lock
+                              - if:
+                                  condition:
+                                    lambda: 'return !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high)) && (id(selected_item_state) == "heat_cool" || id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));'
+                                  then:
+                                    - script.execute: climate_temperature_high_down
+                                  else:
+                                    - script.execute: cycle_selected_climate_mode
                             else:
                               - if:
                                   condition:
-                                    lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                                    lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS;'
                                   then:
-                                    - script.execute: media_play_pause
+                                    - script.execute: unlock_selected_lock
                                   else:
-                                    - script.execute: trigger_selected_automation
+                                    - if:
+                                        condition:
+                                          lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                                        then:
+                                          - script.execute: media_play_pause
+                                        else:
+                                          - script.execute: trigger_selected_automation
 
   - id: increase_mode_value
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES || id(current_mode) == REMOTE_MODE_LOCKS || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
           then:
             - lambda: |-
                 id(updated_ui) = true;
@@ -1503,7 +1602,7 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES || id(current_mode) == REMOTE_MODE_LOCKS || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
           then:
             - lambda: |-
                 id(updated_ui) = true;
@@ -1550,6 +1649,9 @@ script:
                 bool show_brightness_bar =
                     id(last_brightness_interaction) > 0 && (now - id(last_brightness_interaction)) <= 3000 &&
                     id(selected_item_state) == "on" && mode == REMOTE_MODE_LIGHTS;
+                bool show_switch_feedback =
+                    id(last_switch_interaction) > 0 && (now - id(last_switch_interaction)) <= 5000 &&
+                    mode == REMOTE_MODE_SWITCHES;
                 bool show_contrast_feedback =
                     id(last_contrast_interaction) > 0 && (now - id(last_contrast_interaction)) <= 3000;
                 bool show_climate_feedback =
@@ -1625,7 +1727,9 @@ script:
 
                 it->clear();
                 const char *header_icon = "\ue90f";
-                if (mode == REMOTE_MODE_CLIMATE) {
+                if (mode == REMOTE_MODE_SWITCHES) {
+                  header_icon = "\ue1f4";
+                } else if (mode == REMOTE_MODE_CLIMATE) {
                   header_icon = "\uf076";
                 } else if (mode == REMOTE_MODE_LOCKS) {
                   header_icon = "\ue897";
@@ -1675,6 +1779,28 @@ script:
                   } else {
                     draw_footer_dividers();
                     it->filled_rectangle(90, 54, 1, 11, COLOR_ON);
+                    it->printf(10, 50, id(medium_symbols), COLOR_ON, "\ueac3");
+                    it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                    it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
+                  }
+                } else if (mode == REMOTE_MODE_SWITCHES) {
+                  std::string switch_state = upper(id(selected_item_state));
+                  std::string switch_feedback = upper(id(last_switch_feedback));
+                  if (switch_state == "UNKNOWN" || switch_state == "") {
+                    switch_state = "SYNCING";
+                  }
+                  snprintf(status_line, sizeof(status_line), "%s", switch_state.c_str());
+                  it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                  if (show_switch_feedback && !switch_feedback.empty()) {
+                    snprintf(detail_line, sizeof(detail_line), "%s", switch_feedback.c_str());
+                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                  }
+
+                  if (show_contrast_feedback) {
+                    draw_contrast_footer();
+                  } else {
+                    draw_footer_dividers();
                     it->printf(10, 50, id(medium_symbols), COLOR_ON, "\ueac3");
                     it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
                     it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
@@ -1902,6 +2028,10 @@ interval:
                 uint32_t now = millis();
                 uint32_t elapsed = now - id(last_brightness_interaction);
                 if (elapsed > 3000 && elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t switch_elapsed = now - id(last_switch_interaction);
+                if (id(last_switch_interaction) > 0 && switch_elapsed > 5000 && switch_elapsed < 5500) {
                   id(updated_ui) = true;
                 }
                 uint32_t climate_elapsed = now - id(last_climate_interaction);
