@@ -48,12 +48,10 @@ font:
       "\ue1ac", # brightness_high
       "\ue3a1", # audiotrack
       "\ue88a", # home
-      "\uf159", # partly_cloudy_day
       "\uf076", # thermostat
-      "\uf537", # heat
-      "\ueb3b", # ac_unit
       "\ue81a", # sunny
       "\ue88e", # info
+      "\ue897", # lock 
     ]
   - file:
       type: gfonts
@@ -88,10 +86,11 @@ esphome:
             int restored_mode = (state >> 4) & 0x07;
             id(selected_light_index) = (state >> 7) & 0x3F;
             id(selected_climate_index) = (state >> 13) & 0x3F;
-            id(selected_media_index) = (state >> 19) & 0x3F;
-            id(selected_automation_index) = (state >> 25) & 0x3F;
-            id(selected_weather_index) = (state >> 31) & 0x3F;
-            id(selected_time_index) = (state >> 37) & 0x3F;
+            id(selected_lock_index) = (state >> 19) & 0x3F;
+            id(selected_media_index) = (state >> 25) & 0x3F;
+            id(selected_automation_index) = (state >> 31) & 0x3F;
+            id(selected_weather_index) = (state >> 37) & 0x3F;
+            id(selected_time_index) = (state >> 43) & 0x3F;
 
             if (restored_contrast >= 1 && restored_contrast <= 10) {
               id(contrast) = restored_contrast;
@@ -212,6 +211,10 @@ globals:
     type: uint32_t
     initial_value: '0'
 
+  - id: last_lock_interaction
+    type: uint32_t
+    initial_value: '0'
+
   - id: last_climate_target_focus_interaction
     type: uint32_t
     initial_value: '0'
@@ -250,6 +253,10 @@ globals:
     initial_value: '0'
 
   - id: selected_climate_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_lock_index
     type: int
     initial_value: '0'
 
@@ -342,6 +349,10 @@ globals:
     initial_value: '"unknown"'
 
   - id: last_automation_feedback
+    type: std::string
+    initial_value: '""'
+
+  - id: last_lock_feedback
     type: std::string
     initial_value: '""'
 
@@ -547,10 +558,11 @@ script:
     then:
       - lambda: |-
           id(persisted_ui_state) =
-              (uint64_t(id(selected_time_index) & 0x3F) << 37) |
-              (uint64_t(id(selected_weather_index) & 0x3F) << 31) |
-              (uint64_t(id(selected_automation_index) & 0x3F) << 25) |
-              (uint64_t(id(selected_media_index) & 0x3F) << 19) |
+              (uint64_t(id(selected_time_index) & 0x3F) << 43) |
+              (uint64_t(id(selected_weather_index) & 0x3F) << 37) |
+              (uint64_t(id(selected_automation_index) & 0x3F) << 31) |
+              (uint64_t(id(selected_media_index) & 0x3F) << 25) |
+              (uint64_t(id(selected_lock_index) & 0x3F) << 19) |
               (uint64_t(id(selected_climate_index) & 0x3F) << 13) |
               (uint64_t(id(selected_light_index) & 0x3F) << 7) |
               (uint64_t(id(current_mode) & 0x07) << 4) |
@@ -575,7 +587,7 @@ script:
           }
 
           int &selected_index = selected_index_ref(
-              mode, id(selected_light_index), id(selected_climate_index), id(selected_media_index),
+              mode, id(selected_light_index), id(selected_climate_index), id(selected_lock_index), id(selected_media_index),
               id(selected_automation_index), id(selected_weather_index), id(selected_time_index));
           selected_index = clamp_mode_index(selected_index, count);
           int idx = selected_index;
@@ -597,6 +609,8 @@ script:
           id(selected_media_artist) = "";
           id(selected_media_source) = "";
           id(selected_automation_state) = "unknown";
+          id(last_lock_feedback) = "";
+          id(last_lock_interaction) = 0;
           id(selected_weather_temperature) = NAN;
           id(selected_weather_humidity) = NAN;
           id(selected_weather_high_temp) = NAN;
@@ -627,6 +641,7 @@ script:
           id(current_mode) = next_available_mode(current, 1);
           id(last_brightness_interaction) = 0;
           id(last_climate_interaction) = 0;
+          id(last_lock_interaction) = 0;
           id(last_media_interaction) = 0;
           id(last_media_volume_interaction) = 0;
           id(last_automation_interaction) = 0;
@@ -638,7 +653,7 @@ script:
       - lambda: |-
           RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
           int idx = selected_index_ref(
-              mode, id(selected_light_index), id(selected_climate_index), id(selected_media_index),
+              mode, id(selected_light_index), id(selected_climate_index), id(selected_lock_index), id(selected_media_index),
               id(selected_automation_index), id(selected_weather_index), id(selected_time_index));
           idx = clamp_mode_index(idx, mode_item_count(mode));
 
@@ -718,6 +733,15 @@ script:
               if (changed) {
                 id(updated_ui) = true;
               }
+            }
+          } else if (mode == REMOTE_MODE_LOCKS) {
+            const std::string &state = selected_lock_state(idx);
+
+            if (state == "unknown") {
+              request_mode_status(mode, idx);
+            } else if (id(selected_item_state) != state) {
+              id(selected_item_state) = state;
+              id(updated_ui) = true;
             }
           } else if (mode == REMOTE_MODE_MUSIC) {
             const std::string &state = selected_media_state(idx);
@@ -843,7 +867,7 @@ script:
           }
 
           int &selected_index = selected_index_ref(
-              mode, id(selected_light_index), id(selected_climate_index), id(selected_media_index),
+              mode, id(selected_light_index), id(selected_climate_index), id(selected_lock_index), id(selected_media_index),
               id(selected_automation_index), id(selected_weather_index), id(selected_time_index));
           selected_index = wrapped_mode_index(selected_index, count, step);
       - script.execute: update_selected_item
@@ -912,6 +936,56 @@ script:
                 }
                 id(updated_ui) = true;
             - script.execute: update_display
+
+  - id: lock_selected_lock
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_lock_feedback) = "";
+          id(selected_item_state) = "locking";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - homeassistant.action:
+          action: lock.lock
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: "SUCCESS"
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+          on_error:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: "FAILED"
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+
+  - id: unlock_selected_lock
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_lock_feedback) = "";
+          id(selected_item_state) = "unlocking";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - homeassistant.action:
+          action: lock.unlock
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: "SUCCESS"
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+          on_error:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: "FAILED"
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
 
   - id: increase_brightness
     mode: queued
@@ -1291,6 +1365,16 @@ script:
           id(updated_ui) = true;
       - script.execute: update_display
 
+  - id: set_lock_feedback
+    parameters:
+      feedback: std::string
+    then:
+      - lambda: |-
+          id(last_lock_feedback) = feedback;
+          id(last_lock_interaction) = millis();
+          id(updated_ui) = true;
+      - script.execute: update_display
+
   - id: primary_mode_action
     then:
       - if:
@@ -1320,17 +1404,23 @@ script:
                       else:
                         - if:
                             condition:
-                              lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                              lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS;'
                             then:
-                              - script.execute: select_next_item
+                              - script.execute: lock_selected_lock
                             else:
-                              - script.execute: trigger_selected_automation
+                              - if:
+                                  condition:
+                                    lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                                  then:
+                                    - script.execute: select_next_item
+                                  else:
+                                    - script.execute: trigger_selected_automation
 
   - id: secondary_mode_action
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS || id(current_mode) == REMOTE_MODE_AUTOMATION || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS || id(current_mode) == REMOTE_MODE_LOCKS || id(current_mode) == REMOTE_MODE_AUTOMATION || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
           then:
             - lambda: |-
                 id(updated_ui) = true;
@@ -1370,17 +1460,23 @@ script:
                       else:
                         - if:
                             condition:
-                              lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                              lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS;'
                             then:
-                              - script.execute: media_play_pause
+                              - script.execute: unlock_selected_lock
                             else:
-                              - script.execute: trigger_selected_automation
+                              - if:
+                                  condition:
+                                    lambda: 'return id(current_mode) == REMOTE_MODE_MUSIC;'
+                                  then:
+                                    - script.execute: media_play_pause
+                                  else:
+                                    - script.execute: trigger_selected_automation
 
   - id: increase_mode_value
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
           then:
             - lambda: |-
                 id(updated_ui) = true;
@@ -1407,7 +1503,7 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
           then:
             - lambda: |-
                 id(updated_ui) = true;
@@ -1463,6 +1559,9 @@ script:
                     id(last_climate_target_focus_interaction) > 0 &&
                     (now - id(last_climate_target_focus_interaction)) <= 5000 &&
                     id(climate_target_focus) != 0 && mode == REMOTE_MODE_CLIMATE;
+                bool show_lock_feedback =
+                    id(last_lock_interaction) > 0 && (now - id(last_lock_interaction)) <= 5000 &&
+                    mode == REMOTE_MODE_LOCKS;
                 bool show_media_feedback =
                     id(last_media_volume_interaction) > 0 &&
                     (now - id(last_media_volume_interaction)) <= 3000 &&
@@ -1528,6 +1627,8 @@ script:
                 const char *header_icon = "\ue90f";
                 if (mode == REMOTE_MODE_CLIMATE) {
                   header_icon = "\uf076";
+                } else if (mode == REMOTE_MODE_LOCKS) {
+                  header_icon = "\ue897";
                 } else if (mode == REMOTE_MODE_MUSIC) {
                   header_icon = "\ue3a1";
                 } else if (mode == REMOTE_MODE_AUTOMATION) {
@@ -1627,8 +1728,30 @@ script:
                     it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
                   }
 
-                } else if (mode == REMOTE_MODE_MUSIC || mode == REMOTE_MODE_AUTOMATION) {
-                  if (mode == REMOTE_MODE_MUSIC) {
+                } else if (mode == REMOTE_MODE_LOCKS || mode == REMOTE_MODE_MUSIC || mode == REMOTE_MODE_AUTOMATION) {
+                  if (mode == REMOTE_MODE_LOCKS) {
+                    std::string lock_state = upper(id(selected_item_state));
+                    std::string lock_feedback = upper(id(last_lock_feedback));
+                    if (lock_state == "UNKNOWN" || lock_state == "") {
+                      lock_state = "SYNCING";
+                    }
+                    snprintf(status_line, sizeof(status_line), "%s", lock_state.c_str());
+                    it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                    if (show_lock_feedback && !lock_feedback.empty()) {
+                      snprintf(detail_line, sizeof(detail_line), "%s", lock_feedback.c_str());
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    }
+
+                    if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_footer_dividers();
+                      it->printf(10, 50, id(medium_symbols), COLOR_ON, "\ueac3");
+                      it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                      it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
+                    }
+                  } else if (mode == REMOTE_MODE_MUSIC) {
                     std::string playback = upper(id(selected_item_state));
                     if (playback == "UNKNOWN") {
                       playback = "SYNCING";
@@ -1783,6 +1906,10 @@ interval:
                 }
                 uint32_t climate_elapsed = now - id(last_climate_interaction);
                 if (id(last_climate_interaction) > 0 && climate_elapsed > 3000 && climate_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t lock_elapsed = now - id(last_lock_interaction);
+                if (id(last_lock_interaction) > 0 && lock_elapsed > 5000 && lock_elapsed < 5500) {
                   id(updated_ui) = true;
                 }
                 uint32_t climate_target_focus_elapsed = now - id(last_climate_target_focus_interaction);

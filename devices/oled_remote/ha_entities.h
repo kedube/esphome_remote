@@ -14,13 +14,14 @@
 enum RemoteMode {
   REMOTE_MODE_LIGHTS = 0,
   REMOTE_MODE_CLIMATE = 1,
-  REMOTE_MODE_MUSIC = 2,
-  REMOTE_MODE_AUTOMATION = 3,
-  REMOTE_MODE_WEATHER = 4,
-  REMOTE_MODE_INFO = 5,
+  REMOTE_MODE_LOCKS = 2,
+  REMOTE_MODE_MUSIC = 3,
+  REMOTE_MODE_AUTOMATION = 4,
+  REMOTE_MODE_WEATHER = 5,
+  REMOTE_MODE_INFO = 6,
 };
 
-static constexpr int REMOTE_MODE_COUNT = 6;
+static constexpr int REMOTE_MODE_COUNT = 7;
 
 struct LightEntity {
   const char *name;
@@ -28,6 +29,11 @@ struct LightEntity {
 };
 
 struct ClimateEntity {
+  const char *name;
+  const char *entity_id;
+};
+
+struct LockEntity {
   const char *name;
   const char *entity_id;
 };
@@ -84,6 +90,13 @@ static const ClimateEntity CLIMATE_LIST[] = {
     {"Garage", "climate.garage_thermostat"},
 };
 
+static const LockEntity LOCK_LIST[] = {
+    {"Front Door", "lock.front_door"},
+    {"Front Side Door", "lock.front_side_door_lock"},
+    {"Int. Garage Door", "lock.interior_garage_door_lock"},
+    {"Rear Garage Door", "lock.rear_garage_door_lock"},
+};
+
 static const MediaEntity MEDIA_PLAYER_LIST[] = {
     {"Office Sonos", "media_player.office_sonos"},
     {"Office ERA300", "media_player.office"},
@@ -107,6 +120,7 @@ static const WeatherEntity WEATHER_LIST[] = {
 
 static const int LIGHT_LIST_COUNT = sizeof(LIGHT_LIST) / sizeof(LIGHT_LIST[0]);
 static const int CLIMATE_LIST_COUNT = sizeof(CLIMATE_LIST) / sizeof(CLIMATE_LIST[0]);
+static const int LOCK_LIST_COUNT = sizeof(LOCK_LIST) / sizeof(LOCK_LIST[0]);
 static const int MEDIA_PLAYER_LIST_COUNT = sizeof(MEDIA_PLAYER_LIST) / sizeof(MEDIA_PLAYER_LIST[0]);
 static const int AUTOMATION_LIST_COUNT = sizeof(AUTOMATION_LIST) / sizeof(AUTOMATION_LIST[0]);
 static const int WEATHER_LIST_COUNT = sizeof(WEATHER_LIST) / sizeof(WEATHER_LIST[0]);
@@ -141,6 +155,8 @@ static inline const char *mode_title(RemoteMode mode) {
       return "LIGHTS";
     case REMOTE_MODE_CLIMATE:
       return "CLIMATE";
+    case REMOTE_MODE_LOCKS:
+      return "LOCKS";
     case REMOTE_MODE_MUSIC:
       return "MUSIC";
     case REMOTE_MODE_AUTOMATION:
@@ -160,6 +176,8 @@ static inline int mode_item_count(RemoteMode mode) {
       return LIGHT_LIST_COUNT;
     case REMOTE_MODE_CLIMATE:
       return CLIMATE_LIST_COUNT;
+    case REMOTE_MODE_LOCKS:
+      return LOCK_LIST_COUNT;
     case REMOTE_MODE_MUSIC:
       return MEDIA_PLAYER_LIST_COUNT;
     case REMOTE_MODE_AUTOMATION:
@@ -208,6 +226,8 @@ static inline std::string mode_item_name(RemoteMode mode, int idx) {
       return (idx >= 0 && idx < LIGHT_LIST_COUNT) ? LIGHT_LIST[idx].name : "";
     case REMOTE_MODE_CLIMATE:
       return (idx >= 0 && idx < CLIMATE_LIST_COUNT) ? CLIMATE_LIST[idx].name : "";
+    case REMOTE_MODE_LOCKS:
+      return (idx >= 0 && idx < LOCK_LIST_COUNT) ? LOCK_LIST[idx].name : "";
     case REMOTE_MODE_MUSIC:
       return (idx >= 0 && idx < MEDIA_PLAYER_LIST_COUNT) ? MEDIA_PLAYER_LIST[idx].name : "";
     case REMOTE_MODE_AUTOMATION:
@@ -234,6 +254,8 @@ static inline std::string mode_item_entity(RemoteMode mode, int idx) {
       return (idx >= 0 && idx < LIGHT_LIST_COUNT) ? LIGHT_LIST[idx].entity_id : "";
     case REMOTE_MODE_CLIMATE:
       return (idx >= 0 && idx < CLIMATE_LIST_COUNT) ? CLIMATE_LIST[idx].entity_id : "";
+    case REMOTE_MODE_LOCKS:
+      return (idx >= 0 && idx < LOCK_LIST_COUNT) ? LOCK_LIST[idx].entity_id : "";
     case REMOTE_MODE_MUSIC:
       return (idx >= 0 && idx < MEDIA_PLAYER_LIST_COUNT) ? MEDIA_PLAYER_LIST[idx].entity_id : "";
     case REMOTE_MODE_AUTOMATION:
@@ -295,13 +317,15 @@ static inline const char *automation_kind_label(int idx) {
 }
 
 static inline int &selected_index_ref(
-    RemoteMode mode, int &light_idx, int &climate_idx, int &media_idx, int &automation_idx, int &weather_idx,
-    int &time_idx) {
+    RemoteMode mode, int &light_idx, int &climate_idx, int &lock_idx, int &media_idx, int &automation_idx,
+    int &weather_idx, int &time_idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return light_idx;
     case REMOTE_MODE_CLIMATE:
       return climate_idx;
+    case REMOTE_MODE_LOCKS:
+      return lock_idx;
     case REMOTE_MODE_MUSIC:
       return media_idx;
     case REMOTE_MODE_AUTOMATION:
@@ -640,6 +664,57 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
   float target_temperature_high_[CLIMATE_LIST_COUNT] = {NAN};
   float current_temperature_[CLIMATE_LIST_COUNT] = {NAN};
   bool supports_preset_[CLIMATE_LIST_COUNT] = {false};
+};
+
+class LockStatusTracker : public esphome::api::CustomAPIDevice {
+ public:
+  void setup() {
+    for (int i = 0; i < LOCK_LIST_COUNT; i++) {
+      this->subscribe_homeassistant_state(&LockStatusTracker::on_state_, LOCK_LIST[i].entity_id);
+    }
+    this->request_all_states();
+  }
+
+  void request_lock_state(int idx) {
+    if (idx < 0 || idx >= LOCK_LIST_COUNT) {
+      return;
+    }
+
+    const char *entity_id = LOCK_LIST[idx].entity_id;
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
+  }
+
+  void request_all_states() {
+    for (int i = 0; i < LOCK_LIST_COUNT; i++) {
+      this->request_lock_state(i);
+    }
+  }
+
+  const std::string &state(int idx) const {
+    if (idx < 0 || idx >= LOCK_LIST_COUNT) {
+      return unknown_string();
+    }
+    return this->state_[idx];
+  }
+
+ protected:
+  void on_state_(const std::string &entity_id, esphome::StringRef state) {
+    int idx = this->find_index_(entity_id);
+    if (idx >= 0) {
+      this->store_state_(idx, state);
+    }
+  }
+
+  void store_state_(int idx, esphome::StringRef state) {
+    this->state_[idx] = ha_state_or_unknown(state);
+  }
+
+  int find_index_(const std::string &entity_id) const {
+    return find_entity_index(LOCK_LIST, LOCK_LIST_COUNT, entity_id);
+  }
+
+  std::string state_[LOCK_LIST_COUNT];
 };
 
 class MediaStatusTracker : public esphome::api::CustomAPIDevice {
@@ -1008,6 +1083,7 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
 
 static LightStatusTracker light_status_tracker_storage;
 static ClimateStatusTracker climate_status_tracker_storage;
+static LockStatusTracker lock_status_tracker_storage;
 static MediaStatusTracker media_status_tracker_storage;
 static AutomationStatusTracker automation_status_tracker_storage;
 static WeatherStatusTracker weather_status_tracker_storage;
@@ -1019,6 +1095,7 @@ static inline void ensure_remote_status_trackers() {
   }
   light_status_tracker_storage.setup();
   climate_status_tracker_storage.setup();
+  lock_status_tracker_storage.setup();
   media_status_tracker_storage.setup();
   automation_status_tracker_storage.setup();
   weather_status_tracker_storage.setup();
@@ -1095,6 +1172,16 @@ static inline float selected_climate_target_temperature_high(int idx) {
 static inline float selected_climate_current_temperature(int idx) {
   ensure_remote_status_trackers();
   return climate_status_tracker_storage.current_temperature(idx);
+}
+
+static inline void request_selected_lock_status(int idx) {
+  ensure_remote_status_trackers();
+  lock_status_tracker_storage.request_lock_state(idx);
+}
+
+static inline const std::string &selected_lock_state(int idx) {
+  ensure_remote_status_trackers();
+  return lock_status_tracker_storage.state(idx);
 }
 
 static inline void request_selected_media_status(int idx) {
@@ -1179,6 +1266,9 @@ static inline void request_mode_status(RemoteMode mode, int idx) {
       break;
     case REMOTE_MODE_CLIMATE:
       request_selected_climate_status(idx);
+      break;
+    case REMOTE_MODE_LOCKS:
+      request_selected_lock_status(idx);
       break;
     case REMOTE_MODE_MUSIC:
       request_selected_media_status(idx);
