@@ -28,15 +28,15 @@ font:
   - file: "fonts/arial-bold.ttf"
     id: tiny_font
     size: 9
-    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]", "(", ")", "'", "!", "?", "/", "+", "-", "\u00B0"]
+    glyphs: &arial_glyphs ['0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_ :<>%[]()''!?/+-&*=$#@^°']
   - file: "fonts/arial-bold.ttf"
     id: small_font
     size: 10
-    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]", "(", ")", "'", "!", "?", "/", "+", "-", "\u00B0"]
+    glyphs: *arial_glyphs
   - file: "fonts/arial-bold.ttf"
     id: medium_font
     size: 13
-    glyphs: [0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz, "_", " ", ":", "<", ">", "%", "[", "]", "(", ")", "'", "!", "?", "/", "+", "-", "\u00B0"]
+    glyphs: *arial_glyphs
   - file:
       type: gfonts
       family: Material+Symbols+Rounded
@@ -53,7 +53,7 @@ font:
       "\uf537", # heat
       "\ueb3b", # ac_unit
       "\ue81a", # sunny
-      "\ue8b5", # schedule
+      "\ue88e", # info
     ]
   - file:
       type: gfonts
@@ -823,9 +823,10 @@ script:
                 id(updated_ui) = true;
               }
             }
-          } else if (mode == REMOTE_MODE_TIME) {
-            if (id(selected_item_state) != "time") {
-              id(selected_item_state) = "time";
+          } else if (mode == REMOTE_MODE_INFO) {
+            const char *state = idx == 0 ? "date" : "version";
+            if (id(selected_item_state) != state) {
+              id(selected_item_state) = state;
               id(updated_ui) = true;
             }
           }
@@ -1294,7 +1295,7 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_TIME;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
           then:
             - lambda: |-
                 id(updated_ui) = true;
@@ -1329,7 +1330,7 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS || id(current_mode) == REMOTE_MODE_AUTOMATION || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_TIME;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS || id(current_mode) == REMOTE_MODE_AUTOMATION || id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
           then:
             - lambda: |-
                 id(updated_ui) = true;
@@ -1344,7 +1345,7 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_TIME;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
           then:
             - lambda: |-
                 id(updated_ui) = true;
@@ -1379,7 +1380,7 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_TIME;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
           then:
             - lambda: |-
                 id(updated_ui) = true;
@@ -1406,7 +1407,7 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_TIME;'
+            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER || id(current_mode) == REMOTE_MODE_INFO;'
           then:
             - lambda: |-
                 id(updated_ui) = true;
@@ -1533,8 +1534,8 @@ script:
                   header_icon = "\ue88a";
                 } else if (mode == REMOTE_MODE_WEATHER) {
                   header_icon = "\ue81a";
-                } else if (mode == REMOTE_MODE_TIME) {
-                  header_icon = "\ue8b5";
+                } else if (mode == REMOTE_MODE_INFO) {
+                  header_icon = "\ue88e";
                 }
                 it->print(14, -3, id(symbols), COLOR_ON, display::TextAlign::LEFT, header_icon);
                 it->printf(64, 4, id(small_font), COLOR_ON, display::TextAlign::CENTER, mode_title(mode));
@@ -1555,6 +1556,11 @@ script:
                     snprintf(status_line, sizeof(status_line), "SYNCING");
                   }
                   it->print(64, 35, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                  if (id(selected_item_state) == "on" && !show_brightness_bar) {
+                    snprintf(detail_line, sizeof(detail_line), "BRIGHTNESS %d%%", id(selected_brightness_pct));
+                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                  }
 
                   if (show_brightness_bar) {
                     it->rectangle(bar_x, bar_y, bar_w, bar_h, COLOR_ON);
@@ -1697,12 +1703,8 @@ script:
                   }
                   it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
 
-                  if (!isnan(id(selected_weather_high_temp)) && !isnan(id(selected_weather_low_temp))) {
-                    snprintf(detail_line, sizeof(detail_line), "H: %.0f°${TEMPERATURE_UNIT}  L: %.0f°${TEMPERATURE_UNIT}", id(selected_weather_high_temp), id(selected_weather_low_temp));
-                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
-                  } else if (!isnan(id(selected_weather_humidity))) {
-                    snprintf(detail_line, sizeof(detail_line), "HUMIDITY: %.0f%%", id(selected_weather_humidity));
-                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                  if (condition != "SYNCING" && condition != "") {
+                     it->print(64, 45, id(small_font), COLOR_ON, display::TextAlign::CENTER, condition.c_str());
                   }
 
                   if (show_contrast_feedback) {
@@ -1710,31 +1712,49 @@ script:
                   } else {
                     draw_footer_dividers();
                     it->printf(10, 50, id(medium_symbols), COLOR_ON, "\ueac3");
-                    if (condition != "SYNCING" && condition != "") {
-                      it->print(64, 58, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, condition.c_str());
+                    if (condition != "SYNCING" && !isnan(id(selected_weather_humidity))) {
+                      snprintf(footer_line, sizeof(footer_line), "%.0f%%", id(selected_weather_humidity));
+                      it->print(64, 58, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, footer_line);
                     } else {
                       it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
                     }
                     it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
                   }
                 } else {
-                  std::string time_label = format_time();
-                  std::string date_label = format_date();
+                  if (id(selected_time_index) == 0) {
+                    std::string time_label = format_time();
+                    std::string date_label = format_date();
 
-                  it->print(64, 20, id(medium_font), COLOR_ON, display::TextAlign::CENTER, time_label.c_str());
-                  it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, date_label.c_str());
-                  if (id(battery_monitoring_available)) {
-                    snprintf(detail_line, sizeof(detail_line), "BATTERY: %d%% (%.2fV)", id(battery_percentage), id(battery_voltage));
-                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
-                  } else {
-                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "BATTERY: N/A");
-                  }
+                    it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, time_label.c_str());
+                    it->print(64, 45, id(small_font), COLOR_ON, display::TextAlign::CENTER, date_label.c_str());
 
-                  if (show_contrast_feedback) {
-                    draw_contrast_footer();
+                    if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_footer_dividers();
+                      it->printf(10, 50, id(medium_symbols), COLOR_ON, "\ueac3");
+                      it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                      it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
+                    }
                   } else {
-                    draw_footer_dividers();
-                    it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                    snprintf(status_line, sizeof(status_line), "${VERSION}");
+                    it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                    if (id(battery_monitoring_available)) {
+                      snprintf(detail_line, sizeof(detail_line), "BATTERY: %d%% (%.02fV)", id(battery_percentage), id(battery_voltage));
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    } else {
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "BATTERY: N/A");
+                    }
+
+                    if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_footer_dividers();
+                      it->printf(10, 50, id(medium_symbols), COLOR_ON, "\ueac3");
+                      it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                      it->printf(104, 50, id(medium_symbols), COLOR_ON, "\ueac9");
+                    }
                   }
                 }
                 it->display();

@@ -17,7 +17,7 @@ enum RemoteMode {
   REMOTE_MODE_MUSIC = 2,
   REMOTE_MODE_AUTOMATION = 3,
   REMOTE_MODE_WEATHER = 4,
-  REMOTE_MODE_TIME = 5,
+  REMOTE_MODE_INFO = 5,
 };
 
 static constexpr int REMOTE_MODE_COUNT = 6;
@@ -99,8 +99,10 @@ static const AutomationEntity AUTOMATION_LIST[] = {
 };
 
 static const WeatherEntity WEATHER_LIST[] = {
+    {"WeatherFlow", "weather.forecast_annisquam"},
+    {"OpenWeatherMap", "weather.openweathermap"},
+    {"Home Assistant", "weather.forecast_home"},
     {"PirateWeather", "weather.pirateweather"},
-    {"WeatherFlow", "weather.weatherflow_forecast"},
 };
 
 static const int LIGHT_LIST_COUNT = sizeof(LIGHT_LIST) / sizeof(LIGHT_LIST[0]);
@@ -145,8 +147,8 @@ static inline const char *mode_title(RemoteMode mode) {
       return "AUTOMATIONS";
     case REMOTE_MODE_WEATHER:
       return "WEATHER";
-    case REMOTE_MODE_TIME:
-      return "TIME";
+    case REMOTE_MODE_INFO:
+      return "INFO";
     default:
       return "MODE";
   }
@@ -164,8 +166,8 @@ static inline int mode_item_count(RemoteMode mode) {
       return AUTOMATION_LIST_COUNT;
     case REMOTE_MODE_WEATHER:
       return WEATHER_LIST_COUNT;
-    case REMOTE_MODE_TIME:
-      return 1;
+    case REMOTE_MODE_INFO:
+      return 2;
     default:
       return 0;
   }
@@ -182,7 +184,7 @@ static inline RemoteMode first_available_mode() {
       return mode;
     }
   }
-  return REMOTE_MODE_TIME;
+  return REMOTE_MODE_INFO;
 }
 
 static inline RemoteMode next_available_mode(RemoteMode current, int step) {
@@ -212,8 +214,15 @@ static inline std::string mode_item_name(RemoteMode mode, int idx) {
       return (idx >= 0 && idx < AUTOMATION_LIST_COUNT) ? AUTOMATION_LIST[idx].name : "";
     case REMOTE_MODE_WEATHER:
       return (idx >= 0 && idx < WEATHER_LIST_COUNT) ? WEATHER_LIST[idx].name : "";
-    case REMOTE_MODE_TIME:
-      return "";
+    case REMOTE_MODE_INFO:
+      switch (idx) {
+        case 0:
+          return "Time & Date";
+        case 1:
+          return "Version";
+        default:
+          return "";
+      }
     default:
       return "";
   }
@@ -231,8 +240,15 @@ static inline std::string mode_item_entity(RemoteMode mode, int idx) {
       return (idx >= 0 && idx < AUTOMATION_LIST_COUNT) ? AUTOMATION_LIST[idx].entity_id : "";
     case REMOTE_MODE_WEATHER:
       return (idx >= 0 && idx < WEATHER_LIST_COUNT) ? WEATHER_LIST[idx].entity_id : "";
-    case REMOTE_MODE_TIME:
-      return "";
+    case REMOTE_MODE_INFO:
+      switch (idx) {
+        case 0:
+          return "info.date";
+        case 1:
+          return "info.version";
+        default:
+          return "";
+      }
     default:
       return "";
   }
@@ -292,7 +308,7 @@ static inline int &selected_index_ref(
       return automation_idx;
     case REMOTE_MODE_WEATHER:
       return weather_idx;
-    case REMOTE_MODE_TIME:
+    case REMOTE_MODE_INFO:
     default:
       return time_idx;
   }
@@ -1173,7 +1189,7 @@ static inline void request_mode_status(RemoteMode mode, int idx) {
     case REMOTE_MODE_WEATHER:
       request_selected_weather_status(idx);
       break;
-    case REMOTE_MODE_TIME:
+    case REMOTE_MODE_INFO:
       break;
   }
 }
