@@ -1,21 +1,30 @@
 # ESPHome Remote Configuration
 
-This repository contains ESPHome YAML configuration files for remote devices and sensors, specifically designed for light control using ESP32 boards with OLED displays.
+This repository contains ESPHome YAML configuration files for remote devices and sensors, specifically designed for Home Assistant entity control using ESP32 boards with OLED displays. It supports the control of:
+- Lights
+- Climate (Thermostats)
+- Music Players
+- Triggering Automations, Scripts, or Scenes
+- Weather Reports
+- Info (Date/Version/Battery Details)
 
 ## Overview
 
-ESPHome is a system to control your ESP8266/ESP32 by simple yet powerful configuration files and control them remotely through Home Assistant. This repository serves as a centralized location for managing ESPHome device configurations for remote control of light devices.
+ESPHome is a system to control your ESP8266/ESP32 by simple yet powerful configuration files and control them remotely through Home Assistant. This repository serves as a centralized location for managing ESPHome device configurations for remote control of Home Assistant devices.
 
 ## Repository Structure
 
 ```
 esphome_remote/
 ├── README.md                                    # This file
+├── imagees/*                                    # Pictures of the remote UI
 └── devices/
     └── oled_remote/
-        ├── oled_remote.yaml                     # Main multi-mode OLED remote for Home Assistant
-        ├── oled_remote_battery.yaml             # Configuration for PCB v3.1 and newer with fixed voltage divider
-        └── ha_entities.h                        # C++ header for Home Assistant entity helpers
+        ├── oled_remote.yaml                     # Main multi-mode OLED remote functionality for Home Assistant
+        ├── pcb_proto.yaml                       # Configuration for older PCBs without battery monitoring
+        ├── pcb_rev32.yaml                       # Configuration for PCB v3.1 and newer with fixed voltage divider        
+        ├── secrets-example.yaml                 # Example secrets file to copy and edit with your specific settings       
+        └── ha_entities.h                        # C++ header for Home Assistant entity helpers and where you define your entities
 ```
 
 ## Quick Start Guide
@@ -47,7 +56,7 @@ cd esphome_remote/devices/oled_remote
 
 3. **Update Home Assistant entities** (if needed):
    - Edit `ha_entities.h` to match your Home Assistant entities
-   - The default configuration includes numerous lights: Living Room, Office, Master Bedroom, etc.
+   - The default configuration includes numerous entities for several classification of devices: Lights, Climate, Music, Automations, & Weather
 
 4. **Compile and upload** to your ESP32
 
@@ -78,16 +87,16 @@ esphome run oled_remote.yaml
 
 - **ESP32 Lolin** development board
 - **SH1106 128x64 OLED** display (I2C)
-- **Push buttons** (7 total for full functionality)
+- **Push buttons** (8 total for full functionality)
 
 ## Features
 
-- **Multi-Light Control**: Control multiple lights from one device
+- **Multi-Light Control**: Control multiple types of entities from one device
 - **Deep Sleep**: Battery-efficient operation with automatic sleep
 - **OLED Display**: Real-time status display with custom fonts
 - **Button Interface**: Physical buttons for all common operations
 - **Home Assistant Integration**: Full API integration with encryption
-- **Auto-sync**: Automatically syncs with Home Assistant Light states
+- **Auto-sync**: Automatically syncs with Home Assistant entity states
 
 ## Troubleshooting
 
