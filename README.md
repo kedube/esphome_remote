@@ -330,7 +330,8 @@ That usually means the corresponding entity list is empty. Empty modes are inten
 
 Ensure there are no typos in the entity name. You can check the list of entity names from __Home Assistant->Settings->Developer Tools->Template__. In the Template editor, use this example (replace 'light' with the entity domain you'd like to search):
 
-```{% for e in states if 'light.' in e.entity_id %}
+```yaml
+{% for e in states if 'light.' in e.entity_id %}
 {{ e.entity_id }}
 {% endfor %}
 ```
