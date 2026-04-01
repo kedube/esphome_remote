@@ -1,6 +1,6 @@
 # ESPHome OLED Remote
 
-ESPHome configuration for a handheld ESP32 remote with a SH1106 128x64 OLED display, physical buttons, deep sleep, and a compact Home Assistant control UI.
+Replacement firmware for [Pawel Lugowksi's ESPHome OLED Remote Control](https://tech.lugowski.dev/guides/smart-oled-remote-esphome/). The hadware is built around an ESP32 Lolin32 WROOM (WIFI + Bluetooth) board, a 1.3-inch SH1106 128x64 OLED display, and physical buttons that provide a compact, battery-friendly UI for controlling Home Assistant entities directly from the handheld remote. 
 
 It is designed to let you cycle through Home Assistant entities directly from the remote without needing a touchscreen or a phone. The project supports lights, switches, climate devices, humidifiers, fans, covers, locks, media players, sensors, automations, alarms, notifications, weather, and info screens.
 
@@ -48,9 +48,11 @@ It is designed to let you cycle through Home Assistant entities directly from th
 
 This configuration is built around:
 
-- ESP32 development board
-- SH1106 128x64 OLED over I2C
+- ESP32 Lolin32 WROOM (WIFI + Bluetooth) development board
+- 1.3-inch SH1106 128x64 OLED display over I2C
+- Remote PCB designed by Pawel Lugowski
 - Physical navigation and action buttons
+- 3D Printed Case and Buttons
 
 Board-specific wiring is selected through the package include in [`src/oled_remote.yaml`](src/oled_remote.yaml):
 
@@ -316,3 +318,9 @@ If validation succeeds, retry with:
 ```bash
 esphome run src/oled_remote.yaml
 ```
+
+## Related Links
+
+- [ESPHome OLED remote control project article](https://tech.lugowski.dev/guides/smart-oled-remote-esphome/)
+- [Etsy store for buying PCBs or Full Remotes](https://www.etsy.com/listing/4390635949/home-assistant-esphome-oled-remote)
+- [MakerWorld case files](https://makerworld.com/en/models/1902607-home-assistant-esphome-remote-with-oled-display)
