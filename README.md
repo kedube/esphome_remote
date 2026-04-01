@@ -13,7 +13,7 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 | ![UI 1](images/remote_UI-1.png) | ![UI 2](images/remote_UI-2.png) | ![UI 3](images/remote_UI-3.png) | ![UI 4](images/remote_UI-4.png) | ![UI 5](images/remote_UI-5.png) |
 | :---: | :---: | :---: | :---: | :---: |
 | ![UI 6](images/remote_UI-6.png) | ![UI 7](images/remote_UI-7.png) | ![UI 8](images/remote_UI-8.png) | ![UI 9](images/remote_UI-9.png) | ![UI 10](images/remote_UI-10.png) | 
-| ![UI 11](images/remote_UI-11.png) | ![UI 12](images/remote_UI-12.png) | ![UI 13](images/remote_UI-13.png) | ![UI 14](images/remote_UI-14.png) | ![UI 15](images/remote_UI-15.png) |
+| ![UI 11](images/remote_UI-11.png) | ![UI 12](images/remote_UI-12.png) | ![UI 13](images/remote_UI-13.png) | ![UI 14](images/remote_UI-14.png) | ![UI 15](images/remote_UI-15.png) <tr></tr> |
 | ![UI 16](images/remote_UI-16.png) | ![UI 17](images/remote_UI-17.png) | ![UI 18](images/remote_UI-18.png) | ![UI 19](images/remote_UI-19.png) | ![UI 20](images/remote_UI-20.png) |
 
 ## Features
@@ -215,7 +215,14 @@ esphome config src/oled_remote.yaml
 esphome run src/oled_remote.yaml
 ```
 
-After the first flash, future updates can be done over OTA.
+You must connect the remote via USB to your computer in order to perform the first flash. It will prompt you after a successful built for where to upload the code. After the first flash, future updates can be done over OTA.
+
+```INFO Build Info: config_hash=0x694d2e36 build_time_str=2026-04-01 14:02:17 -0400
+INFO Successfully compiled program.
+Found multiple options for uploading, please choose one:
+  [1] /dev/cu.usbserial-8320 (USB Serial)
+  [2] Over The Air (esp32-remote.local)
+(number):```
 
 ## Optional Framebuffer Download Debugging
 
@@ -307,9 +314,25 @@ Create it from the example file:
 cp src/local_entities-example.h src/local_entities.h
 ```
 
+### `secrets.yaml` is missing
+
+Create it from the example file:
+
+```bash
+cp src/secrets-example.yaml src/local_secrets.yaml
+```
+
 ### A mode does not appear in the menu
 
 That usually means the corresponding entity list is empty. Empty modes are intentionally hidden.
+
+### A Home Assistant entity does not respond
+
+Ensure there are no typos in the entity name. You can check the list of entity names from __Home Assistant->Settings->Developer Tools->Template__. In the Template editor, use this example (replace 'light' with the entity domain you'd like to search):
+
+```{% for e in states if 'light.' in e.entity_id %}
+{{ e.entity_id }}
+{% endfor %}```
 
 ### The framebuffer download URL does not work
 
