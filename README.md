@@ -8,7 +8,7 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 
 ![Remote photo 1](images/remote_4.jpeg)
 
-## UI Screenshots
+## Remote UI Screenshots
 
 | ![UI 1](images/remote_UI-1.png) | ![UI 2](images/remote_UI-2.png) | ![UI 3](images/remote_UI-3.png) | ![UI 4](images/remote_UI-4.png) | ![UI 5](images/remote_UI-5.png) |
 | :---: | :---: | :---: | :---: | :---: |
@@ -249,7 +249,7 @@ Notes:
 - Info mode includes Time & Date, Network, and Version screens.
 - Notification mode reads from `sensor.persistent_notifications` by default.
 
-## Supported Home Assistant Domains
+## Supported Home Assistant Entity Domains
 
 - `light.*`
 - `switch.*`
