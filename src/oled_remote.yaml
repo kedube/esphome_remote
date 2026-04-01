@@ -3238,7 +3238,7 @@ script:
 
                     message = sanitize_message(message);
                     if (message.empty()) {
-                      message = "NO MESSAGES";
+                      message = "NO NOTIFICATIONS";
                     }
 
                     bool truncated = message.size() > 66;

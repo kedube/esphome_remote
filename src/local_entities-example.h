@@ -59,3 +59,10 @@ static const WeatherEntity WEATHER_LIST[] = {
     {"Local Weather", "weather.forecast_home"},
     {"Backup Weather", "weather.backup_provider"},
 };
+
+// Optional notifications mode. Leave NOTIFICATION_FEED_ENTITY undefined or set it
+// to an empty string to hide Notifications from the UI entirely.
+#define NOTIFICATION_FEED_ENTITY "sensor.persistent_notifications"
+#define NOTIFICATION_FEED_ATTRIBUTE "messages"
+#define NOTIFICATION_FEED_SEPARATOR "||"
+

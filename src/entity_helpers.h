@@ -127,9 +127,17 @@ static const char *const INFO_ITEM_ENTITIES[] = {"info.date", "info.network", "i
 static const int INFO_ITEM_COUNT = sizeof(INFO_ITEM_NAMES) / sizeof(INFO_ITEM_NAMES[0]);
 static constexpr int NOTIFICATION_FEED_MAX_ITEMS = 16;
 
-static const char *const NOTIFICATION_FEED_ENTITY = "sensor.persistent_notifications";
-static const char *const NOTIFICATION_FEED_ATTRIBUTE = "messages";
-static const char *const NOTIFICATION_FEED_SEPARATOR = "||";
+#ifndef NOTIFICATION_FEED_ENTITY
+#define NOTIFICATION_FEED_ENTITY ""
+#endif
+
+#ifndef NOTIFICATION_FEED_ATTRIBUTE
+#define NOTIFICATION_FEED_ATTRIBUTE "messages"
+#endif
+
+#ifndef NOTIFICATION_FEED_SEPARATOR
+#define NOTIFICATION_FEED_SEPARATOR "||"
+#endif
 
 static inline int notification_mode_item_count();
 static inline std::string notification_mode_item_name(int idx);
@@ -198,6 +206,10 @@ static inline std::string delimited_option_at(const std::string &source_list, in
     start = end + 1;
   }
   return "";
+}
+
+static inline bool notifications_mode_enabled() {
+  return NOTIFICATION_FEED_ENTITY[0] != '\0';
 }
 
 static inline std::string media_configured_source_list_for_index(int idx) {
@@ -366,7 +378,7 @@ static inline int mode_item_count(RemoteMode mode) {
     case REMOTE_MODE_ALARMS:
       return ALARM_LIST_COUNT;
     case REMOTE_MODE_NOTIFICATIONS:
-      return notification_mode_item_count();
+      return notifications_mode_enabled() ? notification_mode_item_count() : 0;
     case REMOTE_MODE_WEATHER:
       return WEATHER_LIST_COUNT;
     case REMOTE_MODE_INFO:
@@ -2041,27 +2053,42 @@ static inline const std::string &alarm_state_for_index(int idx) {
 
 static inline void request_selected_notification_status(int idx) {
   (void) idx;
+  if (!notifications_mode_enabled()) {
+    return;
+  }
   ensure_remote_status_trackers();
   notification_feed_tracker_storage.request_notifications();
 }
 
 static inline int notification_mode_item_count() {
+  if (!notifications_mode_enabled()) {
+    return 0;
+  }
   ensure_remote_status_trackers();
   return notification_feed_tracker_storage.item_count();
 }
 
 static inline std::string notification_mode_item_name(int idx) {
+  if (!notifications_mode_enabled()) {
+    return "";
+  }
   ensure_remote_status_trackers();
   return notification_feed_tracker_storage.label(idx);
 }
 
 static inline std::string notification_mode_item_entity(int idx) {
   (void) idx;
+  if (!notifications_mode_enabled()) {
+    return "";
+  }
   ensure_remote_status_trackers();
   return notification_feed_tracker_storage.entity();
 }
 
 static inline const std::string &notification_message_for_index(int idx) {
+  if (!notifications_mode_enabled()) {
+    return empty_string();
+  }
   ensure_remote_status_trackers();
   return notification_feed_tracker_storage.message(idx);
 }
