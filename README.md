@@ -332,7 +332,8 @@ Ensure there are no typos in the entity name. You can check the list of entity n
 
 ```{% for e in states if 'light.' in e.entity_id %}
 {{ e.entity_id }}
-{% endfor %}```
+{% endfor %}
+```
 
 ### The framebuffer download URL does not work
 
