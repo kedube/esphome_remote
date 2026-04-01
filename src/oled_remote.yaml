@@ -1,0 +1,3441 @@
+substitutions:
+  BOARD: "esp32dev"
+  DEVICE_NAME: "esp32-remote"
+  FRIENDLY_NAME: "ESP32 OLED Remote"
+  TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
+  SLEEP_DURATION: "120" # seconds until auto-sleep
+  DEEP_SLEEP_DURATION: "360min"
+  LONG_PRESS_DURATION_MS: "2000" # hold time for lock/cover/automation actions
+  LOW_BATTERY_VOLTAGE: "3.45" # boot warning threshold when battery monitoring is available
+  VERSION: "2.1 beta"
+  PIN_WAKE: "0"
+  PIN_I2C_SDA: "27"
+  PIN_I2C_SCL: "25"
+  PIN_BTN_NEXT: "33"
+  PIN_BTN_PREV: "22"
+  PIN_BTN_MODE: "14"
+  PIN_BTN_SETTINGS: "26"
+  PIN_BTN_CIRCLE: "23"
+  PIN_BTN_DIMMER_UP: "19"
+  PIN_BTN_DIMMER_DOWN: "18"
+
+packages:
+  select_pcb: !include 
+    # Select the appropriate PCB file to include based on your remote control hardware revision.
+    file: pcb_proto.yaml
+    #file: pcb_rev31.yaml
+
+font:
+  - file: "fonts/arial-bold.ttf"
+    id: tiny_font
+    size: 9
+    glyphs: &arial_glyphs ['0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_ :<>%[](){}|''!?/+-&*=$#@^°']
+  - file: "fonts/arial-bold.ttf"
+    id: small_font
+    size: 10
+    glyphs: *arial_glyphs
+  - file: "fonts/arial-bold.ttf"
+    id: medium_font
+    size: 13
+    glyphs: *arial_glyphs
+  - file:
+      type: gfonts
+      family: Material+Symbols+Rounded
+      weight: 400
+    id: symbols
+    size: 12
+    glyphs: [
+      "\ue1ac", # brightness_high
+      "\ue8ac", # power_settings_new
+      "\ue047", # stop
+      "\ue90f", # light_mode
+      "\ue1f4", # switch
+      "\uf076", # thermostat
+      "\uf165", # humidity_mid
+      "\uf168", # fan_mode
+      "\ue286", # blinds
+      "\ue897", # lock 
+      "\uf4f2", # media_output
+      "\uf556", # sensors
+      "\ue88a", # home
+      "\ue7f7", # notifications_active
+      "\ue158", # mail
+      "\ue81a", # sunny
+      "\ue88e", # info
+    ]
+  - file:
+      type: gfonts
+      family: Material+Symbols+Rounded
+      weight: 400
+    id: medium_symbols
+    size: 15
+    glyphs: [
+      "\ueac3", # keyboard_double_arrow_left
+      "\ueac9", # keyboard_double_arrow_right
+      "\ueacf", # keyboard_double_arrow_up
+      "\uead0", # keyboard_double_arrow_down
+      "\ue045", # skip_previous
+      "\ue044", # skip_next
+      "\ue63e", # wifi
+      "\ue648", # wifi_off
+      "\ue8ac", # power_settings_new
+      "\ue19c", # battery_alert
+    ]
+
+esphome:
+  name: ${DEVICE_NAME}
+  friendly_name: ${FRIENDLY_NAME}
+  min_version: 2026.1.0
+  name_add_mac_suffix: false
+  includes:
+    - entity_helpers.h
+    - local_entities.h
+  on_boot:
+    - priority: 250
+      then:
+        - lambda: |-
+            ensure_light_status_tracker();
+            id(last_active) = millis() / 1000;
+            uint64_t state = id(persisted_ui_state);
+            constexpr uint64_t UI_STATE_FORMAT_V2 = 1ULL << 63;
+            constexpr uint64_t UI_STATE_FORMAT_V3 = (1ULL << 63) | (1ULL << 62);
+            constexpr uint64_t UI_STATE_FORMAT_V4 = (1ULL << 63) | (1ULL << 62) | (1ULL << 61);
+            constexpr uint64_t UI_STATE_FORMAT_V5 = (1ULL << 63) | (1ULL << 62) | (1ULL << 61) | (1ULL << 60);
+            int restored_contrast = state & 0x0F;
+            int restored_mode = 0;
+            auto remap_v2_mode = [](int old_mode) {
+              switch (old_mode) {
+                case 0:
+                  return REMOTE_MODE_LIGHTS;
+                case 1:
+                  return REMOTE_MODE_SWITCHES;
+                case 2:
+                  return REMOTE_MODE_CLIMATE;
+                case 3:
+                  return REMOTE_MODE_LOCKS;
+                case 4:
+                  return REMOTE_MODE_SHADES;
+                case 5:
+                  return REMOTE_MODE_MEDIA;
+                case 6:
+                  return REMOTE_MODE_AUTOMATION;
+                case 7:
+                  return REMOTE_MODE_WEATHER;
+                case 8:
+                  return REMOTE_MODE_INFO;
+                case 9:
+                  return REMOTE_MODE_FANS;
+                case 10:
+                  return REMOTE_MODE_HUMIDIFIERS;
+                default:
+                  return REMOTE_MODE_INFO;
+              }
+            };
+            auto remap_v3_mode = [](int old_mode) {
+              switch (old_mode) {
+                case 0:
+                  return REMOTE_MODE_LIGHTS;
+                case 1:
+                  return REMOTE_MODE_SWITCHES;
+                case 2:
+                  return REMOTE_MODE_CLIMATE;
+                case 3:
+                  return REMOTE_MODE_HUMIDIFIERS;
+                case 4:
+                  return REMOTE_MODE_FANS;
+                case 5:
+                  return REMOTE_MODE_SHADES;
+                case 6:
+                  return REMOTE_MODE_LOCKS;
+                case 7:
+                  return REMOTE_MODE_MEDIA;
+                case 8:
+                  return REMOTE_MODE_AUTOMATION;
+                case 9:
+                  return REMOTE_MODE_WEATHER;
+                case 10:
+                  return REMOTE_MODE_INFO;
+                default:
+                  return REMOTE_MODE_INFO;
+              }
+            };
+            auto remap_v4_mode = [](int old_mode) {
+              switch (old_mode) {
+                case 0:
+                  return REMOTE_MODE_LIGHTS;
+                case 1:
+                  return REMOTE_MODE_SWITCHES;
+                case 2:
+                  return REMOTE_MODE_CLIMATE;
+                case 3:
+                  return REMOTE_MODE_HUMIDIFIERS;
+                case 4:
+                  return REMOTE_MODE_FANS;
+                case 5:
+                  return REMOTE_MODE_SHADES;
+                case 6:
+                  return REMOTE_MODE_LOCKS;
+                case 7:
+                  return REMOTE_MODE_MEDIA;
+                case 8:
+                  return REMOTE_MODE_AUTOMATION;
+                case 9:
+                  return REMOTE_MODE_NOTIFICATIONS;
+                case 10:
+                  return REMOTE_MODE_WEATHER;
+                case 11:
+                  return REMOTE_MODE_INFO;
+                default:
+                  return REMOTE_MODE_INFO;
+              }
+            };
+
+            if ((state & UI_STATE_FORMAT_V5) == UI_STATE_FORMAT_V5) {
+              restored_mode = (state >> 4) & 0x0F;
+              id(selected_light_index) = (state >> 8) & 0x3F;
+              id(selected_switch_index) = (state >> 14) & 0x3F;
+              id(selected_climate_index) = (state >> 20) & 0x3F;
+              id(selected_lock_index) = (state >> 26) & 0x3F;
+              id(selected_cover_index) = (state >> 32) & 0x3F;
+              id(selected_media_index) = (state >> 38) & 0x3F;
+              id(selected_automation_index) = (state >> 44) & 0x3F;
+              id(selected_weather_index) = (state >> 50) & 0x3F;
+              id(selected_time_index) = (state >> 56) & 0x1F;
+            } else if ((state & UI_STATE_FORMAT_V2) != 0) {
+              if ((state & UI_STATE_FORMAT_V4) == UI_STATE_FORMAT_V4) {
+                restored_mode = remap_v4_mode((state >> 4) & 0x0F);
+                id(selected_light_index) = (state >> 8) & 0x3F;
+                id(selected_switch_index) = (state >> 14) & 0x3F;
+                id(selected_climate_index) = (state >> 20) & 0x3F;
+                id(selected_lock_index) = (state >> 26) & 0x3F;
+                id(selected_cover_index) = (state >> 32) & 0x3F;
+                id(selected_media_index) = (state >> 38) & 0x3F;
+                id(selected_automation_index) = (state >> 44) & 0x3F;
+                id(selected_weather_index) = (state >> 50) & 0x3F;
+                id(selected_time_index) = (state >> 56) & 0x1F;
+              } else if ((state & UI_STATE_FORMAT_V3) == UI_STATE_FORMAT_V3) {
+                restored_mode = remap_v3_mode((state >> 4) & 0x0F);
+                id(selected_light_index) = (state >> 8) & 0x3F;
+                id(selected_switch_index) = (state >> 14) & 0x3F;
+                id(selected_climate_index) = (state >> 20) & 0x3F;
+                id(selected_lock_index) = (state >> 26) & 0x3F;
+                id(selected_cover_index) = (state >> 32) & 0x3F;
+                id(selected_media_index) = (state >> 38) & 0x3F;
+                id(selected_automation_index) = (state >> 44) & 0x3F;
+                id(selected_weather_index) = (state >> 50) & 0x3F;
+                id(selected_time_index) = (state >> 56) & 0x3F;
+              } else {
+                restored_mode = remap_v2_mode((state >> 4) & 0x0F);
+                id(selected_light_index) = (state >> 8) & 0x3F;
+                id(selected_switch_index) = (state >> 14) & 0x3F;
+                id(selected_climate_index) = (state >> 20) & 0x3F;
+                id(selected_lock_index) = (state >> 26) & 0x3F;
+                id(selected_cover_index) = (state >> 32) & 0x3F;
+                id(selected_media_index) = (state >> 38) & 0x3F;
+                id(selected_automation_index) = (state >> 44) & 0x3F;
+                id(selected_weather_index) = (state >> 50) & 0x3F;
+                id(selected_time_index) = (state >> 56) & 0x3F;
+              }
+            } else {
+              int old_mode = (state >> 4) & 0x07;
+              restored_mode =
+                  old_mode == 0 ? REMOTE_MODE_LIGHTS :
+                  old_mode == 1 ? REMOTE_MODE_SWITCHES :
+                  old_mode == 2 ? REMOTE_MODE_CLIMATE :
+                  old_mode == 3 ? REMOTE_MODE_LOCKS :
+                  old_mode == 4 ? REMOTE_MODE_MEDIA :
+                  old_mode == 5 ? REMOTE_MODE_AUTOMATION :
+                  old_mode == 6 ? REMOTE_MODE_WEATHER :
+                  REMOTE_MODE_INFO;
+              id(selected_light_index) = (state >> 7) & 0x3F;
+              id(selected_switch_index) = (state >> 13) & 0x3F;
+              id(selected_climate_index) = (state >> 19) & 0x3F;
+              id(selected_lock_index) = (state >> 25) & 0x3F;
+              id(selected_cover_index) = 0;
+              id(selected_media_index) = (state >> 31) & 0x3F;
+              id(selected_automation_index) = (state >> 37) & 0x3F;
+              id(selected_weather_index) = (state >> 43) & 0x3F;
+              id(selected_time_index) = (state >> 49) & 0x3F;
+            }
+
+            if (restored_contrast >= 1 && restored_contrast <= 10) {
+              id(contrast) = restored_contrast;
+            } else {
+              id(contrast) = 5;
+            }
+            id(oled_display).set_contrast(id(contrast) * 1.0f / 10.0f);
+
+            if (restored_mode < 0 || restored_mode >= REMOTE_MODE_COUNT) {
+              id(current_mode) = first_available_mode();
+            } else {
+              RemoteMode restored = static_cast<RemoteMode>(restored_mode);
+              id(current_mode) = mode_is_available(restored) ? restored : first_available_mode();
+            }
+            id(updated_ui) = true;
+        - script.execute: update_selected_item
+
+preferences:
+  flash_write_interval: 5s
+
+esp32:
+  board: ${BOARD}
+  flash_size: 4MB
+  framework:
+    type: arduino
+    advanced:
+      minimum_chip_revision: "3.1"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  output_power: 10dB
+  fast_connect: true
+  power_save_mode: LIGHT
+
+api:
+  homeassistant_states: true
+  reboot_timeout: 0s
+  encryption:
+    key: !secret encryption_key
+
+json:
+
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+    on_time_sync:
+      then:
+        - lambda: |-
+            id(updated_ui) = true;
+    on_time:
+      - seconds: 0
+        minutes: /1
+        then:
+          - lambda: |-
+              id(updated_ui) = true;
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+  level: INFO # DEBUG
+
+deep_sleep:
+  id: go_sleep
+  sleep_duration: ${DEEP_SLEEP_DURATION}
+  wakeup_pin:
+    number: ${PIN_WAKE}
+    allow_other_uses: true
+    ignore_strapping_warning: true
+  wakeup_pin_mode: INVERT_WAKEUP
+
+i2c:
+  sda: ${PIN_I2C_SDA}
+  scl: ${PIN_I2C_SCL}
+  frequency: 400kHz
+  scan: false
+
+display:
+  - platform: ssd1306_i2c
+    model: "SH1106 128x64"
+    address: 0x3C
+    rotation: 180
+    contrast: 0.5
+    id: oled_display
+
+globals:
+  - id: contrast
+    type: int
+    initial_value: '5'
+
+  - id: last_active
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: last_brightness_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_switch_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_contrast_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_climate_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_fan_speed_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_humidifier_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_humidifier_mode_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_lock_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_cover_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_cover_position_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_climate_target_focus_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_media_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_media_volume_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_media_source_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_media_power_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_automation_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: updated_ui
+    type: bool
+    initial_value: 'true'
+
+  - id: show_boot_screen
+    type: bool
+    initial_value: 'true'
+
+  - id: low_battery_popup_active
+    type: bool
+    initial_value: 'false'
+
+  - id: low_battery_popup_shown
+    type: bool
+    initial_value: 'false'
+
+  - id: persisted_ui_state
+    type: uint64_t
+    initial_value: '0'
+    restore_value: True
+
+  - id: current_mode
+    type: int
+    initial_value: '0'
+
+  - id: selected_light_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_switch_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_fan_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_humidifier_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_climate_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_lock_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_cover_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_media_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_automation_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_weather_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_time_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_item_name
+    type: std::string
+    initial_value: '"Office Light"'
+
+  - id: selected_item_entity
+    type: std::string
+    initial_value: '"light.office_light"'
+
+  - id: selected_item_state
+    type: std::string
+    initial_value: '"unknown"'
+
+  - id: selected_brightness_pct
+    type: int
+    initial_value: '0'
+
+  - id: selected_fan_speed_pct
+    type: int
+    initial_value: '0'
+
+  - id: selected_humidifier_target_humidity
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_humidifier_current_humidity
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_humidifier_action
+    type: std::string
+    initial_value: '"unknown"'
+
+  - id: selected_humidifier_mode
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_cover_position_pct
+    type: int
+    initial_value: '0'
+
+  - id: selected_climate_target_temp
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_climate_target_temp_low
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_climate_target_temp_high
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_climate_current_temp
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_climate_hvac_action
+    type: std::string
+    initial_value: '"unknown"'
+
+  - id: selected_climate_preset
+    type: std::string
+    initial_value: '""'
+
+  - id: last_climate_mode
+    type: std::string
+    initial_value: '"heat"'
+
+  - id: climate_target_focus
+    type: int
+    initial_value: '0'
+
+  - id: climate_target_focus_value
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_media_volume_pct
+    type: int
+    initial_value: '0'
+
+  - id: selected_media_title
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_media_artist
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_media_device_class
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_media_source
+    type: std::string
+    initial_value: '""'
+
+  - id: last_media_power_feedback
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_automation_state
+    type: std::string
+    initial_value: '"unknown"'
+
+  - id: last_automation_feedback
+    type: std::string
+    initial_value: '""'
+
+  - id: last_switch_feedback
+    type: std::string
+    initial_value: '""'
+
+  - id: last_lock_feedback
+    type: std::string
+    initial_value: '""'
+
+  - id: last_cover_feedback
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_weather_temperature
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_humidity
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_high_temp
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_low_temp
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_condition
+    type: std::string
+    initial_value: '"unknown"'
+
+  - id: battery_monitoring_available
+    type: bool
+    initial_value: 'false'
+
+  - id: battery_percentage
+    type: int
+    initial_value: '0'
+
+  - id: battery_voltage
+    type: float
+    initial_value: 'NAN'
+
+  - id: last_battery_update
+    type: uint32_t
+    initial_value: '0'
+
+  - id: primary_button_press_started_at
+    type: uint32_t
+    initial_value: '0'
+
+  - id: play_pause_button_press_started_at
+    type: uint32_t
+    initial_value: '0'
+
+  - id: primary_button_press_mode
+    type: int
+    initial_value: '-1'
+
+  - id: play_pause_button_press_mode
+    type: int
+    initial_value: '-1'
+
+  - id: primary_button_long_press_fired
+    type: bool
+    initial_value: 'false'
+
+  - id: play_pause_button_long_press_fired
+    type: bool
+    initial_value: 'false'
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      allow_other_uses: true
+      number: ${PIN_WAKE}
+      ignore_strapping_warning: true
+      mode:
+        input: True
+        pullup: True
+    name: "Remote Power Button"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: turn_off
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_PREV}
+      mode:
+        input: True
+        pullup: True
+    name: "Previous Mode Item"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: previous_button_action
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_CONTRAST}
+      mode:
+        input: True
+        pullup: True
+    name: "OLED Contrast"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - if:
+            condition:
+              lambda: 'return id(current_mode) == REMOTE_MODE_MEDIA;'
+            then:
+              - if:
+                  condition:
+                    lambda: 'return id(selected_media_device_class) == "speaker";'
+                  then:
+                    - script.execute: media_play_stop
+                  else:
+                    - script.execute: media_toggle_power
+            else:
+              - lambda: |-
+                  id(contrast) += 1;
+                  if (id(contrast) > 10) id(contrast) = 1;
+                  float contrast_value = id(contrast) * 1.0 / 10;
+                  ESP_LOGD("display", "Contrast = %f", contrast_value);
+                  id(oled_display).set_contrast(contrast_value);
+                  id(last_contrast_interaction) = millis();
+                  id(updated_ui) = true;
+              - script.execute: persist_ui_state
+              - script.execute: update_display
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_NEXT}
+      mode:
+        input: True
+        pullup: True
+    name: "Next Mode Item"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: next_button_action
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_MODE}
+      mode:
+        input: True
+        pullup: True
+    name: "Cycle Remote Mode"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: cycle_mode
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_SETTINGS}
+      mode:
+        input: True
+        pullup: True
+    name: "Secondary Mode Action"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: secondary_mode_action
+
+  - platform: gpio
+    id: primary_mode_button
+    pin:
+      number: ${PIN_BTN_CIRCLE}
+      mode:
+        input: True
+        pullup: True
+    name: "Primary Mode Action"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: handle_primary_button_press
+    on_release:
+      then:
+        - script.execute: handle_primary_button_release
+
+  - platform: gpio
+    id: play_pause_mode_button
+    pin:
+      number: ${PIN_BTN_PLAY_PAUSE}
+      mode:
+        input: True
+        pullup: True
+    name: "Play Pause Mode Action"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: handle_play_pause_button_press
+    on_release:
+      then:
+        - script.execute: handle_play_pause_button_release
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_DIMMER_UP}
+      mode:
+        input: True
+        pullup: True
+    name: "Increase Mode Value"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: increase_mode_value
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_DIMMER_DOWN}
+      mode:
+        input: True
+        pullup: True
+    name: "Decrease Mode Value"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: decrease_mode_value
+
+script:
+  - id: show_powering_off_screen
+    mode: single
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue8ac");
+          it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "POWERING OFF");
+          it->display();
+
+  - id: clear_display_for_sleep
+    mode: single
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->display();
+
+  - id: reset_mode_feedback_timers
+    then:
+      - lambda: |-
+          id(last_brightness_interaction) = 0;
+          id(last_switch_interaction) = 0;
+          id(last_fan_speed_interaction) = 0;
+          id(last_humidifier_interaction) = 0;
+          id(last_humidifier_mode_interaction) = 0;
+          id(last_climate_interaction) = 0;
+          id(last_lock_interaction) = 0;
+          id(last_cover_interaction) = 0;
+          id(last_cover_position_interaction) = 0;
+          id(last_media_interaction) = 0;
+          id(last_media_volume_interaction) = 0;
+          id(last_media_source_interaction) = 0;
+          id(last_media_power_interaction) = 0;
+          id(last_automation_interaction) = 0;
+
+  - id: reset_selected_item_state
+    then:
+      - lambda: |-
+          id(selected_item_state) = "unknown";
+          id(selected_brightness_pct) = 0;
+          id(selected_fan_speed_pct) = 0;
+          id(selected_humidifier_target_humidity) = NAN;
+          id(selected_humidifier_current_humidity) = NAN;
+          id(selected_humidifier_action) = "unknown";
+          id(selected_humidifier_mode) = "";
+          id(selected_cover_position_pct) = 0;
+          id(last_switch_feedback) = "";
+          id(last_switch_interaction) = 0;
+          id(selected_climate_target_temp) = NAN;
+          id(selected_climate_hvac_action) = "unknown";
+          id(selected_climate_preset) = "";
+          id(selected_climate_target_temp_low) = NAN;
+          id(selected_climate_target_temp_high) = NAN;
+          id(selected_climate_current_temp) = NAN;
+          id(climate_target_focus) = 0;
+          id(climate_target_focus_value) = NAN;
+          id(last_climate_target_focus_interaction) = 0;
+          id(selected_media_title) = "";
+          id(selected_media_artist) = "";
+          id(selected_media_device_class) = "";
+          id(selected_media_source) = "";
+          id(last_media_power_feedback) = "";
+          id(selected_automation_state) = "unknown";
+          id(last_lock_feedback) = "";
+          id(last_lock_interaction) = 0;
+          id(last_cover_feedback) = "";
+          id(last_cover_interaction) = 0;
+          id(last_cover_position_interaction) = 0;
+          id(selected_weather_temperature) = NAN;
+          id(selected_weather_humidity) = NAN;
+          id(selected_weather_high_temp) = NAN;
+          id(selected_weather_low_temp) = NAN;
+          id(selected_weather_condition) = "unknown";
+          id(updated_ui) = true;
+
+  - id: persist_ui_state
+    then:
+      - lambda: |-
+          constexpr uint64_t UI_STATE_FORMAT_V5 = (1ULL << 63) | (1ULL << 62) | (1ULL << 61) | (1ULL << 60);
+          id(persisted_ui_state) =
+              UI_STATE_FORMAT_V5 |
+              (uint64_t(id(selected_time_index) & 0x1F) << 56) |
+              (uint64_t(id(selected_weather_index) & 0x3F) << 50) |
+              (uint64_t(id(selected_automation_index) & 0x3F) << 44) |
+              (uint64_t(id(selected_media_index) & 0x3F) << 38) |
+              (uint64_t(id(selected_cover_index) & 0x3F) << 32) |
+              (uint64_t(id(selected_lock_index) & 0x3F) << 26) |
+              (uint64_t(id(selected_climate_index) & 0x3F) << 20) |
+              (uint64_t(id(selected_switch_index) & 0x3F) << 14) |
+              (uint64_t(id(selected_light_index) & 0x3F) << 8) |
+              (uint64_t(id(current_mode) & 0x0F) << 4) |
+              uint64_t(id(contrast) & 0x0F);
+
+  - id: update_selected_item
+    then:
+      - lambda: |-
+          RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          if (!mode_is_available(mode)) {
+            mode = first_available_mode();
+            id(current_mode) = mode;
+          }
+          int count = mode_item_count(mode);
+
+          if (count <= 0) {
+            id(selected_item_name) = "NO ITEMS";
+            id(selected_item_entity) = "";
+            id(selected_item_state) = "unknown";
+            id(updated_ui) = true;
+            return;
+          }
+
+          int &selected_index = selected_index_ref(
+              mode, id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index), id(selected_cover_index),
+              id(selected_media_index), id(selected_automation_index), id(selected_weather_index), id(selected_time_index), id(selected_fan_index), id(selected_humidifier_index));
+          selected_index = clamp_mode_index(selected_index, count);
+          int idx = selected_index;
+
+          id(selected_item_name) = mode_item_name(mode, idx);
+          id(selected_item_entity) = mode_item_entity(mode, idx);
+      - script.execute: reset_selected_item_state
+      - lambda: |-
+          RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          int idx = selected_index_ref(
+              mode, id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index), id(selected_cover_index),
+              id(selected_media_index), id(selected_automation_index), id(selected_weather_index), id(selected_time_index), id(selected_fan_index), id(selected_humidifier_index));
+          idx = clamp_mode_index(idx, mode_item_count(mode));
+          if (mode == REMOTE_MODE_MEDIA) {
+            const std::string &state = selected_media_state(idx);
+            const std::string &device_class = media_device_class_for_index(idx);
+            const std::string &title = media_title_for_index(idx);
+            const std::string &artist = media_artist_for_index(idx);
+            const std::string &source = media_source_for_index(idx);
+            float volume = selected_media_volume(idx);
+
+            if (state != "unknown") {
+              id(selected_item_state) = state;
+            }
+            id(selected_media_device_class) = device_class;
+            id(selected_media_title) = title;
+            id(selected_media_artist) = artist;
+            if ((device_class == "tv" || device_class == "receiver")) {
+              if (!source.empty()) {
+                id(selected_media_source) = source;
+              }
+            } else {
+              id(selected_media_source) = source;
+            }
+            if (!isnan(volume)) {
+              int pct = (int) roundf(volume * 100.0f);
+              if (pct < 0) pct = 0;
+              if (pct > 100) pct = 100;
+              id(selected_media_volume_pct) = pct;
+            }
+          }
+          request_mode_status(mode, idx);
+      - script.execute: persist_ui_state
+      - script.execute: sync_current_mode_status
+      - script.execute: update_display
+
+  - id: boot_screen
+    then:
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - lambda: |-
+                auto it = id(oled_display);
+                it->clear();
+                it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue63e");
+                it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WIFI CONNECTED");
+                it->print(64, 36, id(small_font), COLOR_ON, display::TextAlign::CENTER, "CONNECTING TO API");
+                it->display();
+          else:
+            - lambda: |-
+                auto it = id(oled_display);
+                it->clear();
+                it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue63e");
+                it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "CONNECTING TO WIFI");
+                it->print(64, 36, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WAITING FOR NETWORK");
+                it->print(64, 56, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "V${VERSION}");
+                it->display();
+
+  - id: show_low_battery_popup
+    mode: restart
+    then:
+      - lambda: |-
+          id(low_battery_popup_active) = true;
+          id(low_battery_popup_shown) = true;
+          id(show_boot_screen) = false;
+          id(updated_ui) = true;
+
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue19c");
+          it->print(64, 26, id(small_font), COLOR_ON, display::TextAlign::CENTER, "LOW BATTERY");
+          it->print(64, 38, id(small_font), COLOR_ON, display::TextAlign::CENTER, "PLEASE CHARGE");
+          if (!isnan(id(battery_voltage))) {
+            it->printf(64, 56, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "%.02fV", id(battery_voltage));
+          }
+          it->display();
+      - delay: 10s
+      - lambda: |-
+          id(low_battery_popup_active) = false;
+          id(updated_ui) = true;
+
+  - id: api_disconnected_screen
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue648");
+          it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WIFI CONNECTED");
+          it->print(64, 36, id(small_font), COLOR_ON, display::TextAlign::CENTER, "API DISCONNECTED");
+          it->print(64, 56, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "RECONNECTING...");
+          it->display();
+
+  - id: wifi_disconnected_screen
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue648");
+          it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WIFI DISCONNECTED");
+          it->print(64, 36, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "RECONNECTING...");
+          it->display();
+
+  - id: cycle_mode
+    then:
+      - lambda: |-
+          RemoteMode current = static_cast<RemoteMode>(id(current_mode));
+          id(current_mode) = next_available_mode(current, 1);
+          id(updated_ui) = true;
+      - script.execute: reset_mode_feedback_timers
+      - script.execute: update_selected_item
+
+  - id: sync_current_mode_status
+    then:
+      - lambda: |-
+          RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          int idx = selected_index_ref(
+              mode, id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index), id(selected_cover_index),
+              id(selected_media_index), id(selected_automation_index), id(selected_weather_index), id(selected_time_index), id(selected_fan_index), id(selected_humidifier_index));
+          idx = clamp_mode_index(idx, mode_item_count(mode));
+
+          if (mode == REMOTE_MODE_LIGHTS) {
+            const std::string &state = selected_light_state(idx);
+            float brightness = selected_light_brightness(idx);
+            std::string next_state = id(selected_item_state);
+            int next_brightness_pct = id(selected_brightness_pct);
+
+            if (state == "on") {
+              next_state = "on";
+              if (selected_light_has_brightness(idx) && !isnan(brightness) && brightness > 0) {
+                int pct = (int) roundf((brightness / 255.0f) * 100.0f);
+                if (pct < 1) pct = 1;
+                if (pct > 100) pct = 100;
+                next_brightness_pct = pct;
+              } else if (next_brightness_pct <= 0) {
+                next_brightness_pct = 100;
+              }
+            } else if (state == "off") {
+              next_state = "off";
+              next_brightness_pct = 0;
+            } else {
+              next_state = "unknown";
+              request_selected_light_status(idx);
+            }
+
+            if (next_state != id(selected_item_state) || next_brightness_pct != id(selected_brightness_pct)) {
+              id(selected_item_state) = next_state;
+              id(selected_brightness_pct) = next_brightness_pct;
+              id(updated_ui) = true;
+            }
+          } else if (mode == REMOTE_MODE_FANS) {
+            const std::string &state = selected_fan_state(idx);
+            float percentage = selected_fan_percentage(idx);
+            bool has_percentage = selected_fan_has_percentage(idx);
+            std::string next_state = id(selected_item_state);
+            int next_speed_pct = id(selected_fan_speed_pct);
+
+            if (state == "on") {
+              next_state = "on";
+              if (has_percentage && !isnan(percentage) && percentage > 0) {
+                int pct = (int) roundf(percentage);
+                if (pct < 1) pct = 1;
+                if (pct > 100) pct = 100;
+                next_speed_pct = pct;
+              } else if (!has_percentage) {
+                next_speed_pct = 0;
+              }
+            } else if (state == "off") {
+              next_state = "off";
+              next_speed_pct = 0;
+            } else {
+              next_state = "unknown";
+              request_selected_fan_status(idx);
+            }
+
+            if (next_state != id(selected_item_state) || next_speed_pct != id(selected_fan_speed_pct)) {
+              id(selected_item_state) = next_state;
+              id(selected_fan_speed_pct) = next_speed_pct;
+              id(updated_ui) = true;
+            }
+          } else if (mode == REMOTE_MODE_HUMIDIFIERS) {
+            const std::string &state = selected_humidifier_state(idx);
+            const std::string &mode_value = humidifier_mode_for_index(idx);
+            const std::string &action = humidifier_action_for_index(idx);
+            float target = humidifier_target_humidity_for_index(idx);
+            float current = humidifier_current_humidity_for_index(idx);
+            bool changed = false;
+
+            if (state == "unknown" && std::isnan(target) && std::isnan(current)) {
+              request_mode_status(mode, idx);
+            } else {
+              if (id(selected_item_state) != state) {
+                id(selected_item_state) = state;
+                changed = true;
+              }
+              if (id(selected_humidifier_action) != action) {
+                id(selected_humidifier_action) = action;
+                changed = true;
+              }
+              if (id(selected_humidifier_mode) != mode_value) {
+                id(selected_humidifier_mode) = mode_value;
+                changed = true;
+              }
+              if (!isnan(target) && id(selected_humidifier_target_humidity) != target) {
+                id(selected_humidifier_target_humidity) = target;
+                changed = true;
+              }
+              if (!isnan(current) && id(selected_humidifier_current_humidity) != current) {
+                id(selected_humidifier_current_humidity) = current;
+                changed = true;
+              }
+              if (changed) {
+                id(updated_ui) = true;
+              }
+            }
+          } else if (mode == REMOTE_MODE_SWITCHES) {
+            const std::string &state = selected_switch_state(idx);
+
+            if (state == "unknown") {
+              request_mode_status(mode, idx);
+            } else if (id(selected_item_state) != state) {
+              id(selected_item_state) = state;
+              id(updated_ui) = true;
+            }
+          } else if (mode == REMOTE_MODE_CLIMATE) {
+            const std::string &state = selected_climate_state(idx);
+            const std::string &hvac_action = climate_hvac_action_for_index(idx);
+            const std::string &preset = selected_climate_preset_mode(idx);
+            float target = selected_climate_target_temperature(idx);
+            float target_low = selected_climate_target_temperature_low(idx);
+            float target_high = selected_climate_target_temperature_high(idx);
+            float current = selected_climate_current_temperature(idx);
+            bool changed = false;
+
+            if (state == "unknown") {
+              request_mode_status(mode, idx);
+            } else {
+              if (id(selected_item_state) != state) {
+                id(selected_item_state) = state;
+                changed = true;
+              }
+              if (state != "off") {
+                id(last_climate_mode) = state;
+              }
+              if (!hvac_action.empty() && id(selected_climate_hvac_action) != hvac_action) {
+                id(selected_climate_hvac_action) = hvac_action;
+                changed = true;
+              }
+              if (!isnan(target) && id(selected_climate_target_temp) != target) {
+                id(selected_climate_target_temp) = target;
+                changed = true;
+              }
+              if (!isnan(target_low) && id(selected_climate_target_temp_low) != target_low) {
+                id(selected_climate_target_temp_low) = target_low;
+                changed = true;
+              }
+              if (!isnan(target_high) && id(selected_climate_target_temp_high) != target_high) {
+                id(selected_climate_target_temp_high) = target_high;
+                changed = true;
+              }
+              if (!isnan(current) && id(selected_climate_current_temp) != current) {
+                id(selected_climate_current_temp) = current;
+                changed = true;
+              }
+              if (id(selected_climate_preset) != preset) {
+                id(selected_climate_preset) = preset;
+                changed = true;
+              }
+              if (changed) {
+                id(updated_ui) = true;
+              }
+            }
+          } else if (mode == REMOTE_MODE_LOCKS) {
+            const std::string &state = selected_lock_state(idx);
+
+            if (state == "unknown") {
+              request_mode_status(mode, idx);
+            } else if (id(selected_item_state) != state) {
+              id(selected_item_state) = state;
+              id(updated_ui) = true;
+            }
+          } else if (mode == REMOTE_MODE_SHADES) {
+            const std::string &state = selected_cover_state(idx);
+            float position = selected_cover_position(idx);
+            bool changed = false;
+
+            if (state == "unknown" && std::isnan(position)) {
+              request_mode_status(mode, idx);
+            } else {
+              if (state != "unknown" && id(selected_item_state) != state) {
+                id(selected_item_state) = state;
+                changed = true;
+              }
+              if (!std::isnan(position)) {
+                int pct = (int) roundf(position);
+                if (pct < 0) pct = 0;
+                if (pct > 100) pct = 100;
+                if (id(selected_cover_position_pct) != pct) {
+                  id(selected_cover_position_pct) = pct;
+                  changed = true;
+                }
+              }
+              if (changed) {
+                id(updated_ui) = true;
+              }
+            }
+          } else if (mode == REMOTE_MODE_MEDIA) {
+            const std::string &state = selected_media_state(idx);
+            const std::string &device_class = media_device_class_for_index(idx);
+            const std::string &title = media_title_for_index(idx);
+            const std::string &artist = media_artist_for_index(idx);
+            const std::string &source = media_source_for_index(idx);
+            float volume = selected_media_volume(idx);
+            bool changed = false;
+
+            if (state == "unknown") {
+              request_mode_status(mode, idx);
+            } else {
+              if (id(selected_item_state) != state) {
+                id(selected_item_state) = state;
+                changed = true;
+              }
+              if (id(selected_media_title) != title) {
+                id(selected_media_title) = title;
+                changed = true;
+              }
+              if (id(selected_media_artist) != artist) {
+                id(selected_media_artist) = artist;
+                changed = true;
+              }
+              if (id(selected_media_device_class) != device_class) {
+                id(selected_media_device_class) = device_class;
+                changed = true;
+              }
+              if (device_class == "tv" || device_class == "receiver") {
+                if (!source.empty() && id(selected_media_source) != source) {
+                  id(selected_media_source) = source;
+                  changed = true;
+                }
+              } else if (id(selected_media_source) != source) {
+                id(selected_media_source) = source;
+                changed = true;
+              }
+              if (!isnan(volume)) {
+                int pct = (int) roundf(volume * 100.0f);
+                if (pct < 0) pct = 0;
+                if (pct > 100) pct = 100;
+                if (id(selected_media_volume_pct) != pct) {
+                  id(selected_media_volume_pct) = pct;
+                  changed = true;
+                }
+              }
+              if (changed) {
+                id(updated_ui) = true;
+              }
+            }
+          } else if (mode == REMOTE_MODE_SENSORS) {
+            const std::string &state = sensor_state_for_index(idx);
+            if (state == "unknown") {
+              request_mode_status(mode, idx);
+            } else if (id(selected_item_state) != state) {
+              id(selected_item_state) = state;
+              id(updated_ui) = true;
+            }
+          } else if (mode == REMOTE_MODE_AUTOMATION) {
+            const std::string &state = automation_state_for_index(idx);
+            std::string next_state = automation_supports_enabled_state(idx) ? state : "ready";
+            bool changed = false;
+
+            if (automation_supports_enabled_state(idx)) {
+              if (id(selected_automation_state) != next_state) {
+                id(selected_automation_state) = next_state;
+                changed = true;
+              }
+            } else if (id(selected_automation_state) != "ready") {
+              id(selected_automation_state) = "ready";
+              changed = true;
+            }
+            if (id(selected_item_state) != next_state) {
+              id(selected_item_state) = next_state;
+              changed = true;
+            }
+            if (state == "unknown") {
+              request_mode_status(mode, idx);
+            }
+            if (changed) {
+              id(updated_ui) = true;
+            }
+          } else if (mode == REMOTE_MODE_ALARMS) {
+            const std::string &state = alarm_state_for_index(idx);
+            if (state == "unknown") {
+              request_mode_status(mode, idx);
+            } else if (id(selected_item_state) != state) {
+              id(selected_item_state) = state;
+              id(updated_ui) = true;
+            }
+          } else if (mode == REMOTE_MODE_NOTIFICATIONS) {
+            int count = notification_mode_item_count();
+            int clamped_idx = clamp_mode_index(idx, count);
+            std::string next_name = notification_mode_item_name(clamped_idx);
+            std::string next_entity = notification_mode_item_entity(clamped_idx);
+            std::string next_message = notification_message_for_index(clamped_idx);
+
+            if (clamped_idx != id(selected_time_index)) {
+              id(selected_time_index) = clamped_idx;
+              idx = clamped_idx;
+              id(updated_ui) = true;
+            }
+            if (id(selected_item_name) != next_name) {
+              id(selected_item_name) = next_name;
+              id(updated_ui) = true;
+            }
+            if (id(selected_item_entity) != next_entity) {
+              id(selected_item_entity) = next_entity;
+              id(updated_ui) = true;
+            }
+            if (id(selected_item_state) != next_message) {
+              id(selected_item_state) = next_message;
+              id(updated_ui) = true;
+            }
+            if (next_entity.empty() || (count > 1 && next_message.empty())) {
+              request_mode_status(mode, clamped_idx);
+            }
+          } else if (mode == REMOTE_MODE_WEATHER) {
+            const std::string &condition = weather_state_for_index(idx);
+            float temperature = weather_temperature_for_index(idx);
+            float humidity = weather_humidity_for_index(idx);
+            float high = weather_high_temperature_for_index(idx);
+            float low = weather_low_temperature_for_index(idx);
+            bool changed = false;
+
+            if (condition == "unknown" && std::isnan(temperature) && std::isnan(humidity) &&
+                std::isnan(high) && std::isnan(low)) {
+              request_mode_status(mode, idx);
+            } else {
+              if (id(selected_item_state) != condition) {
+                id(selected_item_state) = condition;
+                changed = true;
+              }
+              if (id(selected_weather_condition) != condition) {
+                id(selected_weather_condition) = condition;
+                changed = true;
+              }
+              if (id(selected_weather_temperature) != temperature) {
+                id(selected_weather_temperature) = temperature;
+                changed = true;
+              }
+              if (id(selected_weather_humidity) != humidity) {
+                id(selected_weather_humidity) = humidity;
+                changed = true;
+              }
+              if (id(selected_weather_high_temp) != high) {
+                id(selected_weather_high_temp) = high;
+                changed = true;
+              }
+              if (id(selected_weather_low_temp) != low) {
+                id(selected_weather_low_temp) = low;
+                changed = true;
+              }
+              if (changed) {
+                id(updated_ui) = true;
+              }
+            }
+          } else if (mode == REMOTE_MODE_INFO) {
+            const char *state = idx == 0 ? "date" : "version";
+            if (id(selected_item_state) != state) {
+              id(selected_item_state) = state;
+              id(updated_ui) = true;
+            }
+          }
+
+  - id: dispatch_mode_action
+    parameters:
+      action: int
+    then:
+      - lambda: |-
+          const int MODE_ACTION_PRIMARY = 0;
+          const int MODE_ACTION_SECONDARY = 1;
+          const int MODE_ACTION_PLAY_PAUSE = 2;
+          const int MODE_ACTION_INCREASE = 3;
+          const int MODE_ACTION_DECREASE = 4;
+          RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          bool dual_climate_target =
+              !isnan(id(selected_climate_target_temp_low)) &&
+              !isnan(id(selected_climate_target_temp_high)) &&
+              (id(selected_item_state) == "heat_cool" ||
+               id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));
+
+          if (action == MODE_ACTION_SECONDARY) {
+            if (mode == REMOTE_MODE_CLIMATE) {
+              id(toggle_selected_climate_power).execute();
+            } else if (mode == REMOTE_MODE_HUMIDIFIERS) {
+              id(toggle_selected_humidifier_power).execute();
+            } else if (mode == REMOTE_MODE_MEDIA) {
+              id(select_next_media_source).execute();
+            } else {
+              id(updated_ui) = true;
+            }
+            return;
+          }
+
+          if (action == MODE_ACTION_PRIMARY) {
+            if (mode == REMOTE_MODE_LIGHTS) {
+              id(toggle_selected_light).execute();
+            } else if (mode == REMOTE_MODE_FANS) {
+              id(toggle_selected_fan).execute();
+            } else if (mode == REMOTE_MODE_HUMIDIFIERS) {
+              id(cycle_selected_humidifier_mode).execute();
+            } else if (mode == REMOTE_MODE_SWITCHES) {
+              id(turn_on_selected_switch).execute();
+            } else if (mode == REMOTE_MODE_CLIMATE) {
+              if (dual_climate_target) {
+                id(climate_temperature_high_up).execute();
+              }
+            } else if (mode == REMOTE_MODE_LOCKS) {
+              id(lock_selected_lock).execute();
+            } else if (mode == REMOTE_MODE_SHADES) {
+              id(open_selected_cover).execute();
+            } else if (mode == REMOTE_MODE_MEDIA) {
+              id(select_next_item).execute();
+            } else if (mode == REMOTE_MODE_AUTOMATION) {
+              id(trigger_selected_automation).execute();
+            } else {
+              id(updated_ui) = true;
+            }
+            return;
+          }
+
+          if (action == MODE_ACTION_PLAY_PAUSE) {
+            if (mode == REMOTE_MODE_LIGHTS) {
+              id(toggle_selected_light).execute();
+            } else if (mode == REMOTE_MODE_FANS) {
+              id(toggle_selected_fan).execute();
+            } else if (mode == REMOTE_MODE_HUMIDIFIERS) {
+              id(updated_ui) = true;
+            } else if (mode == REMOTE_MODE_SWITCHES) {
+              id(turn_off_selected_switch).execute();
+            } else if (mode == REMOTE_MODE_CLIMATE) {
+              if (dual_climate_target) {
+                id(climate_temperature_high_down).execute();
+              }
+            } else if (mode == REMOTE_MODE_LOCKS) {
+              id(unlock_selected_lock).execute();
+            } else if (mode == REMOTE_MODE_SHADES) {
+              id(close_selected_cover).execute();
+            } else if (mode == REMOTE_MODE_MEDIA) {
+              id(media_play_pause).execute();
+            } else if (mode == REMOTE_MODE_AUTOMATION) {
+              id(trigger_selected_automation).execute();
+            } else {
+              id(updated_ui) = true;
+            }
+            return;
+          }
+
+          if (action == MODE_ACTION_INCREASE) {
+            if (mode == REMOTE_MODE_LIGHTS) {
+              id(increase_brightness).execute();
+            } else if (mode == REMOTE_MODE_FANS) {
+              id(increase_fan_speed).execute();
+            } else if (mode == REMOTE_MODE_HUMIDIFIERS) {
+              id(humidifier_target_up).execute();
+            } else if (mode == REMOTE_MODE_SHADES) {
+              id(increase_cover_position).execute();
+            } else if (mode == REMOTE_MODE_CLIMATE) {
+              id(climate_temperature_up).execute();
+            } else if (mode == REMOTE_MODE_MEDIA) {
+              id(media_volume_up).execute();
+            } else {
+              id(updated_ui) = true;
+            }
+            return;
+          }
+
+          if (action == MODE_ACTION_DECREASE) {
+            if (mode == REMOTE_MODE_LIGHTS) {
+              id(decrease_brightness).execute();
+            } else if (mode == REMOTE_MODE_FANS) {
+              id(decrease_fan_speed).execute();
+            } else if (mode == REMOTE_MODE_HUMIDIFIERS) {
+              id(humidifier_target_down).execute();
+            } else if (mode == REMOTE_MODE_SHADES) {
+              id(decrease_cover_position).execute();
+            } else if (mode == REMOTE_MODE_CLIMATE) {
+              id(climate_temperature_down).execute();
+            } else if (mode == REMOTE_MODE_MEDIA) {
+              id(media_volume_down).execute();
+            } else {
+              id(updated_ui) = true;
+            }
+          }
+
+  - id: shift_selected_item
+    parameters:
+      step: int
+    then:
+      - lambda: |-
+          RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          int count = mode_item_count(mode);
+          if (count <= 0) {
+            return;
+          }
+
+          int &selected_index = selected_index_ref(
+              mode, id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index), id(selected_cover_index),
+              id(selected_media_index), id(selected_automation_index), id(selected_weather_index), id(selected_time_index), id(selected_fan_index),
+              id(selected_humidifier_index));
+          selected_index = wrapped_mode_index(selected_index, count, step);
+      - script.execute: update_selected_item
+
+  - id: select_next_item
+    then:
+      - script.execute:
+          id: shift_selected_item
+          step: 1
+
+  - id: select_previous_item
+    then:
+      - script.execute:
+          id: shift_selected_item
+          step: -1
+
+  - id: previous_button_action
+    then:
+      - if:
+          condition:
+            lambda: 'return id(current_mode) == REMOTE_MODE_MEDIA;'
+          then:
+            - script.execute: media_previous_track
+          else:
+            - script.execute: select_previous_item
+
+  - id: next_button_action
+    then:
+      - if:
+          condition:
+            lambda: 'return id(current_mode) == REMOTE_MODE_MEDIA;'
+          then:
+            - script.execute: media_next_track
+          else:
+            - script.execute: select_next_item
+
+  - id: toggle_selected_light
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "on";'
+          then:
+            - homeassistant.service:
+                service: light.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "off";
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - homeassistant.service:
+                service: light.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  brightness_pct: !lambda |-
+                    if (id(selected_brightness_pct) <= 0) {
+                      return 100;
+                    }
+                    return id(selected_brightness_pct);
+            - lambda: |-
+                id(selected_item_state) = "on";
+                if (id(selected_brightness_pct) <= 0) {
+                  id(selected_brightness_pct) = 100;
+                }
+                id(updated_ui) = true;
+            - script.execute: update_display
+
+  - id: toggle_selected_fan
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "on";'
+          then:
+            - homeassistant.service:
+                service: fan.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "off";
+                id(selected_fan_speed_pct) = 0;
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - if:
+                condition:
+                  lambda: 'return selected_fan_has_percentage(id(selected_fan_index));'
+                then:
+                  - homeassistant.service:
+                      service: fan.turn_on
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                        percentage: !lambda |-
+                          if (id(selected_fan_speed_pct) <= 0) {
+                            return 100;
+                          }
+                          return id(selected_fan_speed_pct);
+                else:
+                  - homeassistant.service:
+                      service: fan.turn_on
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "on";
+                if (selected_fan_has_percentage(id(selected_fan_index)) && id(selected_fan_speed_pct) <= 0) {
+                  id(selected_fan_speed_pct) = 100;
+                }
+                id(updated_ui) = true;
+            - script.execute: update_display
+
+  - id: turn_on_selected_switch
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_switch_feedback) = "";
+          id(selected_item_state) = "turning_on";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - homeassistant.action:
+          action: switch.turn_on
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - script.execute:
+                id: set_switch_feedback
+                feedback: "SUCCESS"
+            - lambda: |-
+                request_selected_switch_status(id(selected_switch_index));
+          on_error:
+            - script.execute:
+                id: set_switch_feedback
+                feedback: "FAILED"
+            - lambda: |-
+                request_selected_switch_status(id(selected_switch_index));
+
+  - id: turn_off_selected_switch
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_switch_feedback) = "";
+          id(selected_item_state) = "turning_off";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - homeassistant.action:
+          action: switch.turn_off
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - script.execute:
+                id: set_switch_feedback
+                feedback: "SUCCESS"
+            - lambda: |-
+                request_selected_switch_status(id(selected_switch_index));
+          on_error:
+            - script.execute:
+                id: set_switch_feedback
+                feedback: "FAILED"
+            - lambda: |-
+                request_selected_switch_status(id(selected_switch_index));
+
+  - id: lock_selected_lock
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_lock_feedback) = "";
+          id(selected_item_state) = "locking";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - homeassistant.action:
+          action: lock.lock
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: "SUCCESS"
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+          on_error:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: "FAILED"
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+
+  - id: unlock_selected_lock
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_lock_feedback) = "";
+          id(selected_item_state) = "unlocking";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - homeassistant.action:
+          action: lock.unlock
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: "SUCCESS"
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+          on_error:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: "FAILED"
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+
+  - id: open_selected_cover
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_cover_feedback) = "";
+          id(selected_item_state) = "opening";
+          if (id(selected_cover_position_pct) <= 0) {
+            id(selected_cover_position_pct) = 100;
+          }
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - homeassistant.action:
+          action: cover.open_cover
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - script.execute:
+                id: set_cover_feedback
+                feedback: "SUCCESS"
+            - lambda: |-
+                request_selected_cover_status(id(selected_cover_index));
+          on_error:
+            - script.execute:
+                id: set_cover_feedback
+                feedback: "FAILED"
+            - lambda: |-
+                request_selected_cover_status(id(selected_cover_index));
+
+  - id: close_selected_cover
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_cover_feedback) = "";
+          id(selected_item_state) = "closing";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - homeassistant.action:
+          action: cover.close_cover
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - script.execute:
+                id: set_cover_feedback
+                feedback: "SUCCESS"
+            - lambda: |-
+                request_selected_cover_status(id(selected_cover_index));
+          on_error:
+            - script.execute:
+                id: set_cover_feedback
+                feedback: "FAILED"
+            - lambda: |-
+                request_selected_cover_status(id(selected_cover_index));
+
+  - id: increase_cover_position
+    mode: queued
+    then:
+      - lambda: |-
+          int next = id(selected_cover_position_pct) + 10;
+          if (next > 100) next = 100;
+          if (next < 10) next = 10;
+          id(selected_cover_position_pct) = next;
+          id(selected_item_state) = next >= 100 ? "open" : "opening";
+          id(last_cover_position_interaction) = millis();
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: cover.set_cover_position
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            position: !lambda 'return id(selected_cover_position_pct);'
+      - script.execute: update_display
+
+  - id: decrease_cover_position
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_cover_position_pct) <= 10;'
+          then:
+            - homeassistant.service:
+                service: cover.close_cover
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_cover_position_pct) = 0;
+                id(selected_item_state) = "closed";
+                id(last_cover_position_interaction) = millis();
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - lambda: |-
+                int next = id(selected_cover_position_pct) - 10;
+                if (next < 1) next = 1;
+                id(selected_cover_position_pct) = next;
+                id(selected_item_state) = "closing";
+                id(last_cover_position_interaction) = millis();
+                id(updated_ui) = true;
+            - homeassistant.service:
+                service: cover.set_cover_position
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  position: !lambda 'return id(selected_cover_position_pct);'
+            - script.execute: update_display
+
+  - id: increase_brightness
+    mode: queued
+    then:
+      - lambda: |-
+          int next = id(selected_brightness_pct) + 10;
+          if (next > 100) next = 100;
+          if (next < 10) next = 10;
+          id(selected_brightness_pct) = next;
+          id(selected_item_state) = "on";
+          id(last_brightness_interaction) = millis();
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: light.turn_on
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            brightness_pct: !lambda 'return id(selected_brightness_pct);'
+      - script.execute: update_display
+
+  - id: increase_fan_speed
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return !selected_fan_has_percentage(id(selected_fan_index));'
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(selected_item_state) != "on";'
+                then:
+                  - script.execute: toggle_selected_fan
+          else:
+            - lambda: |-
+                int next = id(selected_fan_speed_pct) + 10;
+                if (next > 100) next = 100;
+                if (next < 10) next = 10;
+                id(selected_fan_speed_pct) = next;
+                id(selected_item_state) = "on";
+                id(last_fan_speed_interaction) = millis();
+                id(updated_ui) = true;
+            - homeassistant.service:
+                service: fan.set_percentage
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  percentage: !lambda 'return id(selected_fan_speed_pct);'
+            - script.execute: update_display
+
+  - id: decrease_brightness
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_brightness_pct) <= 10;'
+          then:
+            - homeassistant.service:
+                service: light.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_brightness_pct) = 0;
+                id(selected_item_state) = "off";
+                id(last_brightness_interaction) = millis();
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - lambda: |-
+                int next = id(selected_brightness_pct) - 10;
+                if (next < 1) next = 1;
+                id(selected_brightness_pct) = next;
+                id(selected_item_state) = "on";
+                id(last_brightness_interaction) = millis();
+                id(updated_ui) = true;
+            - homeassistant.service:
+                service: light.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  brightness_pct: !lambda 'return id(selected_brightness_pct);'
+            - script.execute: update_display
+
+  - id: decrease_fan_speed
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return !selected_fan_has_percentage(id(selected_fan_index));'
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(selected_item_state) == "on";'
+                then:
+                  - script.execute: toggle_selected_fan
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(selected_fan_speed_pct) <= 10;'
+                then:
+                  - homeassistant.service:
+                      service: fan.turn_off
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                  - lambda: |-
+                      id(selected_fan_speed_pct) = 0;
+                      id(selected_item_state) = "off";
+                      id(last_fan_speed_interaction) = millis();
+                      id(updated_ui) = true;
+                  - script.execute: update_display
+                else:
+                  - lambda: |-
+                      int next = id(selected_fan_speed_pct) - 10;
+                      if (next < 1) next = 1;
+                      id(selected_fan_speed_pct) = next;
+                      id(selected_item_state) = "on";
+                      id(last_fan_speed_interaction) = millis();
+                      id(updated_ui) = true;
+                  - homeassistant.service:
+                      service: fan.set_percentage
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                        percentage: !lambda 'return id(selected_fan_speed_pct);'
+                  - script.execute: update_display
+
+  - id: toggle_selected_humidifier_power
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "off";'
+          then:
+            - homeassistant.service:
+                service: humidifier.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "on";
+                id(updated_ui) = true;
+          else:
+            - homeassistant.service:
+                service: humidifier.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "off";
+                id(selected_humidifier_action) = "off";
+                id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: adjust_humidifier_target
+    parameters:
+      delta: float
+    mode: queued
+    then:
+      - lambda: |-
+          float next = id(selected_humidifier_target_humidity);
+          if (isnan(next)) {
+            next = 50.0f;
+          }
+          next += delta;
+          if (next < 0.0f) next = 0.0f;
+          if (next > 100.0f) next = 100.0f;
+          id(selected_humidifier_target_humidity) = next;
+          id(last_humidifier_interaction) = millis();
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: humidifier.set_humidity
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            humidity: !lambda 'return id(selected_humidifier_target_humidity);'
+      - script.execute: update_display
+
+  - id: humidifier_target_up
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_humidifier_target
+          delta: 1.0
+
+  - id: humidifier_target_down
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_humidifier_target
+          delta: -1.0
+
+  - id: cycle_selected_humidifier_mode
+    mode: queued
+    then:
+      - lambda: |-
+          std::string next_mode = next_humidifier_mode_for_index(id(selected_humidifier_index));
+          if (next_mode.empty()) {
+            id(updated_ui) = true;
+            return;
+          }
+          id(selected_humidifier_mode) = next_mode;
+          id(last_humidifier_mode_interaction) = millis();
+          id(updated_ui) = true;
+      - if:
+          condition:
+            lambda: 'return !id(selected_humidifier_mode).empty();'
+          then:
+            - homeassistant.service:
+                service: humidifier.set_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  mode: !lambda 'return id(selected_humidifier_mode);'
+            - script.execute: update_display
+
+  - id: toggle_selected_climate_power
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "off";'
+          then:
+            - homeassistant.service:
+                service: climate.set_hvac_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  hvac_mode: !lambda 'return id(last_climate_mode);'
+            - lambda: |-
+                id(selected_item_state) = id(last_climate_mode);
+                id(updated_ui) = true;
+          else:
+            - lambda: |-
+                if (id(selected_item_state) != "unknown" && id(selected_item_state) != "off") {
+                  id(last_climate_mode) = id(selected_item_state);
+                }
+            - homeassistant.service:
+                service: climate.set_hvac_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  hvac_mode: "off"
+            - lambda: |-
+                id(selected_item_state) = "off";
+                id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: cycle_selected_climate_mode
+    mode: queued
+    then:
+      - lambda: |-
+          std::string current = id(selected_item_state);
+          if (current == "off" || current == "unknown") {
+            current = id(last_climate_mode);
+          }
+
+          std::string next = "heat";
+          if (current == "heat") {
+            next = "cool";
+          } else if (current == "cool") {
+            next = "heat_cool";
+          } else if (current == "heat_cool") {
+            next = "heat";
+          }
+
+          id(last_climate_mode) = next;
+          id(selected_item_state) = next;
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: climate.set_hvac_mode
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            hvac_mode: !lambda 'return id(last_climate_mode);'
+      - script.execute: update_display
+
+  - id: adjust_climate_temperature
+    parameters:
+      target_focus: int
+      delta: float
+    mode: queued
+    then:
+      - lambda: |-
+          bool dual_target = id(selected_item_state) == "heat_cool" &&
+                             !isnan(id(selected_climate_target_temp_low)) &&
+                             !isnan(id(selected_climate_target_temp_high));
+          bool high_focus = dual_target && target_focus == 2;
+          float next = dual_target
+                           ? (high_focus ? id(selected_climate_target_temp_high) : id(selected_climate_target_temp_low))
+                           : id(selected_climate_target_temp);
+
+          if (isnan(next)) {
+            return;
+          }
+
+          next += delta;
+
+          if (dual_target) {
+            if (high_focus) {
+              if (!isnan(id(selected_climate_target_temp_low)) && next <= id(selected_climate_target_temp_low)) {
+                next = id(selected_climate_target_temp_low) + 1.0f;
+              }
+              id(selected_climate_target_temp_high) = next;
+            } else {
+              if (!isnan(id(selected_climate_target_temp_high)) && next >= id(selected_climate_target_temp_high)) {
+                next = id(selected_climate_target_temp_high) - 1.0f;
+              }
+              id(selected_climate_target_temp_low) = next;
+            }
+            id(climate_target_focus_value) = next;
+            id(climate_target_focus) = target_focus;
+          } else {
+            id(selected_climate_target_temp) = next;
+            id(selected_climate_target_temp_low) = next;
+            id(selected_climate_target_temp_high) = next;
+            id(climate_target_focus_value) = next;
+            id(climate_target_focus) = 1;
+          }
+
+          id(last_climate_target_focus_interaction) = millis();
+          id(last_climate_interaction) = millis();
+          id(updated_ui) = true;
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "heat_cool" && !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high));'
+          then:
+            - homeassistant.service:
+                service: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  target_temp_low: !lambda 'return id(selected_climate_target_temp_low);'
+                  target_temp_high: !lambda 'return id(selected_climate_target_temp_high);'
+          else:
+            - homeassistant.service:
+                service: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  temperature: !lambda 'return id(selected_climate_target_temp);'
+      - script.execute: update_display
+
+  - id: climate_temperature_up
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_climate_temperature
+          target_focus: 1
+          delta: 1.0
+
+  - id: climate_temperature_down
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_climate_temperature
+          target_focus: 1
+          delta: -1.0
+
+  - id: climate_temperature_high_up
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_climate_temperature
+          target_focus: 2
+          delta: 1.0
+
+  - id: climate_temperature_high_down
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_climate_temperature
+          target_focus: 2
+          delta: -1.0
+
+  - id: cycle_selected_climate_preset
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return climate_supports_preset(id(selected_climate_index));'
+          then:
+            - lambda: |-
+                std::string next = "home";
+                if (id(selected_climate_preset) == "home") {
+                  next = "away";
+                } else if (id(selected_climate_preset) == "away") {
+                  next = "sleep";
+                }
+                id(selected_climate_preset) = next;
+                id(last_climate_interaction) = millis();
+                id(updated_ui) = true;
+            - homeassistant.service:
+                service: climate.set_preset_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  preset_mode: !lambda 'return id(selected_climate_preset);'
+            - script.execute: update_display
+
+  - id: media_play_pause
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "playing";'
+          then:
+            - homeassistant.service:
+                service: media_player.media_pause
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "paused";
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(selected_item_state) == "paused";'
+                then:
+                  - homeassistant.service:
+                      service: media_player.media_play
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                  - lambda: |-
+                      id(selected_item_state) = "playing";
+                else:
+                  - homeassistant.service:
+                      service: media_player.media_play_pause
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(last_media_interaction) = millis();
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: media_toggle_power
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "off";'
+          then:
+            - homeassistant.service:
+                service: media_player.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                bool show_power_feedback =
+                    id(selected_media_device_class) != "tv" && id(selected_media_device_class) != "receiver";
+                id(last_media_power_feedback) = show_power_feedback ? "ON" : "";
+                id(last_media_power_interaction) = show_power_feedback ? millis() : 0;
+                id(last_media_interaction) = millis();
+                id(updated_ui) = true;
+          else:
+            - homeassistant.service:
+                service: media_player.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "off";
+                bool show_power_feedback =
+                    id(selected_media_device_class) != "tv" && id(selected_media_device_class) != "receiver";
+                id(last_media_power_feedback) = show_power_feedback ? "OFF" : "";
+                id(last_media_power_interaction) = show_power_feedback ? millis() : 0;
+                id(last_media_interaction) = millis();
+                id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: media_previous_track
+    mode: queued
+    then:
+      - homeassistant.service:
+          service: media_player.media_previous_track
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: media_next_track
+    mode: queued
+    then:
+      - homeassistant.service:
+          service: media_player.media_next_track
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: media_play_stop
+    mode: queued
+    then:
+      - homeassistant.service:
+          service: media_player.media_stop
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(selected_item_state) = "idle";
+          id(last_media_interaction) = millis();
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: select_next_media_source
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return media_source_option_count(id(selected_media_index)) > 0;'
+          then:
+            - lambda: |-
+                std::string next_source =
+                    next_media_source_for_index(id(selected_media_index), id(selected_media_source));
+                if (next_source.empty()) {
+                  id(updated_ui) = true;
+                  return;
+                }
+                id(selected_media_source) = next_source;
+                set_media_source_for_index(id(selected_media_index), next_source);
+            - homeassistant.service:
+                service: media_player.select_source
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  source: !lambda 'return id(selected_media_source);'
+            - lambda: |-
+                id(last_media_interaction) = millis();
+                id(last_media_source_interaction) = millis();
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - lambda: |-
+                id(updated_ui) = true;
+
+  - id: adjust_media_volume
+    parameters:
+      delta: int
+    mode: queued
+    then:
+      - lambda: |-
+          int next = id(selected_media_volume_pct) + delta;
+          if (next > 100) next = 100;
+          if (next < 0) next = 0;
+          id(selected_media_volume_pct) = next;
+          id(last_media_volume_interaction) = millis();
+          id(last_media_interaction) = millis();
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: media_player.volume_set
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            volume_level: !lambda 'return id(selected_media_volume_pct) / 100.0f;'
+      - script.execute: update_display
+
+  - id: media_volume_up
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_media_volume
+          delta: 5
+
+  - id: media_volume_down
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_media_volume
+          delta: -5
+
+  - id: trigger_selected_automation
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return automation_kind(id(selected_automation_index)) == AUTOMATION_KIND_AUTOMATION;'
+          then:
+            - homeassistant.action:
+                action: automation.trigger
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - script.execute:
+                      id: set_automation_feedback
+                      feedback: "SUCCESS"
+                on_error:
+                  - script.execute:
+                      id: set_automation_feedback
+                      feedback: "FAILED"
+          else:
+            - if:
+                condition:
+                  lambda: 'return automation_kind(id(selected_automation_index)) == AUTOMATION_KIND_SCENE;'
+                then:
+                  - homeassistant.action:
+                      action: scene.turn_on
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                      on_success:
+                        - script.execute:
+                            id: set_automation_feedback
+                            feedback: "SUCCESS"
+                      on_error:
+                        - script.execute:
+                            id: set_automation_feedback
+                            feedback: "FAILED"
+                else:
+                  - homeassistant.action:
+                      action: script.turn_on
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                      on_success:
+                        - script.execute:
+                            id: set_automation_feedback
+                            feedback: "SUCCESS"
+                      on_error:
+                        - script.execute:
+                            id: set_automation_feedback
+                            feedback: "FAILED"
+
+  - id: set_automation_feedback
+    parameters:
+      feedback: std::string
+    then:
+      - lambda: |-
+          id(last_automation_feedback) = feedback;
+          id(last_automation_interaction) = millis();
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: set_switch_feedback
+    parameters:
+      feedback: std::string
+    then:
+      - lambda: |-
+          id(last_switch_feedback) = feedback;
+          id(last_switch_interaction) = millis();
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: set_lock_feedback
+    parameters:
+      feedback: std::string
+    then:
+      - lambda: |-
+          id(last_lock_feedback) = feedback;
+          id(last_lock_interaction) = millis();
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: set_cover_feedback
+    parameters:
+      feedback: std::string
+    then:
+      - lambda: |-
+          id(last_cover_feedback) = feedback;
+          id(last_cover_interaction) = millis();
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: show_sensitive_action_prompt
+    parameters:
+      action: int
+    then:
+      - lambda: |-
+          const int MODE_ACTION_PRIMARY = 0;
+          const int MODE_ACTION_PLAY_PAUSE = 2;
+          RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          std::string feedback;
+
+          if (mode == REMOTE_MODE_LOCKS) {
+            feedback = action == MODE_ACTION_PLAY_PAUSE ? "HOLD TO UNLOCK" : "HOLD TO LOCK";
+            id(last_lock_feedback) = feedback;
+            id(last_lock_interaction) = millis();
+          } else if (mode == REMOTE_MODE_SHADES) {
+            feedback = action == MODE_ACTION_PLAY_PAUSE ? "HOLD TO CLOSE" : "HOLD TO OPEN";
+            id(last_cover_feedback) = feedback;
+            id(last_cover_interaction) = millis();
+          } else if (mode == REMOTE_MODE_AUTOMATION) {
+            id(last_automation_feedback) = "HOLD TO RUN";
+            id(last_automation_interaction) = millis();
+          } else {
+            return;
+          }
+
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: await_primary_long_press
+    mode: restart
+    then:
+      - delay: ${LONG_PRESS_DURATION_MS}ms
+      - lambda: |-
+          bool same_mode = id(primary_button_press_mode) == id(current_mode);
+          bool still_pressed = id(primary_mode_button).state;
+          bool already_fired = id(primary_button_long_press_fired);
+
+          if (id(primary_button_press_started_at) == 0 || !same_mode || !still_pressed || already_fired) {
+            return;
+          }
+
+          id(primary_button_long_press_fired) = true;
+          id(primary_mode_action).execute();
+
+  - id: await_play_pause_long_press
+    mode: restart
+    then:
+      - delay: ${LONG_PRESS_DURATION_MS}ms
+      - lambda: |-
+          bool same_mode = id(play_pause_button_press_mode) == id(current_mode);
+          bool still_pressed = id(play_pause_mode_button).state;
+          bool already_fired = id(play_pause_button_long_press_fired);
+
+          if (id(play_pause_button_press_started_at) == 0 || !same_mode || !still_pressed || already_fired) {
+            return;
+          }
+
+          id(play_pause_button_long_press_fired) = true;
+          id(play_pause_mode_action).execute();
+
+  - id: handle_primary_button_press
+    then:
+      - lambda: |-
+          RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          bool requires_long_press =
+              mode == REMOTE_MODE_LOCKS || mode == REMOTE_MODE_SHADES || mode == REMOTE_MODE_AUTOMATION;
+
+          if (!requires_long_press) {
+            id(primary_button_press_started_at) = 0;
+            id(primary_button_press_mode) = -1;
+            id(primary_button_long_press_fired) = false;
+            id(primary_mode_action).execute();
+            return;
+          }
+
+          id(primary_button_press_started_at) = millis();
+          id(primary_button_press_mode) = id(current_mode);
+          id(primary_button_long_press_fired) = false;
+      - script.execute:
+          id: show_sensitive_action_prompt
+          action: 0
+      - script.execute: await_primary_long_press
+
+  - id: handle_primary_button_release
+    then:
+      - lambda: |-
+          if (id(primary_button_press_started_at) == 0) {
+            return;
+          }
+
+          bool long_press_fired = id(primary_button_long_press_fired);
+          id(primary_button_press_started_at) = 0;
+          id(primary_button_press_mode) = -1;
+          id(primary_button_long_press_fired) = false;
+
+          if (!long_press_fired) {
+            id(updated_ui) = true;
+            id(update_display).execute();
+          }
+
+  - id: handle_play_pause_button_press
+    then:
+      - lambda: |-
+          RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          bool requires_long_press =
+              mode == REMOTE_MODE_LOCKS || mode == REMOTE_MODE_SHADES || mode == REMOTE_MODE_AUTOMATION;
+
+          if (!requires_long_press) {
+            id(play_pause_button_press_started_at) = 0;
+            id(play_pause_button_press_mode) = -1;
+            id(play_pause_button_long_press_fired) = false;
+            id(play_pause_mode_action).execute();
+            return;
+          }
+
+          id(play_pause_button_press_started_at) = millis();
+          id(play_pause_button_press_mode) = id(current_mode);
+          id(play_pause_button_long_press_fired) = false;
+      - script.execute:
+          id: show_sensitive_action_prompt
+          action: 2
+      - script.execute: await_play_pause_long_press
+
+  - id: handle_play_pause_button_release
+    then:
+      - lambda: |-
+          if (id(play_pause_button_press_started_at) == 0) {
+            return;
+          }
+
+          bool long_press_fired = id(play_pause_button_long_press_fired);
+          id(play_pause_button_press_started_at) = 0;
+          id(play_pause_button_press_mode) = -1;
+          id(play_pause_button_long_press_fired) = false;
+
+          if (!long_press_fired) {
+            id(updated_ui) = true;
+            id(update_display).execute();
+          }
+
+  - id: primary_mode_action
+    then:
+      - script.execute:
+          id: dispatch_mode_action
+          action: 0
+
+  - id: secondary_mode_action
+    then:
+      - script.execute:
+          id: dispatch_mode_action
+          action: 1
+
+  - id: play_pause_mode_action
+    then:
+      - script.execute:
+          id: dispatch_mode_action
+          action: 2
+
+  - id: increase_mode_value
+    then:
+      - script.execute:
+          id: dispatch_mode_action
+          action: 3
+
+  - id: decrease_mode_value
+    then:
+      - script.execute:
+          id: dispatch_mode_action
+          action: 4
+
+  - id: update_display
+    then:
+      - if:
+          condition:
+            lambda: 'return id(updated_ui) == true;'
+          then:
+            - lambda: |-
+                auto it = id(oled_display);
+                char status_line[27];
+                char footer_line[27];
+                char detail_line[27];
+                const int bar_x = 14;
+                const int bar_y = 45;
+                const int bar_w = 100;
+                const int bar_h = 8;
+                RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+                uint32_t now = millis();
+                status_line[0] = '\0';
+                footer_line[0] = '\0';
+                detail_line[0] = '\0';
+
+                auto upper = [](std::string text) {
+                  for (auto &ch : text) {
+                    if (ch >= 'a' && ch <= 'z') {
+                      ch = ch - 'a' + 'A';
+                    } else if (ch == '_') {
+                      ch = ' ';
+                    }
+                  }
+                  return text;
+                };
+                auto recent_interaction = [&](uint32_t last_interaction, uint32_t duration_ms) {
+                  return last_interaction > 0 && (now - last_interaction) <= duration_ms;
+                };
+                bool show_brightness_bar =
+                    recent_interaction(id(last_brightness_interaction), 3000) &&
+                    id(selected_item_state) == "on" && mode == REMOTE_MODE_LIGHTS;
+                bool show_fan_speed_bar =
+                    recent_interaction(id(last_fan_speed_interaction), 3000) &&
+                    id(selected_item_state) == "on" && mode == REMOTE_MODE_FANS;
+                bool show_humidifier_target =
+                    recent_interaction(id(last_humidifier_interaction), 5000) &&
+                    mode == REMOTE_MODE_HUMIDIFIERS;
+                bool show_humidifier_mode =
+                    recent_interaction(id(last_humidifier_mode_interaction), 5000) &&
+                    mode == REMOTE_MODE_HUMIDIFIERS;
+                bool show_cover_position_bar =
+                    recent_interaction(id(last_cover_position_interaction), 3000) &&
+                    mode == REMOTE_MODE_SHADES;
+                bool show_switch_feedback =
+                    recent_interaction(id(last_switch_interaction), 5000) &&
+                    mode == REMOTE_MODE_SWITCHES;
+                bool show_contrast_feedback =
+                    recent_interaction(id(last_contrast_interaction), 3000);
+                bool show_climate_target_focus =
+                    recent_interaction(id(last_climate_target_focus_interaction), 5000) &&
+                    id(climate_target_focus) != 0 && mode == REMOTE_MODE_CLIMATE;
+                bool show_lock_feedback =
+                    recent_interaction(id(last_lock_interaction), 5000) &&
+                    mode == REMOTE_MODE_LOCKS;
+                bool show_cover_feedback =
+                    recent_interaction(id(last_cover_interaction), 5000) &&
+                    mode == REMOTE_MODE_SHADES;
+                bool show_media_feedback =
+                    recent_interaction(id(last_media_volume_interaction), 3000) &&
+                    mode == REMOTE_MODE_MEDIA;
+                bool show_media_source_feedback =
+                    recent_interaction(id(last_media_source_interaction), 5000) &&
+                    mode == REMOTE_MODE_MEDIA;
+                bool show_media_power_feedback =
+                    recent_interaction(id(last_media_power_interaction), 5000) &&
+                    mode == REMOTE_MODE_MEDIA;
+                bool show_automation_feedback =
+                    recent_interaction(id(last_automation_interaction), 5000) &&
+                    mode == REMOTE_MODE_AUTOMATION;
+                auto has_dual_climate_target = [&]() {
+                  return !isnan(id(selected_climate_target_temp_low)) &&
+                         !isnan(id(selected_climate_target_temp_high)) &&
+                         (id(selected_item_state) == "heat_cool" ||
+                          id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));
+                };
+                auto draw_footer_dividers = [&]() {
+                  it->filled_rectangle(0, 52, 128, 1, COLOR_ON);
+                  it->filled_rectangle(38, 53, 1, 11, COLOR_ON);
+                  it->filled_rectangle(90, 53, 1, 11, COLOR_ON);
+                };
+                auto draw_contrast_footer = [&]() {
+                  snprintf(footer_line, sizeof(footer_line), "CONTRAST %d%%", id(contrast) * 10);
+                  it->filled_rectangle(0, 52, 128, 1, COLOR_ON);
+                  it->print(64, 58, id(small_font), COLOR_ON, display::TextAlign::CENTER, footer_line);
+                };
+                auto draw_footer_chrome = [&](const char *left_icon, const char *right_icon) {
+                  draw_footer_dividers();
+                  it->printf(10, 50, id(medium_symbols), COLOR_ON, left_icon);
+                  it->printf(104, 50, id(medium_symbols), COLOR_ON, right_icon);
+                };
+                auto draw_default_footer = [&]() {
+                  draw_footer_chrome("\ueac3", "\ueac9");
+                  it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                };
+                auto draw_footer_text = [&](const char *text) {
+                  it->print(64, 58, id(small_font), COLOR_ON, display::TextAlign::CENTER, text);
+                };
+                auto draw_progress_bar = [&](int percent) {
+                  int fill = (bar_w - 2) * percent / 100;
+                  it->rectangle(bar_x, bar_y, bar_w, bar_h, COLOR_ON);
+                  if (fill > 0) {
+                    it->filled_rectangle(bar_x + 1, bar_y + 1, fill, bar_h - 2, COLOR_ON);
+                  }
+                };
+                auto draw_progress_footer = [&](int percent, const char *label) {
+                  draw_progress_bar(percent);
+                  snprintf(footer_line, sizeof(footer_line), "%s %d%%", label, percent);
+                  draw_footer_text(footer_line);
+                };
+                auto format_time = [&]() -> std::string {
+                  auto time_now = id(homeassistant_time).now();
+                  if (!time_now.is_valid()) {
+                    return "--:--";
+                  }
+                  int hour = time_now.hour % 12;
+                  if (hour == 0) {
+                    hour = 12;
+                  }
+                  char time_buffer[9];
+                  snprintf(
+                      time_buffer, sizeof(time_buffer), "%d:%02d %s", hour, time_now.minute,
+                      time_now.hour >= 12 ? "PM" : "AM");
+                  return std::string(time_buffer);
+                };
+                auto format_date = [&]() -> std::string {
+                  auto time_now = id(homeassistant_time).now();
+                  if (!time_now.is_valid()) {
+                    return "--/--/----";
+                  }
+                  char date_buffer[11];
+                  snprintf(
+                      date_buffer, sizeof(date_buffer), "%02d/%02d/%04d", time_now.month, time_now.day_of_month,
+                      time_now.year);
+                  return std::string(date_buffer);
+                };
+
+                it->clear();
+                const char *header_icon = mode_icon(mode);
+                it->print(10, -3, id(symbols), COLOR_ON, display::TextAlign::LEFT, header_icon);
+                it->printf(64, 4, id(small_font), COLOR_ON, display::TextAlign::CENTER, mode_title(mode));
+                it->print(118, -3, id(symbols), COLOR_ON, display::TextAlign::RIGHT, header_icon);
+
+                it->filled_rectangle(0, 12, 128, 1, COLOR_ON);
+                if (mode != REMOTE_MODE_NOTIFICATIONS) {
+                  it->printf(64, 20, id(medium_font), COLOR_ON, display::TextAlign::CENTER, id(selected_item_name).c_str());
+                }
+
+                switch (mode) {
+                  case REMOTE_MODE_LIGHTS:
+                    if (id(selected_item_state) == "on") {
+                      snprintf(status_line, sizeof(status_line), "ON");
+                    } else if (id(selected_item_state) == "off") {
+                      snprintf(status_line, sizeof(status_line), "OFF");
+                    } else {
+                      snprintf(status_line, sizeof(status_line), "SYNCING");
+                    }
+                    it->print(64, 35, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                    if (id(selected_item_state) == "on" && !show_brightness_bar) {
+                      snprintf(detail_line, sizeof(detail_line), "%d%%", id(selected_brightness_pct));
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    }
+
+                    if (show_brightness_bar) {
+                      draw_progress_footer(id(selected_brightness_pct), "BRIGHTNESS");
+                    } else if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_default_footer();
+                      it->filled_rectangle(90, 54, 1, 11, COLOR_ON);
+                    }
+                    break;
+
+                  case REMOTE_MODE_FANS:
+                    if (id(selected_item_state) == "on") {
+                      snprintf(status_line, sizeof(status_line), "ON");
+                    } else if (id(selected_item_state) == "off") {
+                      snprintf(status_line, sizeof(status_line), "OFF");
+                    } else {
+                      snprintf(status_line, sizeof(status_line), "SYNCING");
+                    }
+                    it->print(64, 35, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                    if (id(selected_item_state) == "on" && id(selected_fan_speed_pct) > 0 && !show_fan_speed_bar) {
+                      snprintf(detail_line, sizeof(detail_line), "%d%%", id(selected_fan_speed_pct));
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    }
+
+                    if (show_fan_speed_bar) {
+                      draw_progress_footer(id(selected_fan_speed_pct), "SPEED");
+                    } else if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_default_footer();
+                      it->filled_rectangle(90, 54, 1, 11, COLOR_ON);
+                    }
+                    break;
+
+                  case REMOTE_MODE_SWITCHES: {
+                    std::string switch_state = upper(id(selected_item_state));
+                    std::string switch_feedback = upper(id(last_switch_feedback));
+                    if (switch_state == "UNKNOWN" || switch_state.empty()) {
+                      switch_state = "SYNCING";
+                    }
+                    snprintf(status_line, sizeof(status_line), "%s", switch_state.c_str());
+                    it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                    if (show_switch_feedback && !switch_feedback.empty()) {
+                      snprintf(detail_line, sizeof(detail_line), "%s", switch_feedback.c_str());
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    }
+
+                    if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_default_footer();
+                    }
+                    break;
+                  }
+
+                  case REMOTE_MODE_CLIMATE: {
+                    std::string hvac_label = upper(id(selected_item_state));
+                    std::string action_label = upper(id(selected_climate_hvac_action));
+                    bool has_dual_target = has_dual_climate_target();
+                    if (hvac_label == "UNKNOWN") {
+                      hvac_label = "SYNCING";
+                    }
+                    if (show_climate_target_focus) {
+                      if (!isnan(id(climate_target_focus_value))) {
+                        if (!has_dual_target) {
+                          snprintf(status_line, sizeof(status_line), "TARGET: %.0f°${TEMPERATURE_UNIT}", id(climate_target_focus_value));
+                        } else if (id(climate_target_focus) == 2) {
+                          snprintf(status_line, sizeof(status_line), "HIGH: %.0f°${TEMPERATURE_UNIT}", id(climate_target_focus_value));
+                        } else {
+                          snprintf(status_line, sizeof(status_line), "LOW: %.0f°${TEMPERATURE_UNIT}", id(climate_target_focus_value));
+                        }
+                      }
+                    } else if (!isnan(id(selected_climate_current_temp))) {
+                      snprintf(status_line, sizeof(status_line), "%.0f°${TEMPERATURE_UNIT}", id(selected_climate_current_temp));
+                    } else {
+                      snprintf(status_line, sizeof(status_line), "SYNCING");
+                    }
+                    it->print(64, 35, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                    if (!show_climate_target_focus && has_dual_target && action_label != "UNKNOWN") {
+                      snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°${TEMPERATURE_UNIT}   HIGH: %.0f°${TEMPERATURE_UNIT}",
+                               id(selected_climate_target_temp_low), id(selected_climate_target_temp_high));
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    } else if (
+                        !show_climate_target_focus && !isnan(id(selected_climate_target_temp)) &&
+                        action_label != "UNKNOWN") {
+                      snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°${TEMPERATURE_UNIT}", id(selected_climate_target_temp));
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    }
+
+                    if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_footer_chrome("\ueac3", "\ueac9");
+                      if (hvac_label != "SYNCING" && action_label != "UNKNOWN") {
+                        snprintf(status_line, sizeof(status_line), "%s", action_label.c_str());
+                        draw_footer_text(status_line);
+                      } else {
+                        it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                      }
+                    }
+                    break;
+                  }
+
+                  case REMOTE_MODE_HUMIDIFIERS: {
+                    std::string humidifier_state = upper(id(selected_item_state));
+                    std::string action_label = upper(id(selected_humidifier_action));
+                    std::string humidifier_mode = upper(id(selected_humidifier_mode));
+                    if (humidifier_state == "UNKNOWN" || humidifier_state.empty()) {
+                      humidifier_state = "SYNCING";
+                    }
+
+                    if (show_humidifier_target && !isnan(id(selected_humidifier_target_humidity))) {
+                      snprintf(status_line, sizeof(status_line), "TARGET: %.0f%%", id(selected_humidifier_target_humidity));
+                    } else if (!isnan(id(selected_humidifier_current_humidity))) {
+                      snprintf(status_line, sizeof(status_line), "%.0f%%", id(selected_humidifier_current_humidity));
+                    } else {
+                      snprintf(status_line, sizeof(status_line), "SYNCING");
+                    }
+                    it->print(64, 35, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                    if (show_humidifier_mode && !humidifier_mode.empty()) {
+                      snprintf(detail_line, sizeof(detail_line), "%s", humidifier_mode.c_str());
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    } else if (!show_humidifier_target && !isnan(id(selected_humidifier_target_humidity))) {
+                      snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f%%", id(selected_humidifier_target_humidity));
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    }
+
+                    if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_footer_chrome("\ueac3", "\ueac9");
+                      if (action_label != "UNKNOWN" && !action_label.empty()) {
+                        snprintf(footer_line, sizeof(footer_line), "%s", action_label.c_str());
+                        draw_footer_text(footer_line);
+                      } else if (humidifier_state != "SYNCING") {
+                        snprintf(footer_line, sizeof(footer_line), "%s", humidifier_state.c_str());
+                        draw_footer_text(footer_line);
+                      } else {
+                        it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                      }
+                    }
+                    break;
+                  }
+
+                  case REMOTE_MODE_LOCKS: {
+                    std::string lock_state = upper(id(selected_item_state));
+                    std::string lock_feedback = upper(id(last_lock_feedback));
+                    if (lock_state == "UNKNOWN" || lock_state.empty()) {
+                      lock_state = "SYNCING";
+                    }
+                    snprintf(status_line, sizeof(status_line), "%s", lock_state.c_str());
+                    it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                    if (show_lock_feedback && !lock_feedback.empty()) {
+                      snprintf(detail_line, sizeof(detail_line), "%s", lock_feedback.c_str());
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    }
+
+                    if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_default_footer();
+                    }
+                    break;
+                  }
+
+                  case REMOTE_MODE_SHADES: {
+                    std::string cover_state = upper(id(selected_item_state));
+                    std::string cover_feedback = upper(id(last_cover_feedback));
+                    if (cover_state == "UNKNOWN" || cover_state.empty()) {
+                      cover_state = "SYNCING";
+                    }
+                    snprintf(status_line, sizeof(status_line), "%s", cover_state.c_str());
+                    it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                    if (show_cover_position_bar) {
+                      draw_progress_footer(id(selected_cover_position_pct), "POSITION");
+                    } else {
+                      if (show_cover_feedback && !cover_feedback.empty()) {
+                        snprintf(detail_line, sizeof(detail_line), "%s", cover_feedback.c_str());
+                      } else if (cover_state == "OPEN") {
+                        snprintf(detail_line, sizeof(detail_line), "%d%%", id(selected_cover_position_pct));
+                      }
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+
+                      if (show_contrast_feedback) {
+                        draw_contrast_footer();
+                      } else {
+                        draw_default_footer();
+                      }
+                    }
+                    break;
+                  }
+
+                  case REMOTE_MODE_MEDIA: {
+                    std::string playback = upper(id(selected_item_state));
+                    std::string device_class = id(selected_media_device_class);
+                    bool is_tv = device_class == "tv" || device_class == "receiver";
+                    bool is_speaker = device_class == "speaker";
+                    bool media_is_on = id(selected_item_state) != "off" && id(selected_item_state) != "unknown";
+                    if (playback == "UNKNOWN") {
+                      playback = "SYNCING";
+                    }
+                    if (is_tv) {
+                      snprintf(status_line, sizeof(status_line), "%s", media_is_on ? "ON" : "OFF");
+                      it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+                    } else if (!id(selected_media_title).empty()) {
+                      snprintf(status_line, sizeof(status_line), "%s", id(selected_media_title).c_str());
+                      it->print(64, 33, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+                    }
+                    if (!is_tv && !show_media_feedback && show_media_power_feedback && !id(last_media_power_feedback).empty()) {
+                      snprintf(detail_line, sizeof(detail_line), "%s", id(last_media_power_feedback).c_str());
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    } else if (!show_media_feedback && show_media_source_feedback && !id(selected_media_source).empty()) {
+                      snprintf(detail_line, sizeof(detail_line), "%s", id(selected_media_source).c_str());
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    } else if (is_tv && media_is_on && !id(selected_media_source).empty()) {
+                      snprintf(detail_line, sizeof(detail_line), "%s", id(selected_media_source).c_str());
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    } else if (!show_media_feedback && !id(selected_media_artist).empty()) {
+                      snprintf(detail_line, sizeof(detail_line), "%s", id(selected_media_artist).c_str());
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                    }
+
+                    if (show_media_feedback) {
+                      draw_progress_footer(id(selected_media_volume_pct), "VOLUME");
+                    } else if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      if (is_tv) {
+                        draw_footer_chrome("\uead0", "\ueacf");
+                      } else {
+                        draw_footer_chrome("\ue045", "\ue044");
+                      }
+                      if (playback == "PAUSED") {
+                        it->printf(64, 58, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "PAUSED");
+                      } else if (playback == "PLAYING") {
+                        it->printf(64, 58, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "PLAYING");
+                      } else if (playback == "IDLE") {
+                        it->printf(64, 58, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "IDLE");
+                      } else {
+                        it->printf(58, 51, id(symbols), COLOR_ON, is_speaker ? "\ue047" : "\ue8ac");
+                      }
+                    }
+                    break;
+                  }
+
+                  case REMOTE_MODE_SENSORS: {
+                    std::string sensor_value = id(selected_item_state);
+                    if (sensor_value == "unknown" || sensor_value.empty()) {
+                      sensor_value = "SYNCING";
+                    } else if (sensor_value == "on") {
+                      sensor_value = "ON";
+                    } else if (sensor_value == "off") {
+                      sensor_value = "OFF";
+                    }
+
+                    if (sensor_value.size() <= 12) {
+                      it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, sensor_value.c_str());
+                    } else {
+                      it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, sensor_value.c_str());
+                    }
+
+                    if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_default_footer();
+                    }
+                    break;
+                  }
+
+                  case REMOTE_MODE_AUTOMATION: {
+                    std::string automation_state = upper(id(selected_item_state));
+                    std::string automation_feedback = upper(id(last_automation_feedback));
+                    const char *automation_type = automation_kind_label(id(selected_automation_index));
+                    if (automation_state == "UNKNOWN" || automation_state.empty()) {
+                      automation_state = "READY";
+                    }
+                    if (show_automation_feedback && !automation_feedback.empty()) {
+                      snprintf(status_line, sizeof(status_line), "%s", automation_feedback.c_str());
+                    } else {
+                      snprintf(status_line, sizeof(status_line), "%s", automation_state.c_str());
+                    }
+                    it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, automation_type);
+                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                    if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_default_footer();
+                    }
+                    break;
+                  }
+
+                  case REMOTE_MODE_ALARMS: {
+                    std::string alarm_state = upper(id(selected_item_state));
+                    if (alarm_state == "UNKNOWN" || alarm_state.empty()) {
+                      alarm_state = "SYNCING";
+                    }
+                    it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, alarm_state.c_str());
+
+                    if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_default_footer();
+                    }
+                    break;
+                  }
+
+                  case REMOTE_MODE_NOTIFICATIONS: {
+                    std::string message = id(selected_item_state);
+                    auto sanitize_message = [](std::string text) {
+                      for (auto &ch : text) {
+                        if (ch == '\n' || ch == '\r' || ch == '\t') {
+                          ch = ' ';
+                        }
+                      }
+                      return text;
+                    };
+                    auto draw_notification_line = [&](int y, const std::string &text) {
+                      if (!text.empty()) {
+                        it->print(64, y, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, text.c_str());
+                      }
+                    };
+
+                    message = sanitize_message(message);
+                    if (message.empty()) {
+                      message = "NO MESSAGES";
+                    }
+
+                    bool truncated = message.size() > 66;
+                    if (message.size() > 66) {
+                      message = message.substr(0, 66);
+                    }
+
+                    std::string line_1 = message.substr(0, std::min<size_t>(22, message.size()));
+                    std::string line_2 = message.size() > 22 ? message.substr(22, std::min<size_t>(22, message.size() - 22)) : "";
+                    std::string line_3 = message.size() > 44 ? message.substr(44, std::min<size_t>(22, message.size() - 44)) : "";
+                    if (truncated && line_3.size() >= 3) {
+                      line_3.replace(line_3.size() - 3, 3, "...");
+                    } else if (truncated) {
+                      line_3 = "...";
+                    }
+
+                    draw_notification_line(20, line_1);
+                    draw_notification_line(33, line_2);
+                    draw_notification_line(45, line_3);
+
+                    if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_default_footer();
+                    }
+                    break;
+                  }
+
+                  case REMOTE_MODE_WEATHER: {
+                    std::string condition = upper(id(selected_weather_condition));
+                    if (condition == "UNKNOWN") {
+                      condition = "SYNCING";
+                    }
+
+                    if (!isnan(id(selected_weather_temperature))) {
+                      snprintf(status_line, sizeof(status_line), "%.0f°${TEMPERATURE_UNIT}", id(selected_weather_temperature));
+                    } else {
+                      snprintf(status_line, sizeof(status_line), "SYNCING");
+                    }
+                    it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                    if (condition != "SYNCING" && !condition.empty()) {
+                       it->print(64, 45, id(small_font), COLOR_ON, display::TextAlign::CENTER, condition.c_str());
+                    }
+
+                    if (show_contrast_feedback) {
+                      draw_contrast_footer();
+                    } else {
+                      draw_footer_chrome("\ueac3", "\ueac9");
+                      if (condition != "SYNCING" && !isnan(id(selected_weather_humidity))) {
+                        snprintf(footer_line, sizeof(footer_line), "%.0f%%", id(selected_weather_humidity));
+                        it->print(64, 58, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, footer_line);
+                      } else {
+                        it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                      }
+                    }
+                    break;
+                  }
+
+                  case REMOTE_MODE_INFO:
+                  default:
+                    if (id(selected_time_index) == 0) {
+                      std::string time_label = format_time();
+                      std::string date_label = format_date();
+
+                      it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, time_label.c_str());
+                      it->print(64, 45, id(small_font), COLOR_ON, display::TextAlign::CENTER, date_label.c_str());
+
+                      if (show_contrast_feedback) {
+                        draw_contrast_footer();
+                      } else {
+                        draw_default_footer();
+                      }
+                    } else {
+                      snprintf(status_line, sizeof(status_line), "${VERSION}");
+                      it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+
+                      if (id(battery_monitoring_available)) {
+                        snprintf(detail_line, sizeof(detail_line), "BATTERY: %d%% (%.02fV)", id(battery_percentage), id(battery_voltage));
+                        it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                      } else {
+                        it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "BATTERY: N/A");
+                      }
+
+                      if (show_contrast_feedback) {
+                        draw_contrast_footer();
+                      } else {
+                        draw_default_footer();
+                      }
+                    }
+                    break;
+                }
+                it->display();
+                id(updated_ui) = false;
+
+  - id: reset_idle_timer
+    mode: restart
+    then:
+      - lambda: |-
+          id(last_active) = millis() / 1000;
+
+interval:
+  - interval: 500ms
+    then:
+      - if:
+          condition:
+            lambda: 'return (millis() / 1000) - id(last_active) >= ${SLEEP_DURATION};'
+          then:
+            - script.execute: turn_off
+          else:
+            - lambda: |-
+                uint32_t now = millis();
+                uint32_t elapsed = now - id(last_brightness_interaction);
+                if (elapsed > 3000 && elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t switch_elapsed = now - id(last_switch_interaction);
+                if (id(last_switch_interaction) > 0 && switch_elapsed > 5000 && switch_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t fan_speed_elapsed = now - id(last_fan_speed_interaction);
+                if (id(last_fan_speed_interaction) > 0 && fan_speed_elapsed > 3000 && fan_speed_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t humidifier_elapsed = now - id(last_humidifier_interaction);
+                if (id(last_humidifier_interaction) > 0 && humidifier_elapsed > 5000 && humidifier_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t humidifier_mode_elapsed = now - id(last_humidifier_mode_interaction);
+                if (id(last_humidifier_mode_interaction) > 0 && humidifier_mode_elapsed > 5000 &&
+                    humidifier_mode_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t climate_elapsed = now - id(last_climate_interaction);
+                if (id(last_climate_interaction) > 0 && climate_elapsed > 3000 && climate_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t lock_elapsed = now - id(last_lock_interaction);
+                if (id(last_lock_interaction) > 0 && lock_elapsed > 5000 && lock_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t cover_elapsed = now - id(last_cover_interaction);
+                if (id(last_cover_interaction) > 0 && cover_elapsed > 5000 && cover_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t cover_position_elapsed = now - id(last_cover_position_interaction);
+                if (id(last_cover_position_interaction) > 0 && cover_position_elapsed > 3000 &&
+                    cover_position_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t climate_target_focus_elapsed = now - id(last_climate_target_focus_interaction);
+                if (id(last_climate_target_focus_interaction) > 0 && climate_target_focus_elapsed > 5000 &&
+                    climate_target_focus_elapsed < 5500) {
+                  id(climate_target_focus) = 0;
+                  id(climate_target_focus_value) = NAN;
+                  id(last_climate_target_focus_interaction) = 0;
+                  id(updated_ui) = true;
+                }
+                uint32_t media_elapsed = now - id(last_media_volume_interaction);
+                if (id(last_media_volume_interaction) > 0 && media_elapsed > 3000 && media_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t media_source_elapsed = now - id(last_media_source_interaction);
+                if (id(last_media_source_interaction) > 0 && media_source_elapsed > 5000 &&
+                    media_source_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t media_power_elapsed = now - id(last_media_power_interaction);
+                if (id(last_media_power_interaction) > 0 && media_power_elapsed > 5000 &&
+                    media_power_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t automation_elapsed = now - id(last_automation_interaction);
+                if (id(last_automation_interaction) > 0 && automation_elapsed > 5000 && automation_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t contrast_elapsed = now - id(last_contrast_interaction);
+                if (id(last_contrast_interaction) > 0 && contrast_elapsed > 3000 && contrast_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+            - if:
+                condition:
+                  wifi.connected:
+                then:
+                  - if:
+                      condition:
+                        api.connected:
+                          state_subscription_only: true
+                      then:
+                        - if:
+                            condition:
+                              lambda: 'return id(show_boot_screen) && !id(low_battery_popup_active);'
+                            then:
+                              - if:
+                                  condition:
+                                    lambda: 'return id(battery_monitoring_available) && !id(low_battery_popup_shown) && !isnan(id(battery_voltage)) && id(battery_voltage) <= ${LOW_BATTERY_VOLTAGE};'
+                                  then:
+                                    - script.execute: show_low_battery_popup
+                                  else:
+                                    - lambda: |-
+                                        id(show_boot_screen) = false;
+                                        id(updated_ui) = true;
+            - if:
+                condition:
+                  lambda: 'return id(low_battery_popup_active);'
+                then:
+                  - lambda: 'return;'
+                else:
+                  - if:
+                      condition:
+                        lambda: 'return id(show_boot_screen);'
+                      then:
+                        - script.execute: boot_screen
+                      else:
+                        - if:
+                            condition:
+                              not:
+                                wifi.connected:
+                            then:
+                              - script.execute: wifi_disconnected_screen
+                            else:
+                              - if:
+                                  condition:
+                                    not:
+                                      api.connected:
+                                        state_subscription_only: true
+                                  then:
+                                    - script.execute: api_disconnected_screen
+                                  else:
+                                    - script.execute: sync_current_mode_status
+                                    - script.execute: update_display
+  - interval: 30min
+    then:
+      - lambda: |-
+          request_all_weather_status();

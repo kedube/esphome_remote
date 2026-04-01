@@ -1,0 +1,113 @@
+substitutions:
+    PIN_BAT_ADC: "32"
+    PIN_BTN_CONTRAST: "5"
+    PIN_BTN_PLAY_PAUSE: "17"
+    PIN_OLED_EN: "15"
+
+esphome:
+  on_boot:
+    - priority: -10
+      then:
+        - script.execute: update_battery
+
+output:
+  - platform: gpio
+    pin: ${PIN_OLED_EN}
+    id: oled_power
+
+sensor:
+  - platform: adc
+    pin: ${PIN_BAT_ADC}
+    id: battery_adc
+    attenuation: 12db
+    update_interval: never
+    filters:
+      - multiply: 1.68
+
+  - platform: template
+    id: battery_voltage_sensor
+    name: "Battery Voltage"
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+    update_interval: never
+    lambda: |-
+      if (!id(battery_adc).has_state()) {
+        return NAN;
+      }
+      return id(battery_adc).state;
+
+  - platform: template
+    id: battery_percent_sensor
+    name: "Battery"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    device_class: battery
+    state_class: measurement
+    update_interval: never
+    lambda: |-
+      if (!id(battery_adc).has_state()) {
+        return NAN;
+      }
+
+      float v = id(battery_adc).state;
+      static float v_avg = 0;
+
+      const float V_MIN = 3.30;
+      const float V_MAX = 4.20;
+      const float GAMMA = 2.2;
+
+      if (isnan(v) || v < 2.5 || v > 4.5) {
+        return NAN;
+      }
+
+      v_avg = (v_avg == 0) ? v : (v_avg * 0.8f + v * 0.2f);
+      v = v_avg;
+
+      if (v <= V_MIN) return 0;
+      if (v >= V_MAX) return 100;
+
+      float x = (v - V_MIN) / (V_MAX - V_MIN);
+      float pct = powf(x, GAMMA) * 100.0f;
+
+      return (int)roundf(pct);
+
+script:
+  - id: turn_off
+    mode: single
+    then:
+      - script.execute: show_powering_off_screen
+      - delay: 1s
+      - script.execute: clear_display_for_sleep
+      - delay: 500ms
+      - output.turn_off: oled_power
+      - delay: 5ms
+      - deep_sleep.enter: go_sleep
+
+  - id: update_battery
+    mode: single
+    then:
+      - logger.log:
+          level: DEBUG
+          format: "Updating battery state"
+      - component.update: battery_adc
+      - delay: 50ms
+      - lambda: |-
+          ESP_LOGD("battery", "ADC has state: %d value: %.3f",
+            id(battery_adc).has_state(),
+            id(battery_adc).has_state() ? id(battery_adc).state : -1.0);
+      - component.update: battery_voltage_sensor
+      - component.update: battery_percent_sensor
+      - lambda: |-
+          id(battery_monitoring_available) = true;
+          id(battery_voltage) = id(battery_voltage_sensor).has_state() ? id(battery_voltage_sensor).state : NAN;
+          id(battery_percentage) =
+              id(battery_percent_sensor).has_state() ? int(roundf(id(battery_percent_sensor).state)) : 0;
+          id(last_battery_update) = millis();
+          id(updated_ui) = true;
+
+interval:
+  - interval: 5min
+    then:
+      - script.execute: update_battery

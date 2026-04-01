@@ -1,0 +1,13 @@
+substitutions:
+  PIN_BTN_CONTRAST: "32"
+  PIN_BTN_PLAY_PAUSE: "5"
+
+script:
+  - id: turn_off
+    mode: single
+    then:
+      - script.execute: show_powering_off_screen
+      - delay: 1s
+      - script.execute: clear_display_for_sleep
+      - delay: 500ms
+      - deep_sleep.enter: go_sleep
