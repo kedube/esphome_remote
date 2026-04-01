@@ -77,12 +77,10 @@ esphome_remote/
     ├── fonts/
     │   └── arial-bold.ttf
     ├── local_entities-example.h
-    ├── local_entities.h
     ├── oled_remote.yaml
     ├── pcb_proto.yaml
     ├── pcb_rev31.yaml
-    ├── secrets-example.yaml
-    └── secrets.yaml
+    └── secrets-example.yaml
 ```
 
 ## Important Files
