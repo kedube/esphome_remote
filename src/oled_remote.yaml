@@ -26,6 +26,10 @@ packages:
     file: pcb_proto.yaml
     #file: pcb_rev31.yaml
 
+# Uncomment to enable framebuffer web debugging on port 80. Make sure to also set REMOTE_FRAMEBUFFER_WEB_DEBUG to 1 in the substitutions section above.
+#web_server:
+#  port: 80
+
 font:
   - file: "fonts/arial-bold.ttf"
     id: tiny_font
@@ -317,10 +321,6 @@ api:
   reboot_timeout: 0s
   encryption:
     key: !secret encryption_key
-
-# Uncomment to enable framebuffer web debugging on port 80. Make sure to also set REMOTE_FRAMEBUFFER_WEB_DEBUG to 1 in the substitutions section above.
-#web_server:
-#  port: 80
 
 json:
 
