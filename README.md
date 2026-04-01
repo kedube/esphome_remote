@@ -157,22 +157,7 @@ The example file supports these lists:
 
 You can leave any list empty. Empty lists compile cleanly, and their corresponding modes are automatically hidden from the remote UI.
 
-Notifications are configured in the same file with optional feed defines:
-
-```cpp
-#define NOTIFICATION_FEED_ENTITY "sensor.persistent_notifications"
-#define NOTIFICATION_FEED_ATTRIBUTE "messages"
-#define NOTIFICATION_FEED_SEPARATOR "||"
-```
-
-Notes:
-
-- Set `NOTIFICATION_FEED_ENTITY` to an empty string to hide Notifications mode completely.
-- `NOTIFICATION_FEED_ENTITY` is the Home Assistant entity the remote reads from.
-- `NOTIFICATION_FEED_ATTRIBUTE` is the attribute on that entity containing the notification payload.
-- `NOTIFICATION_FEED_SEPARATOR` is used when multiple notifications are packed into one string.
-
-Example:
+_Example:_
 
 ```cpp
 static const LightEntity LIGHT_LIST[] = {
@@ -191,6 +176,21 @@ Minimal empty-list example:
 static const AlarmEntity ALARM_LIST[] = {};
 static const WeatherEntity WEATHER_LIST[] = {};
 ```
+
+Notifications are configured in the same file with optional feed defines:
+
+```cpp
+#define NOTIFICATION_FEED_ENTITY "sensor.persistent_notifications"
+#define NOTIFICATION_FEED_ATTRIBUTE "messages"
+#define NOTIFICATION_FEED_SEPARATOR "||"
+```
+
+Notes:
+
+- Set `NOTIFICATION_FEED_ENTITY` to an empty string to hide Notifications mode completely.
+- `NOTIFICATION_FEED_ENTITY` is the Home Assistant entity the remote reads from.
+- `NOTIFICATION_FEED_ATTRIBUTE` is the attribute on that entity containing the notification payload.
+- `NOTIFICATION_FEED_SEPARATOR` is used when multiple notifications are packed into one string.
 
 ## 5. Select The Correct PCB Package
 
