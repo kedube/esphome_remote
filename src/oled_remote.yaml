@@ -2,6 +2,7 @@ substitutions:
   BOARD: "esp32dev"
   DEVICE_NAME: "esp32-remote"
   FRIENDLY_NAME: "ESP32 OLED Remote"
+  FRAMEBUFFER_WEB_DEBUG: "0"
   TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
   SLEEP_DURATION: "120" # seconds until auto-sleep
   DEEP_SLEEP_DURATION: "360min"
@@ -87,8 +88,13 @@ esphome:
   friendly_name: ${FRIENDLY_NAME}
   min_version: 2026.1.0
   name_add_mac_suffix: false
+  platformio_options:
+    build_flags:
+      - -DREMOTE_FRAMEBUFFER_WEB_DEBUG=${FRAMEBUFFER_WEB_DEBUG}
   includes:
     - entity_helpers.h
+    - framebuffer_web_debug.h
+    - framebuffer_web_debug.cpp
     - local_entities.h
   on_boot:
     - priority: 250
@@ -283,6 +289,10 @@ esphome:
             }
             id(updated_ui) = true;
         - script.execute: update_selected_item
+    - priority: -100
+      then:
+        - lambda: |-
+            register_framebuffer_web_debug(id(oled_display));
 
 preferences:
   flash_write_interval: 5s
@@ -307,6 +317,10 @@ api:
   reboot_timeout: 0s
   encryption:
     key: !secret encryption_key
+
+# Uncomment to enable framebuffer web debugging on port 80. Make sure to also set REMOTE_FRAMEBUFFER_WEB_DEBUG to 1 in the substitutions section above.
+#web_server:
+#  port: 80
 
 json:
 
@@ -1455,7 +1469,10 @@ script:
               }
             }
           } else if (mode == REMOTE_MODE_INFO) {
-            const char *state = idx == 0 ? "date" : "version";
+            const char *state =
+                idx == 0 ? "date" :
+                idx == 1 ? "network" :
+                "version";
             if (id(selected_item_state) != state) {
               id(selected_item_state) = state;
               id(updated_ui) = true;
@@ -3289,6 +3306,37 @@ script:
 
                       it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, time_label.c_str());
                       it->print(64, 45, id(small_font), COLOR_ON, display::TextAlign::CENTER, date_label.c_str());
+
+                      if (show_contrast_feedback) {
+                        draw_contrast_footer();
+                      } else {
+                        draw_default_footer();
+                      }
+                    } else if (id(selected_time_index) == 1) {
+                      std::string ssid_label = wifi::global_wifi_component != nullptr
+                          ? wifi::global_wifi_component->wifi_ssid()
+                          : "";
+                      std::string ip_label;
+                      if (wifi::global_wifi_component != nullptr) {
+                        auto ip_addresses = wifi::global_wifi_component->wifi_sta_ip_addresses();
+                        for (const auto &ip : ip_addresses) {
+                          if (ip.is_set()) {
+                            char ip_buffer[network::IP_ADDRESS_BUFFER_SIZE];
+                            ip_label = ip.str_to(ip_buffer);
+                            break;
+                          }
+                        }
+                      }
+
+                      if (ssid_label.empty()) {
+                        ssid_label = "DISCONNECTED";
+                      }
+                      if (ip_label.empty() || ip_label == "0.0.0.0") {
+                        ip_label = "NO IP ADDRESS";
+                      }
+
+                      it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, ssid_label.c_str());
+                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, ip_label.c_str());
 
                       if (show_contrast_feedback) {
                         draw_contrast_footer();

@@ -122,8 +122,8 @@ static constexpr int SENSOR_LIST_COUNT = sizeof(SENSOR_LIST) / sizeof(SENSOR_LIS
 static constexpr int AUTOMATION_LIST_COUNT = sizeof(AUTOMATION_LIST) / sizeof(AUTOMATION_LIST[0]);
 static constexpr int ALARM_LIST_COUNT = sizeof(ALARM_LIST) / sizeof(ALARM_LIST[0]);
 static constexpr int WEATHER_LIST_COUNT = sizeof(WEATHER_LIST) / sizeof(WEATHER_LIST[0]);
-static const char *const INFO_ITEM_NAMES[] = {"Time & Date", "Version"};
-static const char *const INFO_ITEM_ENTITIES[] = {"info.date", "info.version"};
+static const char *const INFO_ITEM_NAMES[] = {"Time & Date", "Network", "Version"};
+static const char *const INFO_ITEM_ENTITIES[] = {"info.date", "info.network", "info.version"};
 static const int INFO_ITEM_COUNT = sizeof(INFO_ITEM_NAMES) / sizeof(INFO_ITEM_NAMES[0]);
 static constexpr int NOTIFICATION_FEED_MAX_ITEMS = 16;
 

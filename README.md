@@ -34,6 +34,7 @@ esphome_remote/
 │   └── remote_*.jpeg
 └── src/
     ├── entity_helpers.h
+    ├── framebuffer_web_debug.h
     ├── fonts/
     │   └── arial-bold.ttf
     ├── local_entities-example.h
@@ -56,6 +57,9 @@ esphome_remote/
 
 - `src/local_entities-example.h`
   Example entity definitions you can copy and customize.
+
+- `src/framebuffer_web_debug.h`
+  Optional debug-only web endpoint that exports the current OLED framebuffer as a downloadable PBM image.
 
 - `src/pcb_proto.yaml`
   Hardware package for the prototype / older board layout.
@@ -118,6 +122,51 @@ esphome config src/oled_remote.yaml
 ```bash
 esphome run src/oled_remote.yaml
 ```
+
+## Optional Framebuffer Download Debugging
+
+When you want a clean UI capture from the SH1106 without photographing the screen, enable the framebuffer debug flag and the ESPHome web server together. The debug flag adds a framebuffer download endpoint, and the `web_server:` block exposes it over HTTP.
+
+Temporary CLI override:
+
+```bash
+esphome -s FRAMEBUFFER_WEB_DEBUG 1 config src/oled_remote.yaml
+esphome -s FRAMEBUFFER_WEB_DEBUG 1 run src/oled_remote.yaml
+```
+
+In `src/oled_remote.yaml`, set the debug substitution near the top:
+
+```yaml
+substitutions:
+  FRAMEBUFFER_WEB_DEBUG: "1"
+```
+
+Then uncomment the web server section:
+
+```yaml
+web_server:
+  port: 80
+```
+
+The file already includes a commented reminder near that section:
+
+```yaml
+# Uncomment to enable framebuffer web debugging on port 80.
+# Make sure to also set REMOTE_FRAMEBUFFER_WEB_DEBUG to 1 in the substitutions section above.
+#web_server:
+#  port: 80
+```
+
+After flashing, browse to:
+
+- `http://<device-ip>/debug/framebuffer.pbm`
+
+Notes:
+
+- The default build keeps the framebuffer dump endpoint off.
+- If `FRAMEBUFFER_WEB_DEBUG` is enabled but `web_server:` stays commented out, the PBM download URL will not be reachable.
+- The download is a 1-bit PBM image generated from the live OLED framebuffer.
+- This is intended for debugging and README screenshots, not normal day-to-day use.
 
 ## Local Entity Configuration
 
