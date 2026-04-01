@@ -136,6 +136,12 @@ esphome run src/oled_remote.yaml
 - `ALARM_LIST`
 - `WEATHER_LIST`
 
+You can leave any of these lists empty:
+
+- Empty lists compile cleanly.
+- Modes with no configured entities are automatically hidden from the UI menu.
+- You do not need to remove unused mode code by hand.
+
 Example:
 
 ```cpp
@@ -150,6 +156,13 @@ static const MediaEntity MEDIA_PLAYER_LIST[] = {
 ```
 
 `MEDIA_PLAYER_LIST` optionally supports a third field for a pipe-delimited fallback source list. That is useful when the device does not expose usable `source_list` data through Home Assistant.
+
+Minimal empty-list example:
+
+```cpp
+static const AlarmEntity ALARM_LIST[] = {};
+static const WeatherEntity WEATHER_LIST[] = {};
+```
 
 ## Supported Home Assistant Entity Domains
 
@@ -174,7 +187,8 @@ Notifications are read from `sensor.persistent_notifications` by default.
 ## UI Notes
 
 - Lock, cover, and automation actions use long-press protection.
-- The remote restores the previously selected mode and item after wake/reboot.
+- The remote restores the previously selected mode and item after wake/reboot, including fan and humidifier selections.
+- Modes with empty entity lists are skipped automatically when cycling through the menu.
 - Media mode supports device-specific behavior for TVs, receivers, and speakers.
 - Humidifier mode supports target humidity control and mode cycling.
 - Notifications are shown from a Home Assistant sensor attribute feed.
@@ -249,6 +263,12 @@ esphome config src/oled_remote.yaml
 - Check `src/local_entities.h`
 - Make sure each entity exists in Home Assistant
 - Keep entity domains matched to the correct list type
+
+### A mode is missing from the menu
+
+- Check whether the corresponding list in `src/local_entities.h` is empty
+- Modes are hidden automatically when their configured entity list has no items
+- Re-run `esphome config src/oled_remote.yaml` after editing your lists
 
 ### Battery warnings never appear
 
