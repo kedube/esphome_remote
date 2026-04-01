@@ -201,6 +201,8 @@ esphome:
               id(selected_automation_index) = (state >> 44) & 0x3F;
               id(selected_weather_index) = (state >> 50) & 0x3F;
               id(selected_time_index) = (state >> 56) & 0x1F;
+              id(selected_fan_index) = id(persisted_ui_state_aux) & 0x3F;
+              id(selected_humidifier_index) = (id(persisted_ui_state_aux) >> 6) & 0x3F;
             } else if ((state & UI_STATE_FORMAT_V2) != 0) {
               if ((state & UI_STATE_FORMAT_V4) == UI_STATE_FORMAT_V4) {
                 restored_mode = remap_v4_mode((state >> 4) & 0x0F);
@@ -213,6 +215,8 @@ esphome:
                 id(selected_automation_index) = (state >> 44) & 0x3F;
                 id(selected_weather_index) = (state >> 50) & 0x3F;
                 id(selected_time_index) = (state >> 56) & 0x1F;
+                id(selected_fan_index) = 0;
+                id(selected_humidifier_index) = 0;
               } else if ((state & UI_STATE_FORMAT_V3) == UI_STATE_FORMAT_V3) {
                 restored_mode = remap_v3_mode((state >> 4) & 0x0F);
                 id(selected_light_index) = (state >> 8) & 0x3F;
@@ -224,6 +228,8 @@ esphome:
                 id(selected_automation_index) = (state >> 44) & 0x3F;
                 id(selected_weather_index) = (state >> 50) & 0x3F;
                 id(selected_time_index) = (state >> 56) & 0x3F;
+                id(selected_fan_index) = 0;
+                id(selected_humidifier_index) = 0;
               } else {
                 restored_mode = remap_v2_mode((state >> 4) & 0x0F);
                 id(selected_light_index) = (state >> 8) & 0x3F;
@@ -235,6 +241,8 @@ esphome:
                 id(selected_automation_index) = (state >> 44) & 0x3F;
                 id(selected_weather_index) = (state >> 50) & 0x3F;
                 id(selected_time_index) = (state >> 56) & 0x3F;
+                id(selected_fan_index) = 0;
+                id(selected_humidifier_index) = 0;
               }
             } else {
               int old_mode = (state >> 4) & 0x07;
@@ -256,6 +264,8 @@ esphome:
               id(selected_automation_index) = (state >> 37) & 0x3F;
               id(selected_weather_index) = (state >> 43) & 0x3F;
               id(selected_time_index) = (state >> 49) & 0x3F;
+              id(selected_fan_index) = 0;
+              id(selected_humidifier_index) = 0;
             }
 
             if (restored_contrast >= 1 && restored_contrast <= 10) {
@@ -436,6 +446,11 @@ globals:
 
   - id: persisted_ui_state
     type: uint64_t
+    initial_value: '0'
+    restore_value: True
+
+  - id: persisted_ui_state_aux
+    type: uint32_t
     initial_value: '0'
     restore_value: True
 
@@ -942,6 +957,9 @@ script:
               (uint64_t(id(selected_light_index) & 0x3F) << 8) |
               (uint64_t(id(current_mode) & 0x0F) << 4) |
               uint64_t(id(contrast) & 0x0F);
+          id(persisted_ui_state_aux) =
+              (uint32_t(id(selected_humidifier_index) & 0x3F) << 6) |
+              uint32_t(id(selected_fan_index) & 0x3F);
 
   - id: update_selected_item
     then:
@@ -1004,7 +1022,7 @@ script:
               id(selected_media_volume_pct) = pct;
             }
           }
-          request_mode_status(mode, idx);
+          request_mode_status_throttled(mode, idx, millis(), 2500, true);
       - script.execute: persist_ui_state
       - script.execute: sync_current_mode_status
       - script.execute: update_display
@@ -1115,7 +1133,7 @@ script:
               next_brightness_pct = 0;
             } else {
               next_state = "unknown";
-              request_selected_light_status(idx);
+              request_mode_status_throttled(mode, idx, millis(), 2500);
             }
 
             if (next_state != id(selected_item_state) || next_brightness_pct != id(selected_brightness_pct)) {
@@ -1145,7 +1163,7 @@ script:
               next_speed_pct = 0;
             } else {
               next_state = "unknown";
-              request_selected_fan_status(idx);
+              request_mode_status_throttled(mode, idx, millis(), 2500);
             }
 
             if (next_state != id(selected_item_state) || next_speed_pct != id(selected_fan_speed_pct)) {
@@ -1162,7 +1180,7 @@ script:
             bool changed = false;
 
             if (state == "unknown" && std::isnan(target) && std::isnan(current)) {
-              request_mode_status(mode, idx);
+              request_mode_status_throttled(mode, idx, millis(), 2500);
             } else {
               if (id(selected_item_state) != state) {
                 id(selected_item_state) = state;
@@ -1192,7 +1210,7 @@ script:
             const std::string &state = selected_switch_state(idx);
 
             if (state == "unknown") {
-              request_mode_status(mode, idx);
+              request_mode_status_throttled(mode, idx, millis(), 2500);
             } else if (id(selected_item_state) != state) {
               id(selected_item_state) = state;
               id(updated_ui) = true;
@@ -1208,7 +1226,7 @@ script:
             bool changed = false;
 
             if (state == "unknown") {
-              request_mode_status(mode, idx);
+              request_mode_status_throttled(mode, idx, millis(), 2500);
             } else {
               if (id(selected_item_state) != state) {
                 id(selected_item_state) = state;
@@ -1249,7 +1267,7 @@ script:
             const std::string &state = selected_lock_state(idx);
 
             if (state == "unknown") {
-              request_mode_status(mode, idx);
+              request_mode_status_throttled(mode, idx, millis(), 2500);
             } else if (id(selected_item_state) != state) {
               id(selected_item_state) = state;
               id(updated_ui) = true;
@@ -1260,7 +1278,7 @@ script:
             bool changed = false;
 
             if (state == "unknown" && std::isnan(position)) {
-              request_mode_status(mode, idx);
+              request_mode_status_throttled(mode, idx, millis(), 2500);
             } else {
               if (state != "unknown" && id(selected_item_state) != state) {
                 id(selected_item_state) = state;
@@ -1289,7 +1307,7 @@ script:
             bool changed = false;
 
             if (state == "unknown") {
-              request_mode_status(mode, idx);
+              request_mode_status_throttled(mode, idx, millis(), 2500);
             } else {
               if (id(selected_item_state) != state) {
                 id(selected_item_state) = state;
@@ -1332,7 +1350,7 @@ script:
           } else if (mode == REMOTE_MODE_SENSORS) {
             const std::string &state = sensor_state_for_index(idx);
             if (state == "unknown") {
-              request_mode_status(mode, idx);
+              request_mode_status_throttled(mode, idx, millis(), 2500);
             } else if (id(selected_item_state) != state) {
               id(selected_item_state) = state;
               id(updated_ui) = true;
@@ -1356,7 +1374,7 @@ script:
               changed = true;
             }
             if (state == "unknown") {
-              request_mode_status(mode, idx);
+              request_mode_status_throttled(mode, idx, millis(), 2500);
             }
             if (changed) {
               id(updated_ui) = true;
@@ -1364,7 +1382,7 @@ script:
           } else if (mode == REMOTE_MODE_ALARMS) {
             const std::string &state = alarm_state_for_index(idx);
             if (state == "unknown") {
-              request_mode_status(mode, idx);
+              request_mode_status_throttled(mode, idx, millis(), 2500);
             } else if (id(selected_item_state) != state) {
               id(selected_item_state) = state;
               id(updated_ui) = true;
@@ -1394,7 +1412,7 @@ script:
               id(updated_ui) = true;
             }
             if (next_entity.empty() || (count > 1 && next_message.empty())) {
-              request_mode_status(mode, clamped_idx);
+              request_mode_status_throttled(mode, clamped_idx, millis(), 2500);
             }
           } else if (mode == REMOTE_MODE_WEATHER) {
             const std::string &condition = weather_state_for_index(idx);
@@ -1406,7 +1424,7 @@ script:
 
             if (condition == "unknown" && std::isnan(temperature) && std::isnan(humidity) &&
                 std::isnan(high) && std::isnan(low)) {
-              request_mode_status(mode, idx);
+              request_mode_status_throttled(mode, idx, millis(), 2500);
             } else {
               if (id(selected_item_state) != condition) {
                 id(selected_item_state) = condition;

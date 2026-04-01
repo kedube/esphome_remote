@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <string>
@@ -583,10 +584,17 @@ static inline const std::string &empty_string() {
   return empty;
 }
 
+template <typename T, size_t Count>
+static inline std::array<T, Count> filled_array(const T &value) {
+  std::array<T, Count> result{};
+  result.fill(value);
+  return result;
+}
+
 template <typename Entity, int Count>
 class SingleStateTracker : public esphome::api::CustomAPIDevice {
  public:
-  explicit SingleStateTracker(const Entity (&entities)[Count]) : entities_(entities) {}
+  explicit SingleStateTracker(const Entity *entities) : entities_(entities) {}
 
   void setup() {
     for (int i = 0; i < Count; i++) {
@@ -628,8 +636,8 @@ class SingleStateTracker : public esphome::api::CustomAPIDevice {
     return find_entity_index(this->entities_, Count, entity_id);
   }
 
-  const Entity (&entities_)[Count];
-  std::string state_[Count];
+  const Entity *entities_;
+  std::array<std::string, Count> state_{};
 };
 
 class LightStatusTracker : public esphome::api::CustomAPIDevice {
@@ -706,10 +714,10 @@ class LightStatusTracker : public esphome::api::CustomAPIDevice {
     return find_entity_index(LIGHT_LIST, LIGHT_LIST_COUNT, entity_id);
   }
 
-  std::string state_[LIGHT_LIST_COUNT];
-  float brightness_[LIGHT_LIST_COUNT] = {NAN};
-  bool has_state_[LIGHT_LIST_COUNT] = {false};
-  bool has_brightness_[LIGHT_LIST_COUNT] = {false};
+  std::array<std::string, LIGHT_LIST_COUNT> state_{};
+  std::array<float, LIGHT_LIST_COUNT> brightness_ = filled_array<float, LIGHT_LIST_COUNT>(NAN);
+  std::array<bool, LIGHT_LIST_COUNT> has_state_{};
+  std::array<bool, LIGHT_LIST_COUNT> has_brightness_{};
 };
 
 using SwitchStatusTracker = SingleStateTracker<SwitchEntity, SWITCH_LIST_COUNT>;
@@ -782,9 +790,9 @@ class FanStatusTracker : public esphome::api::CustomAPIDevice {
     return find_entity_index(FAN_LIST, FAN_LIST_COUNT, entity_id);
   }
 
-  std::string state_[FAN_LIST_COUNT];
-  float percentage_[FAN_LIST_COUNT] = {NAN};
-  bool has_percentage_[FAN_LIST_COUNT] = {false};
+  std::array<std::string, FAN_LIST_COUNT> state_{};
+  std::array<float, FAN_LIST_COUNT> percentage_ = filled_array<float, FAN_LIST_COUNT>(NAN);
+  std::array<bool, FAN_LIST_COUNT> has_percentage_{};
 };
 
 class HumidifierStatusTracker : public esphome::api::CustomAPIDevice {
@@ -950,12 +958,14 @@ class HumidifierStatusTracker : public esphome::api::CustomAPIDevice {
     return find_entity_index(HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, entity_id);
   }
 
-  std::string state_[HUMIDIFIER_LIST_COUNT];
-  std::string mode_[HUMIDIFIER_LIST_COUNT];
-  std::string available_modes_[HUMIDIFIER_LIST_COUNT];
-  std::string action_[HUMIDIFIER_LIST_COUNT];
-  float target_humidity_[HUMIDIFIER_LIST_COUNT] = {NAN};
-  float current_humidity_[HUMIDIFIER_LIST_COUNT] = {NAN};
+  std::array<std::string, HUMIDIFIER_LIST_COUNT> state_{};
+  std::array<std::string, HUMIDIFIER_LIST_COUNT> mode_{};
+  std::array<std::string, HUMIDIFIER_LIST_COUNT> available_modes_{};
+  std::array<std::string, HUMIDIFIER_LIST_COUNT> action_{};
+  std::array<float, HUMIDIFIER_LIST_COUNT> target_humidity_ =
+      filled_array<float, HUMIDIFIER_LIST_COUNT>(NAN);
+  std::array<float, HUMIDIFIER_LIST_COUNT> current_humidity_ =
+      filled_array<float, HUMIDIFIER_LIST_COUNT>(NAN);
 };
 
 class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
@@ -1166,14 +1176,18 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
     return find_entity_index(CLIMATE_LIST, CLIMATE_LIST_COUNT, entity_id);
   }
 
-  std::string state_[CLIMATE_LIST_COUNT];
-  std::string hvac_action_[CLIMATE_LIST_COUNT];
-  std::string preset_mode_[CLIMATE_LIST_COUNT];
-  float target_temperature_[CLIMATE_LIST_COUNT] = {NAN};
-  float target_temperature_low_[CLIMATE_LIST_COUNT] = {NAN};
-  float target_temperature_high_[CLIMATE_LIST_COUNT] = {NAN};
-  float current_temperature_[CLIMATE_LIST_COUNT] = {NAN};
-  bool supports_preset_[CLIMATE_LIST_COUNT] = {false};
+  std::array<std::string, CLIMATE_LIST_COUNT> state_{};
+  std::array<std::string, CLIMATE_LIST_COUNT> hvac_action_{};
+  std::array<std::string, CLIMATE_LIST_COUNT> preset_mode_{};
+  std::array<float, CLIMATE_LIST_COUNT> target_temperature_ =
+      filled_array<float, CLIMATE_LIST_COUNT>(NAN);
+  std::array<float, CLIMATE_LIST_COUNT> target_temperature_low_ =
+      filled_array<float, CLIMATE_LIST_COUNT>(NAN);
+  std::array<float, CLIMATE_LIST_COUNT> target_temperature_high_ =
+      filled_array<float, CLIMATE_LIST_COUNT>(NAN);
+  std::array<float, CLIMATE_LIST_COUNT> current_temperature_ =
+      filled_array<float, CLIMATE_LIST_COUNT>(NAN);
+  std::array<bool, CLIMATE_LIST_COUNT> supports_preset_{};
 };
 
 using LockStatusTracker = SingleStateTracker<LockEntity, LOCK_LIST_COUNT>;
@@ -1245,9 +1259,9 @@ class CoverStatusTracker : public esphome::api::CustomAPIDevice {
 
   int find_index_(const std::string &entity_id) const { return find_entity_index(COVER_LIST, COVER_LIST_COUNT, entity_id); }
 
-  std::string state_[COVER_LIST_COUNT];
-  float position_[COVER_LIST_COUNT] = {NAN};
-  bool has_position_[COVER_LIST_COUNT] = {false};
+  std::array<std::string, COVER_LIST_COUNT> state_{};
+  std::array<float, COVER_LIST_COUNT> position_ = filled_array<float, COVER_LIST_COUNT>(NAN);
+  std::array<bool, COVER_LIST_COUNT> has_position_{};
 };
 
 class MediaStatusTracker : public esphome::api::CustomAPIDevice {
@@ -1452,13 +1466,13 @@ class MediaStatusTracker : public esphome::api::CustomAPIDevice {
     return find_entity_index(MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, entity_id);
   }
 
-  std::string state_[MEDIA_PLAYER_LIST_COUNT];
-  std::string device_class_[MEDIA_PLAYER_LIST_COUNT];
-  std::string title_[MEDIA_PLAYER_LIST_COUNT];
-  std::string artist_[MEDIA_PLAYER_LIST_COUNT];
-  std::string source_[MEDIA_PLAYER_LIST_COUNT];
-  std::string source_list_[MEDIA_PLAYER_LIST_COUNT];
-  float volume_[MEDIA_PLAYER_LIST_COUNT] = {NAN};
+  std::array<std::string, MEDIA_PLAYER_LIST_COUNT> state_{};
+  std::array<std::string, MEDIA_PLAYER_LIST_COUNT> device_class_{};
+  std::array<std::string, MEDIA_PLAYER_LIST_COUNT> title_{};
+  std::array<std::string, MEDIA_PLAYER_LIST_COUNT> artist_{};
+  std::array<std::string, MEDIA_PLAYER_LIST_COUNT> source_{};
+  std::array<std::string, MEDIA_PLAYER_LIST_COUNT> source_list_{};
+  std::array<float, MEDIA_PLAYER_LIST_COUNT> volume_ = filled_array<float, MEDIA_PLAYER_LIST_COUNT>(NAN);
 };
 
 using AutomationStatusTracker = SingleStateTracker<AutomationEntity, AUTOMATION_LIST_COUNT>;
@@ -1634,11 +1648,13 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
     return find_entity_index(WEATHER_LIST, WEATHER_LIST_COUNT, entity_id);
   }
 
-  std::string state_[WEATHER_LIST_COUNT];
-  float temperature_[WEATHER_LIST_COUNT] = {NAN};
-  float humidity_[WEATHER_LIST_COUNT] = {NAN};
-  float high_temperature_[WEATHER_LIST_COUNT] = {NAN};
-  float low_temperature_[WEATHER_LIST_COUNT] = {NAN};
+  std::array<std::string, WEATHER_LIST_COUNT> state_{};
+  std::array<float, WEATHER_LIST_COUNT> temperature_ = filled_array<float, WEATHER_LIST_COUNT>(NAN);
+  std::array<float, WEATHER_LIST_COUNT> humidity_ = filled_array<float, WEATHER_LIST_COUNT>(NAN);
+  std::array<float, WEATHER_LIST_COUNT> high_temperature_ =
+      filled_array<float, WEATHER_LIST_COUNT>(NAN);
+  std::array<float, WEATHER_LIST_COUNT> low_temperature_ =
+      filled_array<float, WEATHER_LIST_COUNT>(NAN);
 };
 
 class NotificationFeedTracker : public esphome::api::CustomAPIDevice {
@@ -1752,6 +1768,9 @@ static AlarmStatusTracker alarm_status_tracker_storage(ALARM_LIST);
 static NotificationFeedTracker notification_feed_tracker_storage;
 static WeatherStatusTracker weather_status_tracker_storage;
 static bool remote_status_trackers_initialized = false;
+static RemoteMode last_requested_mode = REMOTE_MODE_INFO;
+static int last_requested_mode_index = -1;
+static uint32_t last_requested_mode_at = 0;
 
 static inline void ensure_remote_status_trackers() {
   if (remote_status_trackers_initialized) {
@@ -2126,4 +2145,17 @@ static inline void request_mode_status(RemoteMode mode, int idx) {
     case REMOTE_MODE_INFO:
       break;
   }
+}
+
+static inline void request_mode_status_throttled(
+    RemoteMode mode, int idx, uint32_t now, uint32_t min_interval_ms, bool force = false) {
+  if (!force && last_requested_mode == mode && last_requested_mode_index == idx &&
+      (now - last_requested_mode_at) < min_interval_ms) {
+    return;
+  }
+
+  request_mode_status(mode, idx);
+  last_requested_mode = mode;
+  last_requested_mode_index = idx;
+  last_requested_mode_at = now;
 }
