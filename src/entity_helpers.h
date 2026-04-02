@@ -173,6 +173,66 @@ static inline std::string trim_copy(const std::string &value) {
   return value.substr(start, end - start + 1);
 }
 
+static inline std::string remote_state_label(const std::string &raw, const char *fallback = "SYNCING") {
+  std::string label = raw;
+  for (auto &ch : label) {
+    if (ch >= 'a' && ch <= 'z') {
+      ch = ch - 'a' + 'A';
+    } else if (ch == '_') {
+      ch = ' ';
+    }
+  }
+  if (label.empty() || label == "UNKNOWN") {
+    return std::string(fallback);
+  }
+  return label;
+}
+
+static inline int clamp_percent_value(float value, float scale = 1.0f, int min_value = 0) {
+  int pct = (int) roundf(value * scale);
+  if (pct < min_value) pct = min_value;
+  if (pct > 100) pct = 100;
+  return pct;
+}
+
+static inline bool lock_state_matches_expected(const std::string &state, const std::string &expected_state) {
+  return state == expected_state;
+}
+
+static inline std::string lock_operation_feedback_for_state(const std::string &state) {
+  if (state == "jammed") {
+    return "JAMMED";
+  }
+  if (state == "locking") {
+    return "LOCKING...";
+  }
+  if (state == "unlocking") {
+    return "UNLOCKING...";
+  }
+  return "";
+}
+
+static inline bool cover_state_matches_expected(const std::string &state, float position, const std::string &expected_state) {
+  const bool reached_open = state == "open" || (!std::isnan(position) && position >= 99.0f);
+  const bool reached_closed = state == "closed" || (!std::isnan(position) && position <= 1.0f);
+  return (expected_state == "open" && reached_open) || (expected_state == "closed" && reached_closed);
+}
+
+static inline std::string cover_operation_feedback_for_state(const std::string &state, float position) {
+  if (state == "opening") {
+    return "OPENING...";
+  }
+  if (state == "closing") {
+    return "CLOSING...";
+  }
+  if (!std::isnan(position) && position > 0.0f && position < 100.0f) {
+    char buffer[16];
+    snprintf(buffer, sizeof(buffer), "OPEN %d%%", (int) roundf(position));
+    return std::string(buffer);
+  }
+  return "";
+}
+
 static inline int delimited_option_count(const std::string &source_list) {
   int count = 0;
   size_t start = 0;

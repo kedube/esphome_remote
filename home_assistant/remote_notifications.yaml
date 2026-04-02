@@ -1,5 +1,9 @@
 template:
   - trigger:
+      # Build the remote notification feed from persistent_notification events.
+      # Home Assistant no longer exposes a stable state collection for these, so
+      # this sensor keeps its own ordered list in attributes and derives the
+      # simple `messages` and `ids` strings that the remote firmware expects.
       - id: start
         trigger: homeassistant
         event: start
@@ -42,6 +46,7 @@ template:
           {% endif %}
         attributes:
           notifications: >-
+            {# Canonical notification list stored on the sensor itself. #}
             {% set items = this.attributes.get('notifications', []) %}
             {% if trigger.id == 'start' %}
               {{ [] }}
@@ -73,6 +78,7 @@ template:
               {{ items }}
             {% endif %}
           messages: >-
+            {# Flatten the canonical list into the `msg1||msg2` format used by the remote. #}
             {% set items = this.attributes.get('notifications', []) %}
             {% if trigger.id == 'start' %}
               {% set current = [] %}
@@ -105,6 +111,7 @@ template:
                 | list %}
             {{ texts | join('||') if texts else 'none' }}
           ids: >-
+            {# Notification IDs are kept in the same order as `messages` for dismiss actions. #}
             {% set items = this.attributes.get('notifications', []) %}
             {% if trigger.id == 'start' %}
               {% set current = [] %}

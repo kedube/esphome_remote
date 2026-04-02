@@ -1157,12 +1157,6 @@ script:
             }
             return false;
           };
-          auto clamp_percent = [](float value, float scale = 1.0f, int min_value = 0) {
-            int pct = (int) roundf(value * scale);
-            if (pct < min_value) pct = min_value;
-            if (pct > 100) pct = 100;
-            return pct;
-          };
           auto request_refresh = [&](RemoteMode refresh_mode, int refresh_idx) {
             request_mode_status_throttled(refresh_mode, refresh_idx, millis(), 2500);
           };
@@ -1186,7 +1180,7 @@ script:
             if (state == "on") {
               next_state = "on";
               if (selected_light_has_brightness(idx) && !isnan(brightness) && brightness > 0) {
-                next_brightness_pct = clamp_percent(brightness, 100.0f / 255.0f, 1);
+                next_brightness_pct = clamp_percent_value(brightness, 100.0f / 255.0f, 1);
               } else if (next_brightness_pct <= 0) {
                 next_brightness_pct = 100;
               }
@@ -1213,7 +1207,7 @@ script:
             if (state == "on") {
               next_state = "on";
               if (has_percentage && !isnan(percentage) && percentage > 0) {
-                next_speed_pct = clamp_percent(percentage, 1.0f, 1);
+                next_speed_pct = clamp_percent_value(percentage, 1.0f, 1);
               } else if (!has_percentage) {
                 next_speed_pct = 0;
               }
@@ -1297,7 +1291,7 @@ script:
                 changed = assign_string_if_changed(id(selected_item_state), state) || changed;
               }
               if (!std::isnan(position)) {
-                int pct = clamp_percent(position);
+                int pct = clamp_percent_value(position);
                 changed = assign_int_if_changed(id(selected_cover_position_pct), pct) || changed;
               }
               if (changed) {
@@ -1328,7 +1322,7 @@ script:
                 changed = assign_string_if_changed(id(selected_media_source), source) || changed;
               }
               if (!isnan(volume)) {
-                int pct = clamp_percent(volume, 100.0f);
+                int pct = clamp_percent_value(volume, 100.0f);
                 changed = assign_int_if_changed(id(selected_media_volume_pct), pct) || changed;
               }
               if (changed) {
@@ -1903,16 +1897,15 @@ script:
                   - delay: 1000ms
                   - lambda: |-
                       const std::string state = selected_lock_state(id(selected_lock_index));
-                      if (state == expected_state) {
+                      const std::string feedback = lock_operation_feedback_for_state(state);
+                      if (lock_state_matches_expected(state, expected_state)) {
                         id(set_lock_feedback).execute(success_feedback);
                         id(lock_verification_complete) = true;
-                      } else if (state == "jammed") {
-                        id(set_lock_feedback).execute("JAMMED");
-                        id(lock_verification_complete) = true;
-                      } else if (state == "locking") {
-                        id(set_lock_feedback).execute("LOCKING...");
-                      } else if (state == "unlocking") {
-                        id(set_lock_feedback).execute("UNLOCKING...");
+                      } else if (!feedback.empty()) {
+                        id(set_lock_feedback).execute(feedback);
+                        if (feedback == "JAMMED") {
+                          id(lock_verification_complete) = true;
+                        }
                       }
       - if:
           condition:
@@ -1923,10 +1916,11 @@ script:
             - delay: 500ms
             - lambda: |-
                 const std::string state = selected_lock_state(id(selected_lock_index));
-                if (state == expected_state) {
+                const std::string feedback = lock_operation_feedback_for_state(state);
+                if (lock_state_matches_expected(state, expected_state)) {
                   id(set_lock_feedback).execute(success_feedback);
-                } else if (state == "jammed") {
-                  id(set_lock_feedback).execute("JAMMED");
+                } else if (!feedback.empty()) {
+                  id(set_lock_feedback).execute(feedback);
                 }
                 id(lock_verification_complete) = true;
 
@@ -1951,21 +1945,12 @@ script:
                   - lambda: |-
                       const std::string state = selected_cover_state(id(selected_cover_index));
                       const float position = selected_cover_position(id(selected_cover_index));
-                      const bool reached_open = state == "open" || (!isnan(position) && position >= 99.0f);
-                      const bool reached_closed = state == "closed" || (!isnan(position) && position <= 1.0f);
-
-                      if ((expected_state == "open" && reached_open) ||
-                          (expected_state == "closed" && reached_closed)) {
+                      const std::string feedback = cover_operation_feedback_for_state(state, position);
+                      if (cover_state_matches_expected(state, position, expected_state)) {
                         id(set_cover_feedback).execute(success_feedback);
                         id(cover_verification_complete) = true;
-                      } else if (state == "opening") {
-                        id(set_cover_feedback).execute("OPENING...");
-                      } else if (state == "closing") {
-                        id(set_cover_feedback).execute("CLOSING...");
-                      } else if (!isnan(position) && position > 0.0f && position < 100.0f) {
-                        char buffer[16];
-                        snprintf(buffer, sizeof(buffer), "OPEN %d%%", (int) roundf(position));
-                        id(set_cover_feedback).execute(std::string(buffer));
+                      } else if (!feedback.empty()) {
+                        id(set_cover_feedback).execute(feedback);
                       }
       - if:
           condition:
@@ -1977,16 +1962,11 @@ script:
             - lambda: |-
                 const std::string state = selected_cover_state(id(selected_cover_index));
                 const float position = selected_cover_position(id(selected_cover_index));
-                const bool reached_open = state == "open" || (!isnan(position) && position >= 99.0f);
-                const bool reached_closed = state == "closed" || (!isnan(position) && position <= 1.0f);
-
-                if ((expected_state == "open" && reached_open) ||
-                    (expected_state == "closed" && reached_closed)) {
+                const std::string feedback = cover_operation_feedback_for_state(state, position);
+                if (cover_state_matches_expected(state, position, expected_state)) {
                   id(set_cover_feedback).execute(success_feedback);
-                } else if (!isnan(position) && position > 0.0f && position < 100.0f) {
-                  char buffer[16];
-                  snprintf(buffer, sizeof(buffer), "OPEN %d%%", (int) roundf(position));
-                  id(set_cover_feedback).execute(std::string(buffer));
+                } else if (!feedback.empty()) {
+                  id(set_cover_feedback).execute(feedback);
                 }
                 id(cover_verification_complete) = true;
 
@@ -2972,16 +2952,7 @@ script:
                 footer_line[0] = '\0';
                 detail_line[0] = '\0';
 
-                auto upper = [](std::string text) {
-                  for (auto &ch : text) {
-                    if (ch >= 'a' && ch <= 'z') {
-                      ch = ch - 'a' + 'A';
-                    } else if (ch == '_') {
-                      ch = ' ';
-                    }
-                  }
-                  return text;
-                };
+                auto upper = [](std::string text) { return remote_state_label(text, ""); };
                 auto recent_interaction = [&](uint32_t last_interaction, uint32_t duration_ms) {
                   return last_interaction > 0 && (now - last_interaction) <= duration_ms;
                 };
@@ -3067,11 +3038,7 @@ script:
                   draw_footer_text(footer_line);
                 };
                 auto normalized_state_label = [&](const std::string &raw, const char *fallback = "SYNCING") {
-                  std::string label = upper(raw);
-                  if (label == "UNKNOWN" || label.empty()) {
-                    label = fallback;
-                  }
-                  return label;
+                  return remote_state_label(raw, fallback);
                 };
                 auto draw_centered_state = [&](const std::string &text, int y, bool compact = false) {
                   if (compact) {
