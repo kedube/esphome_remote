@@ -1,4 +1,4 @@
-# ESPHome OLED Remote
+# ESPHome Remote Control
 
 Replacement firmware for [Pawel Lugowksi's ESPHome OLED Remote Control](https://tech.lugowski.dev/guides/smart-oled-remote-esphome/). The hardware is built around an ESP32 Lolin32 WROOM (WIFI + Bluetooth) board, a 1.3-inch SH1106 128x64 OLED display, and physical buttons that provide a compact, battery-friendly UI for controlling Home Assistant entities directly from the handheld remote. 
 
