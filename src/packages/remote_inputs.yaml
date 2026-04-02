@@ -1,0 +1,180 @@
+# Hardware button inputs and their top-level wiring.
+binary_sensor:
+  - platform: gpio
+    pin:
+      allow_other_uses: true
+      number: ${PIN_WAKE}
+      ignore_strapping_warning: true
+      mode:
+        input: True
+        pullup: True
+    name: "Remote Power Button"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: turn_off
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_PREV}
+      mode:
+        input: True
+        pullup: True
+    name: "Previous Mode Item"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: previous_button_action
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_CONTRAST}
+      mode:
+        input: True
+        pullup: True
+    name: "OLED Contrast"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - if:
+            condition:
+              lambda: 'return id(current_mode) == REMOTE_MODE_MEDIA;'
+            then:
+              - if:
+                  condition:
+                    lambda: 'return id(selected_media_device_class) == "speaker";'
+                  then:
+                    - script.execute: media_play_stop
+                  else:
+                    - script.execute: media_toggle_power
+            else:
+              - lambda: |-
+                  id(contrast) += 1;
+                  if (id(contrast) > 10) id(contrast) = 1;
+                  float contrast_value = id(contrast) * 1.0 / 10;
+                  id(oled_display).set_contrast(contrast_value);
+                  id(last_contrast_interaction) = millis();
+                  id(updated_ui) = true;
+              - script.execute: persist_ui_state
+              - script.execute: update_display
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_NEXT}
+      mode:
+        input: True
+        pullup: True
+    name: "Next Mode Item"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: next_button_action
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_MODE}
+      mode:
+        input: True
+        pullup: True
+    name: "Cycle Remote Mode"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: cycle_mode
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_SETTINGS}
+      mode:
+        input: True
+        pullup: True
+    name: "Secondary Mode Action"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: secondary_mode_action
+
+  - platform: gpio
+    id: primary_mode_button
+    pin:
+      number: ${PIN_BTN_CIRCLE}
+      mode:
+        input: True
+        pullup: True
+    name: "Primary Mode Action"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: handle_primary_button_press
+    on_release:
+      then:
+        - script.execute: handle_primary_button_release
+
+  - platform: gpio
+    id: play_pause_mode_button
+    pin:
+      number: ${PIN_BTN_PLAY_PAUSE}
+      mode:
+        input: True
+        pullup: True
+    name: "Play Pause Mode Action"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: handle_play_pause_button_press
+    on_release:
+      then:
+        - script.execute: handle_play_pause_button_release
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_DIMMER_UP}
+      mode:
+        input: True
+        pullup: True
+    name: "Increase Mode Value"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: increase_mode_value
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_DIMMER_DOWN}
+      mode:
+        input: True
+        pullup: True
+    name: "Decrease Mode Value"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: decrease_mode_value

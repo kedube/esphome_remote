@@ -1,0 +1,135 @@
+# Background runtime timers and periodic refresh behavior.
+interval:
+  - interval: 500ms
+    then:
+      - if:
+          condition:
+            lambda: 'return (millis() / 1000) - id(last_active) >= ${SLEEP_DURATION};'
+          then:
+            - script.execute: turn_off
+          else:
+            - lambda: |-
+                uint32_t now = millis();
+                uint32_t elapsed = now - id(last_brightness_interaction);
+                if (elapsed > 3000 && elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t switch_elapsed = now - id(last_switch_interaction);
+                if (id(last_switch_interaction) > 0 && switch_elapsed > 5000 && switch_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t fan_speed_elapsed = now - id(last_fan_speed_interaction);
+                if (id(last_fan_speed_interaction) > 0 && fan_speed_elapsed > 3000 && fan_speed_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t humidifier_elapsed = now - id(last_humidifier_interaction);
+                if (id(last_humidifier_interaction) > 0 && humidifier_elapsed > 5000 && humidifier_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t humidifier_mode_elapsed = now - id(last_humidifier_mode_interaction);
+                if (id(last_humidifier_mode_interaction) > 0 && humidifier_mode_elapsed > 5000 &&
+                    humidifier_mode_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t climate_elapsed = now - id(last_climate_interaction);
+                if (id(last_climate_interaction) > 0 && climate_elapsed > 3000 && climate_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t lock_elapsed = now - id(last_lock_interaction);
+                if (id(last_lock_interaction) > 0 && lock_elapsed > 5000 && lock_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t cover_elapsed = now - id(last_cover_interaction);
+                if (id(last_cover_interaction) > 0 && cover_elapsed > 5000 && cover_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t cover_position_elapsed = now - id(last_cover_position_interaction);
+                if (id(last_cover_position_interaction) > 0 && cover_position_elapsed > 3000 &&
+                    cover_position_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t climate_target_focus_elapsed = now - id(last_climate_target_focus_interaction);
+                if (id(last_climate_target_focus_interaction) > 0 && climate_target_focus_elapsed > 5000 &&
+                    climate_target_focus_elapsed < 5500) {
+                  id(climate_target_focus) = 0;
+                  id(climate_target_focus_value) = NAN;
+                  id(last_climate_target_focus_interaction) = 0;
+                  id(updated_ui) = true;
+                }
+                uint32_t media_elapsed = now - id(last_media_volume_interaction);
+                if (id(last_media_volume_interaction) > 0 && media_elapsed > 3000 && media_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t media_source_elapsed = now - id(last_media_source_interaction);
+                if (id(last_media_source_interaction) > 0 && media_source_elapsed > 5000 &&
+                    media_source_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t media_power_elapsed = now - id(last_media_power_interaction);
+                if (id(last_media_power_interaction) > 0 && media_power_elapsed > 5000 &&
+                    media_power_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t automation_elapsed = now - id(last_automation_interaction);
+                if (id(last_automation_interaction) > 0 && automation_elapsed > 5000 && automation_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
+                uint32_t contrast_elapsed = now - id(last_contrast_interaction);
+                if (id(last_contrast_interaction) > 0 && contrast_elapsed > 3000 && contrast_elapsed < 3500) {
+                  id(updated_ui) = true;
+                }
+            - if:
+                condition:
+                  wifi.connected:
+                then:
+                  - if:
+                      condition:
+                        api.connected:
+                          state_subscription_only: true
+                      then:
+                        - if:
+                            condition:
+                              lambda: 'return id(show_boot_screen) && !id(low_battery_popup_active);'
+                            then:
+                              - if:
+                                  condition:
+                                    lambda: 'return id(battery_monitoring_available) && !id(low_battery_popup_shown) && !isnan(id(battery_voltage)) && id(battery_voltage) <= ${LOW_BATTERY_VOLTAGE};'
+                                  then:
+                                    - script.execute: show_low_battery_popup
+                                  else:
+                                    - lambda: |-
+                                        id(show_boot_screen) = false;
+                                        id(updated_ui) = true;
+            - if:
+                condition:
+                  lambda: 'return id(low_battery_popup_active);'
+                then:
+                  - lambda: 'return;'
+                else:
+                  - if:
+                      condition:
+                        lambda: 'return id(show_boot_screen);'
+                      then:
+                        - script.execute: boot_screen
+                      else:
+                        - if:
+                            condition:
+                              not:
+                                wifi.connected:
+                            then:
+                              - script.execute: wifi_disconnected_screen
+                            else:
+                              - if:
+                                  condition:
+                                    not:
+                                      api.connected:
+                                        state_subscription_only: true
+                                  then:
+                                    - script.execute: api_disconnected_screen
+                                  else:
+                                    - script.execute: sync_current_mode_status
+                                    - script.execute: update_display
+  - interval: 30min
+    then:
+      - lambda: |-
+          request_all_weather_status();

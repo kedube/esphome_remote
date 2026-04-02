@@ -1,0 +1,348 @@
+# Shared display and UI state definitions.
+display:
+  - platform: ssd1306_i2c
+    model: "SH1106 128x64"
+    address: 0x3C
+    rotation: 180
+    contrast: 0.5
+    id: oled_display
+
+globals:
+  - id: contrast
+    type: int
+    initial_value: '5'
+
+  - id: last_active
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: last_brightness_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_switch_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_contrast_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_climate_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_fan_speed_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_humidifier_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_humidifier_mode_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_lock_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_cover_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_cover_position_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_climate_target_focus_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_media_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_media_volume_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_media_source_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_media_power_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_automation_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_notification_dismiss_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: lock_verification_complete
+    type: bool
+    initial_value: 'false'
+
+  - id: cover_verification_complete
+    type: bool
+    initial_value: 'false'
+
+  - id: updated_ui
+    type: bool
+    initial_value: 'true'
+
+  - id: show_boot_screen
+    type: bool
+    initial_value: 'true'
+
+  - id: low_battery_popup_active
+    type: bool
+    initial_value: 'false'
+
+  - id: low_battery_popup_shown
+    type: bool
+    initial_value: 'false'
+
+  - id: persisted_ui_state
+    type: uint64_t
+    initial_value: '0'
+    restore_value: True
+
+  - id: persisted_ui_state_aux
+    type: uint32_t
+    initial_value: '0'
+    restore_value: True
+
+  - id: current_mode
+    type: int
+    initial_value: '0'
+
+  - id: selected_light_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_switch_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_fan_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_humidifier_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_climate_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_lock_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_cover_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_media_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_automation_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_weather_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_misc_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_item_name
+    type: std::string
+    initial_value: '"Office Light"'
+
+  - id: selected_item_entity
+    type: std::string
+    initial_value: '"light.office_light"'
+
+  - id: selected_item_state
+    type: std::string
+    initial_value: '"unknown"'
+
+  - id: selected_brightness_pct
+    type: int
+    initial_value: '0'
+
+  - id: selected_fan_speed_pct
+    type: int
+    initial_value: '0'
+
+  - id: selected_humidifier_target_humidity
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_humidifier_current_humidity
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_humidifier_action
+    type: std::string
+    initial_value: '"unknown"'
+
+  - id: selected_humidifier_mode
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_cover_position_pct
+    type: int
+    initial_value: '0'
+
+  - id: selected_climate_target_temp
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_climate_target_temp_low
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_climate_target_temp_high
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_climate_current_temp
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_climate_hvac_action
+    type: std::string
+    initial_value: '"unknown"'
+
+  - id: selected_climate_preset
+    type: std::string
+    initial_value: '""'
+
+  - id: last_climate_mode
+    type: std::string
+    initial_value: '"heat"'
+
+  - id: climate_target_focus
+    type: int
+    initial_value: '0'
+
+  - id: climate_target_focus_value
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_media_volume_pct
+    type: int
+    initial_value: '0'
+
+  - id: selected_media_title
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_media_artist
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_media_device_class
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_media_source
+    type: std::string
+    initial_value: '""'
+
+  - id: last_media_power_feedback
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_automation_state
+    type: std::string
+    initial_value: '"unknown"'
+
+  - id: last_automation_feedback
+    type: std::string
+    initial_value: '""'
+
+  - id: last_switch_feedback
+    type: std::string
+    initial_value: '""'
+
+  - id: last_lock_feedback
+    type: std::string
+    initial_value: '""'
+
+  - id: last_cover_feedback
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_weather_temperature
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_humidity
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_high_temp
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_low_temp
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_condition
+    type: std::string
+    initial_value: '"unknown"'
+
+  - id: battery_monitoring_available
+    type: bool
+    initial_value: 'false'
+
+  - id: battery_percentage
+    type: int
+    initial_value: '0'
+
+  - id: battery_voltage
+    type: float
+    initial_value: 'NAN'
+
+  - id: last_battery_update
+    type: uint32_t
+    initial_value: '0'
+
+  - id: primary_button_press_started_at
+    type: uint32_t
+    initial_value: '0'
+
+  - id: play_pause_button_press_started_at
+    type: uint32_t
+    initial_value: '0'
+
+  - id: primary_button_press_mode
+    type: int
+    initial_value: '-1'
+
+  - id: play_pause_button_press_mode
+    type: int
+    initial_value: '-1'
+
+  - id: primary_button_long_press_fired
+    type: bool
+    initial_value: 'false'
+
+  - id: play_pause_button_long_press_fired
+    type: bool
+    initial_value: 'false'
