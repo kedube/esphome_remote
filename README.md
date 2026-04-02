@@ -100,8 +100,12 @@ esphome_remote/
 
 Follow the official directions on the [ESPHome website](https://esphome.io/guides/installing_esphome/).
 
-On macOS, one simple option is Homebrew:
+If you're using MacOS, the easiest way to install is via [Homebrew](https://brew.sh/) by running this command in a MacOS terminal window:
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
 
+Now install ESPHome:
 ```bash
 brew install esphome
 ```
