@@ -54,7 +54,7 @@ This configuration is built around:
 - Physical navigation and action buttons
 - 3D Printed Case and Buttons
 
-Board-specific wiring is selected through the package include in [`src/oled_remote.yaml`](src/oled_remote.yaml):
+Board-specific wiring is selected through the package include in [`src/remoe_main.yaml`](src/remoe_main.yaml):
 
 - `pcb_proto.yaml`
   Prototype / older board mapping
@@ -81,7 +81,7 @@ esphome_remote/
     ├── fonts/
     │   └── arial-bold.ttf
     ├── local_entities-example.h
-    ├── oled_remote.yaml
+    ├── remoe_main.yaml
     ├── packages/
     │   ├── remote_display.yaml
     │   ├── remote_inputs.yaml
@@ -93,7 +93,7 @@ esphome_remote/
 
 ## Important Files
 
-- `src/oled_remote.yaml`
+- `src/remoe_main.yaml`
   Main ESPHome entrypoint that pulls together the board package, shared packages, secrets, and local entity definitions.
 - `src/entity_helpers.h`
   Shared C++ helper declarations used by the display and control logic.
@@ -227,7 +227,7 @@ In Notifications mode, pressing the circle or play/pause action button dismisses
 
 ## 5. Select The Correct PCB Package
 
-Open `src/oled_remote.yaml` and choose the board package that matches your hardware:
+Open `src/remoe_main.yaml` and choose the board package that matches your hardware:
 
 ```yaml
 packages:
@@ -239,13 +239,13 @@ packages:
 ## 6. Validate The Configuration
 
 ```bash
-esphome config src/oled_remote.yaml
+esphome config src/remoe_main.yaml
 ```
 
 ## 7. Build And Flash
 
 ```bash
-esphome run src/oled_remote.yaml
+esphome run src/remoe_main.yaml
 ```
 
 You must connect the remote via USB to your computer in order to perform the first flash. It will prompt you after a successful built for where to upload the code. After the first flash, future updates can be done over OTA.
@@ -261,7 +261,7 @@ Found multiple options for uploading, please choose one:
 
 If you want clean screenshots of the OLED UI, the project can expose the current framebuffer as a downloadable PBM image.
 
-Enable the framebuffer debug flag in [`src/oled_remote.yaml`](src/oled_remote.yaml):
+Enable the framebuffer debug flag in [`src/remoe_main.yaml`](src/remoe_main.yaml):
 
 ```yaml
 substitutions:
@@ -278,8 +278,8 @@ web_server:
 You can also use a CLI substitution override:
 
 ```bash
-esphome -s FRAMEBUFFER_WEB_DEBUG 1 config src/oled_remote.yaml
-esphome -s FRAMEBUFFER_WEB_DEBUG 1 run src/oled_remote.yaml
+esphome -s FRAMEBUFFER_WEB_DEBUG 1 config src/remoe_main.yaml
+esphome -s FRAMEBUFFER_WEB_DEBUG 1 run src/remoe_main.yaml
 ```
 
 After flashing, browse to:
@@ -326,7 +326,7 @@ Notes:
 
 ## Important Settings
 
-These substitutions near the top of `src/oled_remote.yaml` are the main things you may want to customize:
+These substitutions near the top of `src/remoe_main.yaml` are the main things you may want to customize:
 
 - `TEMPERATURE_UNIT`
   Set to `"F"` or `"C"` to match your Home Assistant climate values.
@@ -377,21 +377,21 @@ Ensure there are no typos in the entity name. You can check the list of entity n
 
 Make sure both of these are true:
 
-- `FRAMEBUFFER_WEB_DEBUG: "1"` is set in `src/oled_remote.yaml`
-- `web_server:` is uncommented in `src/oled_remote.yaml`
+- `FRAMEBUFFER_WEB_DEBUG: "1"` is set in `src/remoe_main.yaml`
+- `web_server:` is uncommented in `src/remoe_main.yaml`
 
 ### ESPHome compile or upload fails
 
 Start with:
 
 ```bash
-esphome config src/oled_remote.yaml
+esphome config src/remoe_main.yaml
 ```
 
 If validation succeeds, retry with:
 
 ```bash
-esphome run src/oled_remote.yaml
+esphome run src/remoe_main.yaml
 ```
 
 ## Related Links
