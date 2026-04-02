@@ -248,14 +248,16 @@ esphome config src/remote_main.yaml
 esphome run src/remote_main.yaml
 ```
 
-You must connect the remote via USB to your computer in order to perform the first flash. It will prompt you after a successful built for where to upload the code. After the first flash, future updates can be done over OTA.
+You must connect the remote via USB to your computer in order to perform the first flash. It will prompt you after a successful build for where to upload the code. After the first flash, future updates can be done over OTA.
 
-```INFO Build Info: config_hash=0x694d2e36 build_time_str=2026-04-01 14:02:17 -0400
+```text
+INFO Build Info: config_hash=0x694d2e36 build_time_str=2026-04-01 14:02:17 -0400
 INFO Successfully compiled program.
 Found multiple options for uploading, please choose one:
   [1] /dev/cu.usbserial-8320 (USB Serial)
   [2] Over The Air (esp32-remote.local)
-(number):```
+(number):
+```
 
 ## Optional Framebuffer Download Debugging
 
