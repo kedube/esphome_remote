@@ -18,7 +18,7 @@ enum RemoteMode {
   REMOTE_MODE_CLIMATE = 2,
   REMOTE_MODE_HUMIDIFIERS = 3,
   REMOTE_MODE_FANS = 4,
-  REMOTE_MODE_SHADES = 5,
+  REMOTE_MODE_COVERS = 5,
   REMOTE_MODE_LOCKS = 6,
   REMOTE_MODE_MEDIA = 7,
   REMOTE_MODE_SENSORS = 8,
@@ -36,7 +36,7 @@ static constexpr RemoteMode MENU_MODE_ORDER[] = {
     REMOTE_MODE_CLIMATE,
     REMOTE_MODE_HUMIDIFIERS,
     REMOTE_MODE_FANS,
-    REMOTE_MODE_SHADES,
+    REMOTE_MODE_COVERS,
     REMOTE_MODE_LOCKS,
     REMOTE_MODE_MEDIA,
     REMOTE_MODE_SENSORS,
@@ -300,8 +300,8 @@ static inline const char *mode_title(RemoteMode mode) {
       return "HUMIDIFIERS";
     case REMOTE_MODE_FANS:
       return "FANS";
-    case REMOTE_MODE_SHADES:
-      return "SHADES";
+    case REMOTE_MODE_COVERS:
+      return "COVERS";
     case REMOTE_MODE_LOCKS:
       return "DOOR LOCKS";
     case REMOTE_MODE_MEDIA:
@@ -335,7 +335,7 @@ static inline const char *mode_icon(RemoteMode mode) {
       return "\uf165";
     case REMOTE_MODE_FANS:
       return "\uf168";
-    case REMOTE_MODE_SHADES:
+    case REMOTE_MODE_COVERS:
       return "\ue286";
     case REMOTE_MODE_LOCKS:
       return "\ue897";
@@ -370,7 +370,7 @@ static inline int mode_item_count(RemoteMode mode) {
       return HUMIDIFIER_LIST_COUNT;
     case REMOTE_MODE_FANS:
       return FAN_LIST_COUNT;
-    case REMOTE_MODE_SHADES:
+    case REMOTE_MODE_COVERS:
       return COVER_LIST_COUNT;
     case REMOTE_MODE_LOCKS:
       return LOCK_LIST_COUNT;
@@ -441,7 +441,7 @@ static inline std::string mode_item_name(RemoteMode mode, int idx) {
       return indexed_entity_name(HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, idx);
     case REMOTE_MODE_FANS:
       return indexed_entity_name(FAN_LIST, FAN_LIST_COUNT, idx);
-    case REMOTE_MODE_SHADES:
+    case REMOTE_MODE_COVERS:
       return indexed_entity_name(COVER_LIST, COVER_LIST_COUNT, idx);
     case REMOTE_MODE_LOCKS:
       return indexed_entity_name(LOCK_LIST, LOCK_LIST_COUNT, idx);
@@ -476,7 +476,7 @@ static inline std::string mode_item_entity(RemoteMode mode, int idx) {
       return indexed_entity_id(HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, idx);
     case REMOTE_MODE_FANS:
       return indexed_entity_id(FAN_LIST, FAN_LIST_COUNT, idx);
-    case REMOTE_MODE_SHADES:
+    case REMOTE_MODE_COVERS:
       return indexed_entity_id(COVER_LIST, COVER_LIST_COUNT, idx);
     case REMOTE_MODE_LOCKS:
       return indexed_entity_id(LOCK_LIST, LOCK_LIST_COUNT, idx);
@@ -553,7 +553,7 @@ static inline int &selected_index_ref(
       return humidifier_idx;
     case REMOTE_MODE_FANS:
       return fan_idx;
-    case REMOTE_MODE_SHADES:
+    case REMOTE_MODE_COVERS:
       return cover_idx;
     case REMOTE_MODE_LOCKS:
       return lock_idx;
@@ -2211,7 +2211,7 @@ static inline void request_mode_status(RemoteMode mode, int idx) {
     case REMOTE_MODE_LOCKS:
       request_selected_lock_status(idx);
       break;
-    case REMOTE_MODE_SHADES:
+    case REMOTE_MODE_COVERS:
       request_selected_cover_status(idx);
       break;
     case REMOTE_MODE_MEDIA:

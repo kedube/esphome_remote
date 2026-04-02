@@ -34,7 +34,7 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 - Climate
 - Humidifiers
 - Fans
-- Shades / covers
+- Covers
 - Locks
 - Media players
 - Sensors

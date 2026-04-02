@@ -124,7 +124,7 @@ esphome:
                 case 3:
                   return REMOTE_MODE_LOCKS;
                 case 4:
-                  return REMOTE_MODE_SHADES;
+                  return REMOTE_MODE_COVERS;
                 case 5:
                   return REMOTE_MODE_MEDIA;
                 case 6:
@@ -154,7 +154,7 @@ esphome:
                 case 4:
                   return REMOTE_MODE_FANS;
                 case 5:
-                  return REMOTE_MODE_SHADES;
+                  return REMOTE_MODE_COVERS;
                 case 6:
                   return REMOTE_MODE_LOCKS;
                 case 7:
@@ -182,7 +182,7 @@ esphome:
                 case 4:
                   return REMOTE_MODE_FANS;
                 case 5:
-                  return REMOTE_MODE_SHADES;
+                  return REMOTE_MODE_COVERS;
                 case 6:
                   return REMOTE_MODE_LOCKS;
                 case 7:
@@ -447,6 +447,10 @@ globals:
     initial_value: '0'
 
   - id: lock_verification_complete
+    type: bool
+    initial_value: 'false'
+
+  - id: cover_verification_complete
     type: bool
     initial_value: 'false'
 
@@ -1294,7 +1298,7 @@ script:
               id(selected_item_state) = state;
               id(updated_ui) = true;
             }
-          } else if (mode == REMOTE_MODE_SHADES) {
+          } else if (mode == REMOTE_MODE_COVERS) {
             const std::string &state = selected_cover_state(idx);
             float position = selected_cover_position(idx);
             bool changed = false;
@@ -1532,7 +1536,7 @@ script:
               }
             } else if (mode == REMOTE_MODE_LOCKS) {
               id(lock_selected_lock).execute();
-            } else if (mode == REMOTE_MODE_SHADES) {
+            } else if (mode == REMOTE_MODE_COVERS) {
               id(open_selected_cover).execute();
             } else if (mode == REMOTE_MODE_MEDIA) {
               id(select_next_item).execute();
@@ -1561,7 +1565,7 @@ script:
               }
             } else if (mode == REMOTE_MODE_LOCKS) {
               id(unlock_selected_lock).execute();
-            } else if (mode == REMOTE_MODE_SHADES) {
+            } else if (mode == REMOTE_MODE_COVERS) {
               id(close_selected_cover).execute();
             } else if (mode == REMOTE_MODE_MEDIA) {
               id(media_play_pause).execute();
@@ -1582,7 +1586,7 @@ script:
               id(increase_fan_speed).execute();
             } else if (mode == REMOTE_MODE_HUMIDIFIERS) {
               id(humidifier_target_up).execute();
-            } else if (mode == REMOTE_MODE_SHADES) {
+            } else if (mode == REMOTE_MODE_COVERS) {
               id(increase_cover_position).execute();
             } else if (mode == REMOTE_MODE_CLIMATE) {
               id(climate_temperature_up).execute();
@@ -1601,7 +1605,7 @@ script:
               id(decrease_fan_speed).execute();
             } else if (mode == REMOTE_MODE_HUMIDIFIERS) {
               id(humidifier_target_down).execute();
-            } else if (mode == REMOTE_MODE_SHADES) {
+            } else if (mode == REMOTE_MODE_COVERS) {
               id(decrease_cover_position).execute();
             } else if (mode == REMOTE_MODE_CLIMATE) {
               id(climate_temperature_down).execute();
@@ -1945,56 +1949,120 @@ script:
                 }
                 id(lock_verification_complete) = true;
 
+  - id: verify_selected_cover_result
+    mode: restart
+    parameters:
+      expected_state: std::string
+      success_feedback: std::string
+    then:
+      - lambda: |-
+          id(cover_verification_complete) = false;
+      - repeat:
+          count: 8
+          then:
+            - if:
+                condition:
+                  lambda: 'return !id(cover_verification_complete);'
+                then:
+                  - lambda: |-
+                      request_selected_cover_status(id(selected_cover_index));
+                  - delay: 1000ms
+                  - lambda: |-
+                      const std::string state = selected_cover_state(id(selected_cover_index));
+                      const float position = selected_cover_position(id(selected_cover_index));
+                      const bool reached_open = state == "open" || (!isnan(position) && position >= 99.0f);
+                      const bool reached_closed = state == "closed" || (!isnan(position) && position <= 1.0f);
+
+                      if ((expected_state == "open" && reached_open) ||
+                          (expected_state == "closed" && reached_closed)) {
+                        id(set_cover_feedback).execute(success_feedback);
+                        id(cover_verification_complete) = true;
+                      } else if (state == "opening") {
+                        id(set_cover_feedback).execute("OPENING...");
+                      } else if (state == "closing") {
+                        id(set_cover_feedback).execute("CLOSING...");
+                      } else if (!isnan(position) && position > 0.0f && position < 100.0f) {
+                        char buffer[16];
+                        snprintf(buffer, sizeof(buffer), "OPEN %d%%", (int) roundf(position));
+                        id(set_cover_feedback).execute(std::string(buffer));
+                      }
+      - if:
+          condition:
+            lambda: 'return !id(cover_verification_complete);'
+          then:
+            - lambda: |-
+                request_selected_cover_status(id(selected_cover_index));
+            - delay: 500ms
+            - lambda: |-
+                const std::string state = selected_cover_state(id(selected_cover_index));
+                const float position = selected_cover_position(id(selected_cover_index));
+                const bool reached_open = state == "open" || (!isnan(position) && position >= 99.0f);
+                const bool reached_closed = state == "closed" || (!isnan(position) && position <= 1.0f);
+
+                if ((expected_state == "open" && reached_open) ||
+                    (expected_state == "closed" && reached_closed)) {
+                  id(set_cover_feedback).execute(success_feedback);
+                } else if (!isnan(position) && position > 0.0f && position < 100.0f) {
+                  char buffer[16];
+                  snprintf(buffer, sizeof(buffer), "OPEN %d%%", (int) roundf(position));
+                  id(set_cover_feedback).execute(std::string(buffer));
+                }
+                id(cover_verification_complete) = true;
+
   - id: open_selected_cover
     mode: queued
     then:
+      - script.execute:
+          id: set_cover_feedback
+          feedback: "OPENING..."
       - lambda: |-
-          id(last_cover_feedback) = "";
           id(selected_item_state) = "opening";
           if (id(selected_cover_position_pct) <= 0) {
             id(selected_cover_position_pct) = 100;
           }
           id(updated_ui) = true;
-      - script.execute: update_display
       - homeassistant.action:
           action: cover.open_cover
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
           on_success:
-            - script.execute:
-                id: set_cover_feedback
-                feedback: "SUCCESS"
             - lambda: |-
                 request_selected_cover_status(id(selected_cover_index));
+            - script.execute:
+                id: verify_selected_cover_result
+                expected_state: "open"
+                success_feedback: "OPENED"
           on_error:
             - script.execute:
                 id: set_cover_feedback
-                feedback: "FAILED"
+                feedback: "OPEN FAILED"
             - lambda: |-
                 request_selected_cover_status(id(selected_cover_index));
 
   - id: close_selected_cover
     mode: queued
     then:
+      - script.execute:
+          id: set_cover_feedback
+          feedback: "CLOSING..."
       - lambda: |-
-          id(last_cover_feedback) = "";
           id(selected_item_state) = "closing";
           id(updated_ui) = true;
-      - script.execute: update_display
       - homeassistant.action:
           action: cover.close_cover
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
           on_success:
-            - script.execute:
-                id: set_cover_feedback
-                feedback: "SUCCESS"
             - lambda: |-
                 request_selected_cover_status(id(selected_cover_index));
+            - script.execute:
+                id: verify_selected_cover_result
+                expected_state: "closed"
+                success_feedback: "CLOSED"
           on_error:
             - script.execute:
                 id: set_cover_feedback
-                feedback: "FAILED"
+                feedback: "CLOSE FAILED"
             - lambda: |-
                 request_selected_cover_status(id(selected_cover_index));
 
@@ -2736,7 +2804,7 @@ script:
             feedback = action == MODE_ACTION_PLAY_PAUSE ? "HOLD TO UNLOCK" : "HOLD TO LOCK";
             id(last_lock_feedback) = feedback;
             id(last_lock_interaction) = millis();
-          } else if (mode == REMOTE_MODE_SHADES) {
+          } else if (mode == REMOTE_MODE_COVERS) {
             feedback = action == MODE_ACTION_PLAY_PAUSE ? "HOLD TO CLOSE" : "HOLD TO OPEN";
             id(last_cover_feedback) = feedback;
             id(last_cover_interaction) = millis();
@@ -2787,7 +2855,7 @@ script:
       - lambda: |-
           RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
           bool requires_long_press =
-              mode == REMOTE_MODE_LOCKS || mode == REMOTE_MODE_SHADES || mode == REMOTE_MODE_AUTOMATION;
+              mode == REMOTE_MODE_LOCKS || mode == REMOTE_MODE_COVERS || mode == REMOTE_MODE_AUTOMATION;
 
           if (!requires_long_press) {
             id(primary_button_press_started_at) = 0;
@@ -2827,7 +2895,7 @@ script:
       - lambda: |-
           RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
           bool requires_long_press =
-              mode == REMOTE_MODE_LOCKS || mode == REMOTE_MODE_SHADES || mode == REMOTE_MODE_AUTOMATION;
+              mode == REMOTE_MODE_LOCKS || mode == REMOTE_MODE_COVERS || mode == REMOTE_MODE_AUTOMATION;
 
           if (!requires_long_press) {
             id(play_pause_button_press_started_at) = 0;
@@ -2940,7 +3008,7 @@ script:
                     mode == REMOTE_MODE_HUMIDIFIERS;
                 bool show_cover_position_bar =
                     recent_interaction(id(last_cover_position_interaction), 3000) &&
-                    mode == REMOTE_MODE_SHADES;
+                    mode == REMOTE_MODE_COVERS;
                 bool show_switch_feedback =
                     recent_interaction(id(last_switch_interaction), 5000) &&
                     mode == REMOTE_MODE_SWITCHES;
@@ -2954,7 +3022,7 @@ script:
                     mode == REMOTE_MODE_LOCKS;
                 bool show_cover_feedback =
                     recent_interaction(id(last_cover_interaction), 5000) &&
-                    mode == REMOTE_MODE_SHADES;
+                    mode == REMOTE_MODE_COVERS;
                 bool show_media_feedback =
                     recent_interaction(id(last_media_volume_interaction), 3000) &&
                     mode == REMOTE_MODE_MEDIA;
@@ -3231,7 +3299,7 @@ script:
                     break;
                   }
 
-                  case REMOTE_MODE_SHADES: {
+                  case REMOTE_MODE_COVERS: {
                     std::string cover_state = upper(id(selected_item_state));
                     std::string cover_feedback = upper(id(last_cover_feedback));
                     if (cover_state == "UNKNOWN" || cover_state.empty()) {
