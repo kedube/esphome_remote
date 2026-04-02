@@ -446,6 +446,10 @@ globals:
     type: uint32_t
     initial_value: '0'
 
+  - id: lock_verification_complete
+    type: bool
+    initial_value: 'false'
+
   - id: updated_ui
     type: bool
     initial_value: 'true'
@@ -1819,52 +1823,127 @@ script:
   - id: lock_selected_lock
     mode: queued
     then:
+      - if:
+          condition:
+            lambda: |-
+              return id(selected_item_state) == "locked" || id(selected_item_state) == "locking";
+          then:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: !lambda |-
+                  return id(selected_item_state) == "locking" ? std::string("LOCKING...") : std::string("ALREADY LOCKED");
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+            - script.stop: lock_selected_lock
+      - script.execute:
+          id: set_lock_feedback
+          feedback: "LOCKING..."
       - lambda: |-
-          id(last_lock_feedback) = "";
           id(selected_item_state) = "locking";
           id(updated_ui) = true;
-      - script.execute: update_display
       - homeassistant.action:
           action: lock.lock
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
           on_success:
-            - script.execute:
-                id: set_lock_feedback
-                feedback: "SUCCESS"
             - lambda: |-
                 request_selected_lock_status(id(selected_lock_index));
+            - script.execute:
+                id: verify_selected_lock_result
+                expected_state: "locked"
+                success_feedback: "LOCKED"
           on_error:
             - script.execute:
                 id: set_lock_feedback
-                feedback: "FAILED"
+                feedback: "LOCK FAILED"
             - lambda: |-
                 request_selected_lock_status(id(selected_lock_index));
 
   - id: unlock_selected_lock
     mode: queued
     then:
+      - if:
+          condition:
+            lambda: |-
+              return id(selected_item_state) == "unlocked" || id(selected_item_state) == "unlocking";
+          then:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: !lambda |-
+                  return id(selected_item_state) == "unlocking" ? std::string("UNLOCKING...") : std::string("ALREADY UNLOCKED");
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+            - script.stop: unlock_selected_lock
+      - script.execute:
+          id: set_lock_feedback
+          feedback: "UNLOCKING..."
       - lambda: |-
-          id(last_lock_feedback) = "";
           id(selected_item_state) = "unlocking";
           id(updated_ui) = true;
-      - script.execute: update_display
       - homeassistant.action:
           action: lock.unlock
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
           on_success:
-            - script.execute:
-                id: set_lock_feedback
-                feedback: "SUCCESS"
             - lambda: |-
                 request_selected_lock_status(id(selected_lock_index));
+            - script.execute:
+                id: verify_selected_lock_result
+                expected_state: "unlocked"
+                success_feedback: "UNLOCKED"
           on_error:
             - script.execute:
                 id: set_lock_feedback
-                feedback: "FAILED"
+                feedback: "UNLOCK FAILED"
             - lambda: |-
                 request_selected_lock_status(id(selected_lock_index));
+
+  - id: verify_selected_lock_result
+    mode: restart
+    parameters:
+      expected_state: std::string
+      success_feedback: std::string
+    then:
+      - lambda: |-
+          id(lock_verification_complete) = false;
+      - repeat:
+          count: 5
+          then:
+            - if:
+                condition:
+                  lambda: 'return !id(lock_verification_complete);'
+                then:
+                  - lambda: |-
+                      request_selected_lock_status(id(selected_lock_index));
+                  - delay: 1000ms
+                  - lambda: |-
+                      const std::string state = selected_lock_state(id(selected_lock_index));
+                      if (state == expected_state) {
+                        id(set_lock_feedback).execute(success_feedback);
+                        id(lock_verification_complete) = true;
+                      } else if (state == "jammed") {
+                        id(set_lock_feedback).execute("JAMMED");
+                        id(lock_verification_complete) = true;
+                      } else if (state == "locking") {
+                        id(set_lock_feedback).execute("LOCKING...");
+                      } else if (state == "unlocking") {
+                        id(set_lock_feedback).execute("UNLOCKING...");
+                      }
+      - if:
+          condition:
+            lambda: 'return !id(lock_verification_complete);'
+          then:
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+            - delay: 500ms
+            - lambda: |-
+                const std::string state = selected_lock_state(id(selected_lock_index));
+                if (state == expected_state) {
+                  id(set_lock_feedback).execute(success_feedback);
+                } else if (state == "jammed") {
+                  id(set_lock_feedback).execute("JAMMED");
+                }
+                id(lock_verification_complete) = true;
 
   - id: open_selected_cover
     mode: queued
@@ -2518,9 +2597,41 @@ script:
           id: adjust_media_volume
           delta: -5
 
+  - id: verify_selected_script_result
+    mode: restart
+    then:
+      - repeat:
+          count: 8
+          then:
+            - lambda: |-
+                request_selected_automation_status(id(selected_automation_index));
+            - delay: 1000ms
+            - if:
+                condition:
+                  lambda: |-
+                    const std::string state = automation_state_for_index(id(selected_automation_index));
+                    return state == "off" || state == "idle";
+                then:
+                  - script.execute:
+                      id: set_automation_feedback
+                      feedback: "COMPLETED"
+                  - script.stop: verify_selected_script_result
+
   - id: trigger_selected_automation
     mode: queued
     then:
+      - lambda: |-
+          AutomationKind kind = automation_kind(id(selected_automation_index));
+          if (kind == AUTOMATION_KIND_SCRIPT) {
+            id(last_automation_feedback) = "RUNNING...";
+          } else if (kind == AUTOMATION_KIND_SCENE) {
+            id(last_automation_feedback) = "ACTIVATING...";
+          } else {
+            id(last_automation_feedback) = "TRIGGERING...";
+          }
+          id(last_automation_interaction) = millis();
+          id(updated_ui) = true;
+      - script.execute: update_display
       - if:
           condition:
             lambda: 'return automation_kind(id(selected_automation_index)) == AUTOMATION_KIND_AUTOMATION;'
@@ -2532,7 +2643,7 @@ script:
                 on_success:
                   - script.execute:
                       id: set_automation_feedback
-                      feedback: "SUCCESS"
+                      feedback: "TRIGGERED"
                 on_error:
                   - script.execute:
                       id: set_automation_feedback
@@ -2549,7 +2660,7 @@ script:
                       on_success:
                         - script.execute:
                             id: set_automation_feedback
-                            feedback: "SUCCESS"
+                            feedback: "ACTIVATED"
                       on_error:
                         - script.execute:
                             id: set_automation_feedback
@@ -2562,7 +2673,10 @@ script:
                       on_success:
                         - script.execute:
                             id: set_automation_feedback
-                            feedback: "SUCCESS"
+                            feedback: "STARTED"
+                        - lambda: |-
+                            request_selected_automation_status(id(selected_automation_index));
+                        - script.execute: verify_selected_script_result
                       on_error:
                         - script.execute:
                             id: set_automation_feedback
