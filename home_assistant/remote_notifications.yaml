@@ -1,0 +1,138 @@
+template:
+  - trigger:
+      - id: start
+        trigger: homeassistant
+        event: start
+      - id: notify
+        trigger: persistent_notification
+        update_type:
+          - added
+          - updated
+          - removed
+    sensor:
+      - name: Remote Notifications
+        unique_id: remote_notifications
+        icon: mdi:bell-badge
+        state: >-
+          {% set items = this.attributes.get('notifications', []) %}
+          {% if trigger.id == 'start' %}
+            0
+          {% elif trigger.id == 'notify' and trigger.update_type in ['added', 'updated'] %}
+            {% set notification_id = trigger.notification.notification_id | default('', true) | string %}
+            {% set title = trigger.notification.title | default('', true) | string | trim %}
+            {% set message = trigger.notification.message | default('', true) | string | trim %}
+            {% set text = ((title ~ ': ' if title else '') ~ message)
+                | replace('\r', ' ')
+                | replace('\n', ' ')
+                | replace('\t', ' ')
+                | replace('||', '|')
+                | trim %}
+            {% set filtered = items | rejectattr('id', 'eq', notification_id) | list %}
+            {{ (filtered + ([{
+              'id': notification_id,
+              'text': text,
+              'created_at': trigger.notification.created_at.isoformat()
+                if trigger.notification.created_at is defined and trigger.notification.created_at
+                else now().isoformat()
+            }] if notification_id and text else [])) | count }}
+          {% elif trigger.id == 'notify' and trigger.update_type == 'removed' %}
+            {{ (items | rejectattr('id', 'eq', trigger.notification.notification_id) | list) | count }}
+          {% else %}
+            {{ items | count }}
+          {% endif %}
+        attributes:
+          notifications: >-
+            {% set items = this.attributes.get('notifications', []) %}
+            {% if trigger.id == 'start' %}
+              {{ [] }}
+            {% elif trigger.id == 'notify' and trigger.update_type in ['added', 'updated'] %}
+              {% set notification_id = trigger.notification.notification_id | default('', true) | string %}
+              {% set title = trigger.notification.title | default('', true) | string | trim %}
+              {% set message = trigger.notification.message | default('', true) | string | trim %}
+              {% set text = ((title ~ ': ' if title else '') ~ message)
+                  | replace('\r', ' ')
+                  | replace('\n', ' ')
+                  | replace('\t', ' ')
+                  | replace('||', '|')
+                  | trim %}
+              {% set filtered = items | rejectattr('id', 'eq', notification_id) | list %}
+              {% if notification_id and text %}
+                {{ filtered + [{
+                  'id': notification_id,
+                  'text': text,
+                  'created_at': trigger.notification.created_at.isoformat()
+                    if trigger.notification.created_at is defined and trigger.notification.created_at
+                    else now().isoformat()
+                }] }}
+              {% else %}
+                {{ filtered }}
+              {% endif %}
+            {% elif trigger.id == 'notify' and trigger.update_type == 'removed' %}
+              {{ items | rejectattr('id', 'eq', trigger.notification.notification_id) | list }}
+            {% else %}
+              {{ items }}
+            {% endif %}
+          messages: >-
+            {% set items = this.attributes.get('notifications', []) %}
+            {% if trigger.id == 'start' %}
+              {% set current = [] %}
+            {% elif trigger.id == 'notify' and trigger.update_type in ['added', 'updated'] %}
+              {% set notification_id = trigger.notification.notification_id | default('', true) | string %}
+              {% set title = trigger.notification.title | default('', true) | string | trim %}
+              {% set message = trigger.notification.message | default('', true) | string | trim %}
+              {% set text = ((title ~ ': ' if title else '') ~ message)
+                  | replace('\r', ' ')
+                  | replace('\n', ' ')
+                  | replace('\t', ' ')
+                  | replace('||', '|')
+                  | trim %}
+              {% set filtered = items | rejectattr('id', 'eq', notification_id) | list %}
+              {% set current = filtered + ([{
+                'id': notification_id,
+                'text': text,
+                'created_at': trigger.notification.created_at.isoformat()
+                  if trigger.notification.created_at is defined and trigger.notification.created_at
+                  else now().isoformat()
+              }] if notification_id and text else []) %}
+            {% elif trigger.id == 'notify' and trigger.update_type == 'removed' %}
+              {% set current = items | rejectattr('id', 'eq', trigger.notification.notification_id) | list %}
+            {% else %}
+              {% set current = items %}
+            {% endif %}
+            {% set texts = current
+                | sort(attribute='created_at', reverse=true)
+                | map(attribute='text')
+                | list %}
+            {{ texts | join('||') if texts else 'none' }}
+          ids: >-
+            {% set items = this.attributes.get('notifications', []) %}
+            {% if trigger.id == 'start' %}
+              {% set current = [] %}
+            {% elif trigger.id == 'notify' and trigger.update_type in ['added', 'updated'] %}
+              {% set notification_id = trigger.notification.notification_id | default('', true) | string %}
+              {% set title = trigger.notification.title | default('', true) | string | trim %}
+              {% set message = trigger.notification.message | default('', true) | string | trim %}
+              {% set text = ((title ~ ': ' if title else '') ~ message)
+                  | replace('\r', ' ')
+                  | replace('\n', ' ')
+                  | replace('\t', ' ')
+                  | replace('||', '|')
+                  | trim %}
+              {% set filtered = items | rejectattr('id', 'eq', notification_id) | list %}
+              {% set current = filtered + ([{
+                'id': notification_id,
+                'text': text,
+                'created_at': trigger.notification.created_at.isoformat()
+                  if trigger.notification.created_at is defined and trigger.notification.created_at
+                  else now().isoformat()
+              }] if notification_id and text else []) %}
+            {% elif trigger.id == 'notify' and trigger.update_type == 'removed' %}
+              {% set current = items | rejectattr('id', 'eq', trigger.notification.notification_id) | list %}
+            {% else %}
+              {% set current = items %}
+            {% endif %}
+            {% set ids = current
+                | sort(attribute='created_at', reverse=true)
+                | map(attribute='id')
+                | list %}
+            {{ ids | join('||') if ids else 'none' }}

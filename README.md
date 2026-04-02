@@ -180,8 +180,9 @@ static const WeatherEntity WEATHER_LIST[] = {};
 Notifications are configured in the same file with optional feed defines:
 
 ```cpp
-#define NOTIFICATION_FEED_ENTITY "sensor.persistent_notifications"
+#define NOTIFICATION_FEED_ENTITY "sensor.remote_notifications"
 #define NOTIFICATION_FEED_ATTRIBUTE "messages"
+#define NOTIFICATION_FEED_IDS_ATTRIBUTE "ids"
 #define NOTIFICATION_FEED_SEPARATOR "||"
 ```
 
@@ -190,7 +191,21 @@ Notes:
 - Set `NOTIFICATION_FEED_ENTITY` to an empty string to hide Notifications mode completely.
 - `NOTIFICATION_FEED_ENTITY` is the Home Assistant entity the remote reads from.
 - `NOTIFICATION_FEED_ATTRIBUTE` is the attribute on that entity containing the notification payload.
+- `NOTIFICATION_FEED_IDS_ATTRIBUTE` is the attribute on that entity containing notification IDs for dismiss actions.
 - `NOTIFICATION_FEED_SEPARATOR` is used when multiple notifications are packed into one string.
+
+If Home Assistant no longer exposes a ready-made `sensor.persistent_notifications`, add the included template sensor on the Home Assistant side to recreate the feed the remote expects.
+
+Copy [`home_assistant/remote_notifications.yaml`](/esphome_remote/home_assistant/remote_notifications.yaml) into your Home Assistant `template:` configuration, or include it as a package. It publishes:
+
+- `sensor.remote_notifications`
+- state = current notification count
+- attribute `messages` = all active persistent notifications packed into one `||`-separated string
+- attribute `ids` = matching persistent notification IDs packed in the same order
+
+This bridge is event-driven. It listens for Home Assistant `persistent_notification` updates, stores the active notification list in the template sensor’s own attributes, and exposes a `messages` attribute that the remote can read. Each item is emitted as `Title: Message`, with newlines flattened to spaces so the remote can render them cleanly.
+
+In Notifications mode, pressing the circle or play/pause action button dismisses the currently selected persistent notification.
 
 ## 5. Select The Correct PCB Package
 

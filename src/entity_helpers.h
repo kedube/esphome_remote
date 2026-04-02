@@ -135,6 +135,10 @@ static constexpr int NOTIFICATION_FEED_MAX_ITEMS = 16;
 #define NOTIFICATION_FEED_ATTRIBUTE "messages"
 #endif
 
+#ifndef NOTIFICATION_FEED_IDS_ATTRIBUTE
+#define NOTIFICATION_FEED_IDS_ATTRIBUTE "ids"
+#endif
+
 #ifndef NOTIFICATION_FEED_SEPARATOR
 #define NOTIFICATION_FEED_SEPARATOR "||"
 #endif
@@ -142,6 +146,7 @@ static constexpr int NOTIFICATION_FEED_MAX_ITEMS = 16;
 static inline int notification_mode_item_count();
 static inline std::string notification_mode_item_name(int idx);
 static inline std::string notification_mode_item_entity(int idx);
+static inline const std::string &notification_id_for_index(int idx);
 static inline const std::string &media_source_list_for_index(int idx);
 static inline const std::string &media_device_class_for_index(int idx);
 
@@ -1678,13 +1683,24 @@ class NotificationFeedTracker : public esphome::api::CustomAPIDevice {
     this->subscribe_homeassistant_state(
         &NotificationFeedTracker::on_payload_, notification_feed_entity_(),
         notification_feed_attribute_());
+    this->subscribe_homeassistant_state(
+        &NotificationFeedTracker::on_ids_payload_, notification_feed_entity_(),
+        notification_feed_ids_attribute_());
     this->request_notifications();
   }
 
   void request_notifications() {
     if (notification_feed_entity_()[0] == '\0') {
       this->clear_();
+      return;
     }
+
+    esphome::api::global_api_server->get_home_assistant_state(
+        notification_feed_entity_(), notification_feed_attribute_(),
+        [this](esphome::StringRef state) { this->on_payload_(state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        notification_feed_entity_(), notification_feed_ids_attribute_(),
+        [this](esphome::StringRef state) { this->on_ids_payload_(state); });
   }
 
   int item_count() const { return this->count_ > 0 ? this->count_ : 1; }
@@ -1705,6 +1721,14 @@ class NotificationFeedTracker : public esphome::api::CustomAPIDevice {
     }
     idx = clamp_mode_index(idx, this->count_);
     return this->messages_[idx];
+  }
+
+  const std::string &notification_id(int idx) const {
+    if (this->count_ <= 0) {
+      return empty_string();
+    }
+    idx = clamp_mode_index(idx, this->count_);
+    return this->ids_[idx];
   }
 
  private:
@@ -1728,6 +1752,10 @@ class NotificationFeedTracker : public esphome::api::CustomAPIDevice {
     return (NOTIFICATION_FEED_ATTRIBUTE[0] == '\0') ? "messages" : NOTIFICATION_FEED_ATTRIBUTE;
   }
 
+  static const char *notification_feed_ids_attribute_() {
+    return (NOTIFICATION_FEED_IDS_ATTRIBUTE[0] == '\0') ? "ids" : NOTIFICATION_FEED_IDS_ATTRIBUTE;
+  }
+
   static std::string notification_feed_separator_() {
     std::string separator = NOTIFICATION_FEED_SEPARATOR;
     return separator.empty() ? std::string("||") : separator;
@@ -1737,6 +1765,7 @@ class NotificationFeedTracker : public esphome::api::CustomAPIDevice {
     this->count_ = 0;
     for (int i = 0; i < NOTIFICATION_FEED_MAX_ITEMS; i++) {
       this->messages_[i].clear();
+      this->ids_[i].clear();
     }
   }
 
@@ -1762,8 +1791,34 @@ class NotificationFeedTracker : public esphome::api::CustomAPIDevice {
     }
   }
 
+  void on_ids_payload_(esphome::StringRef state) {
+    std::string payload = trim_copy_(state.str());
+    for (int i = 0; i < NOTIFICATION_FEED_MAX_ITEMS; i++) {
+      this->ids_[i].clear();
+    }
+    if (ha_state_missing(payload) || payload == "[]" || payload == "none") {
+      return;
+    }
+
+    const std::string separator = notification_feed_separator_();
+    size_t start = 0;
+    int idx = 0;
+    while (start <= payload.size() && idx < NOTIFICATION_FEED_MAX_ITEMS) {
+      size_t end = payload.find(separator, start);
+      std::string item = trim_copy_(payload.substr(start, end == std::string::npos ? std::string::npos : end - start));
+      if (!item.empty()) {
+        this->ids_[idx++] = item;
+      }
+      if (end == std::string::npos) {
+        break;
+      }
+      start = end + separator.size();
+    }
+  }
+
   int count_{0};
   std::string messages_[NOTIFICATION_FEED_MAX_ITEMS];
+  std::string ids_[NOTIFICATION_FEED_MAX_ITEMS];
 };
 
 static LightStatusTracker light_status_tracker_storage;
@@ -2091,6 +2146,14 @@ static inline const std::string &notification_message_for_index(int idx) {
   }
   ensure_remote_status_trackers();
   return notification_feed_tracker_storage.message(idx);
+}
+
+static inline const std::string &notification_id_for_index(int idx) {
+  if (!notifications_mode_enabled()) {
+    return empty_string();
+  }
+  ensure_remote_status_trackers();
+  return notification_feed_tracker_storage.notification_id(idx);
 }
 
 static inline void request_selected_weather_status(int idx) {

@@ -442,6 +442,10 @@ globals:
     type: uint32_t
     initial_value: '0'
 
+  - id: last_notification_dismiss_interaction
+    type: uint32_t
+    initial_value: '0'
+
   - id: updated_ui
     type: bool
     initial_value: 'true'
@@ -1058,7 +1062,7 @@ script:
             - lambda: |-
                 auto it = id(oled_display);
                 it->clear();
-                it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue63e");
+                it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue648");
                 it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "CONNECTING TO WIFI");
                 it->print(64, 36, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WAITING FOR NETWORK");
                 it->print(64, 56, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "V${VERSION}");
@@ -1092,7 +1096,7 @@ script:
       - lambda: |-
           auto it = id(oled_display);
           it->clear();
-          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue648");
+          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue63e");
           it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WIFI CONNECTED");
           it->print(64, 36, id(small_font), COLOR_ON, display::TextAlign::CENTER, "API DISCONNECTED");
           it->print(64, 56, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "RECONNECTING...");
@@ -1530,6 +1534,8 @@ script:
               id(select_next_item).execute();
             } else if (mode == REMOTE_MODE_AUTOMATION) {
               id(trigger_selected_automation).execute();
+            } else if (mode == REMOTE_MODE_NOTIFICATIONS) {
+              id(dismiss_selected_notification).execute();
             } else {
               id(updated_ui) = true;
             }
@@ -1557,6 +1563,8 @@ script:
               id(media_play_pause).execute();
             } else if (mode == REMOTE_MODE_AUTOMATION) {
               id(trigger_selected_automation).execute();
+            } else if (mode == REMOTE_MODE_NOTIFICATIONS) {
+              id(dismiss_selected_notification).execute();
             } else {
               id(updated_ui) = true;
             }
@@ -1649,6 +1657,38 @@ script:
             - script.execute: media_next_track
           else:
             - script.execute: select_next_item
+
+  - id: dismiss_selected_notification
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: |-
+              int idx = clamp_mode_index(id(selected_time_index), notification_mode_item_count());
+              return notification_mode_item_count() > 0 &&
+                     !notification_message_for_index(idx).empty() &&
+                     !notification_id_for_index(idx).empty();
+          then:
+            - homeassistant.service:
+                service: persistent_notification.dismiss
+                data:
+                  notification_id: !lambda |-
+                    int idx = clamp_mode_index(id(selected_time_index), notification_mode_item_count());
+                    return notification_id_for_index(idx);
+            - lambda: |-
+                id(last_notification_dismiss_interaction) = millis();
+                id(updated_ui) = true;
+            - script.execute: update_display
+            - script.execute: refresh_notifications_after_dismiss
+
+  - id: refresh_notifications_after_dismiss
+    mode: restart
+    then:
+      - delay: 3s
+      - lambda: |-
+          id(last_notification_dismiss_interaction) = 0;
+      - script.execute: update_selected_item
+      - script.execute: update_display
 
   - id: toggle_selected_light
     mode: queued
@@ -3222,6 +3262,9 @@ script:
 
                   case REMOTE_MODE_NOTIFICATIONS: {
                     std::string message = id(selected_item_state);
+                    bool show_dismiss_feedback =
+                        id(last_notification_dismiss_interaction) > 0 &&
+                        (millis() - id(last_notification_dismiss_interaction)) <= 3000;
                     auto sanitize_message = [](std::string text) {
                       for (auto &ch : text) {
                         if (ch == '\n' || ch == '\r' || ch == '\t') {
@@ -3236,23 +3279,31 @@ script:
                       }
                     };
 
-                    message = sanitize_message(message);
-                    if (message.empty()) {
-                      message = "NO NOTIFICATIONS";
-                    }
+                    std::string line_1;
+                    std::string line_2;
+                    std::string line_3;
 
-                    bool truncated = message.size() > 66;
-                    if (message.size() > 66) {
-                      message = message.substr(0, 66);
-                    }
+                    if (show_dismiss_feedback) {
+                      line_2 = "DISMISSED";
+                    } else {
+                      message = sanitize_message(message);
+                      if (message.empty()) {
+                        message = "NO NOTIFICATIONS";
+                      }
 
-                    std::string line_1 = message.substr(0, std::min<size_t>(22, message.size()));
-                    std::string line_2 = message.size() > 22 ? message.substr(22, std::min<size_t>(22, message.size() - 22)) : "";
-                    std::string line_3 = message.size() > 44 ? message.substr(44, std::min<size_t>(22, message.size() - 44)) : "";
-                    if (truncated && line_3.size() >= 3) {
-                      line_3.replace(line_3.size() - 3, 3, "...");
-                    } else if (truncated) {
-                      line_3 = "...";
+                      bool truncated = message.size() > 66;
+                      if (message.size() > 66) {
+                        message = message.substr(0, 66);
+                      }
+
+                      line_1 = message.substr(0, std::min<size_t>(22, message.size()));
+                      line_2 = message.size() > 22 ? message.substr(22, std::min<size_t>(22, message.size() - 22)) : "";
+                      line_3 = message.size() > 44 ? message.substr(44, std::min<size_t>(22, message.size() - 44)) : "";
+                      if (truncated && line_3.size() >= 3) {
+                        line_3.replace(line_3.size() - 3, 3, "...");
+                      } else if (truncated) {
+                        line_3 = "...";
+                      }
                     }
 
                     draw_notification_line(20, line_1);

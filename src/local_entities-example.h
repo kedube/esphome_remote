@@ -62,7 +62,7 @@ static const WeatherEntity WEATHER_LIST[] = {
 
 // Optional notifications mode. Leave NOTIFICATION_FEED_ENTITY undefined or set it
 // to an empty string to hide Notifications from the UI entirely.
-#define NOTIFICATION_FEED_ENTITY "sensor.persistent_notifications"
+#define NOTIFICATION_FEED_ENTITY "sensor.remote_notifications"
 #define NOTIFICATION_FEED_ATTRIBUTE "messages"
+#define NOTIFICATION_FEED_IDS_ATTRIBUTE "ids"
 #define NOTIFICATION_FEED_SEPARATOR "||"
-
