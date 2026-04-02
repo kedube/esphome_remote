@@ -67,17 +67,25 @@ Board-specific wiring is selected through the package include in [`src/oled_remo
 esphome_remote/
 ├── LICENSE
 ├── README.md
+├── home_assistant/
+│   └── remote_notifications.yaml
 ├── images/
 │   ├── remote_*.jpeg
 │   └── remote_UI-*.png
 └── src/
+    ├── entity_helpers_common.h
     ├── entity_helpers.h
+    ├── entity_helpers_requests.h
     ├── framebuffer_web_debug.cpp
     ├── framebuffer_web_debug.h
     ├── fonts/
     │   └── arial-bold.ttf
     ├── local_entities-example.h
     ├── oled_remote.yaml
+    ├── packages/
+    │   ├── remote_display.yaml
+    │   ├── remote_inputs.yaml
+    │   └── remote_runtime.yaml
     ├── pcb_proto.yaml
     ├── pcb_rev31.yaml
     └── secrets-example.yaml
@@ -86,15 +94,21 @@ esphome_remote/
 ## Important Files
 
 - `src/oled_remote.yaml`
-  Main ESPHome configuration, display rendering, button behavior, sleep logic, and Home Assistant actions.
+  Main ESPHome entrypoint that pulls together the board package, shared packages, secrets, and local entity definitions.
 - `src/entity_helpers.h`
-  Shared C++ helpers for mode ordering, entity metadata, state tracking, and status request logic.
+  Shared C++ helper declarations used by the display and control logic.
+- `src/entity_helpers_common.h` and `src/entity_helpers_requests.h`
+  Split helper implementations for shared entity metadata/state logic and Home Assistant request helpers.
 - `src/local_entities.h`
   Your private Home Assistant entity definitions. This file is ignored by Git.
 - `src/local_entities-example.h`
   Example entity lists you can copy and customize.
+- `src/packages/`
+  Modular ESPHome packages for runtime behavior, button/input handling, and display/UI rendering.
 - `src/framebuffer_web_debug.cpp` and `src/framebuffer_web_debug.h`
   Optional debug-only PBM framebuffer export for screenshot capture.
+- `home_assistant/remote_notifications.yaml`
+  Optional Home Assistant template sensor bridge for the Notifications mode.
 
 ## 1. Install ESPHome
 
