@@ -539,9 +539,9 @@ static inline const char *automation_kind_label(int idx) {
   }
 }
 
-static inline int &selected_index_ref(
+static inline int &selected_mode_index_ref(
     RemoteMode mode, int &light_idx, int &switch_idx, int &climate_idx, int &lock_idx, int &cover_idx, int &media_idx,
-    int &automation_idx, int &weather_idx, int &time_idx, int &fan_idx, int &humidifier_idx) {
+    int &automation_idx, int &weather_idx, int &misc_idx, int &fan_idx, int &humidifier_idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return light_idx;
@@ -560,18 +560,18 @@ static inline int &selected_index_ref(
     case REMOTE_MODE_MEDIA:
       return media_idx;
     case REMOTE_MODE_SENSORS:
-      return time_idx;
+      return misc_idx;
     case REMOTE_MODE_AUTOMATION:
       return automation_idx;
     case REMOTE_MODE_ALARMS:
-      return time_idx;
+      return misc_idx;
     case REMOTE_MODE_NOTIFICATIONS:
-      return time_idx;
+      return misc_idx;
     case REMOTE_MODE_WEATHER:
       return weather_idx;
     case REMOTE_MODE_INFO:
     default:
-      return time_idx;
+      return misc_idx;
   }
 }
 

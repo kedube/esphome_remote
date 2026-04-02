@@ -196,7 +196,7 @@ Notes:
 
 If Home Assistant no longer exposes a ready-made `sensor.persistent_notifications`, add the included template sensor on the Home Assistant side to recreate the feed the remote expects.
 
-Copy [`home_assistant/remote_notifications.yaml`](/esphome_remote/home_assistant/remote_notifications.yaml) into your Home Assistant `template:` configuration, or include it as a package. It publishes:
+Copy [`home_assistant/remote_notifications.yaml`](home_assistant/remote_notifications.yaml) into your Home Assistant `template:` configuration, or include it as a package. It publishes:
 
 - `sensor.remote_notifications`
 - state = current notification count
@@ -205,7 +205,7 @@ Copy [`home_assistant/remote_notifications.yaml`](/esphome_remote/home_assistant
 
 This bridge is event-driven. It listens for Home Assistant `persistent_notification` updates, stores the active notification list in the template sensor’s own attributes, and exposes a `messages` attribute that the remote can read. Each item is emitted as `Title: Message`, with newlines flattened to spaces so the remote can render them cleanly.
 
-In Notifications mode, pressing the circle or play/pause action button dismisses the currently selected persistent notification.
+In Notifications mode, pressing the circle or play/pause action button dismisses the currently selected persistent notification. The display shows `DISMISSED` for 3 seconds, then refreshes and advances to the next remaining notification.
 
 ## 5. Select The Correct PCB Package
 
@@ -281,6 +281,10 @@ Notes:
 - Fan and humidifier selections are also persisted.
 - Modes with no configured entities are skipped automatically.
 - Lock, cover, and automation actions use long-press protection.
+- Circle is the primary action button. Play/pause is the alternate action button.
+- In Locks mode, circle locks and play/pause unlocks. The remote shows temporary detail-line feedback such as `LOCKING...`, `UNLOCKING...`, `LOCKED`, `UNLOCKED`, `JAMMED`, `ALREADY LOCKED`, and `ALREADY UNLOCKED`.
+- In Covers mode, circle opens and play/pause closes. The remote shows temporary detail-line feedback such as `OPENING...`, `CLOSING...`, `OPENED`, `CLOSED`, and `OPEN xx%`.
+- In Automations mode, automations, scripts, and scenes show temporary feedback such as `TRIGGERING...`, `ACTIVATING...`, `RUNNING...`, `TRIGGERED`, `ACTIVATED`, `STARTED`, and `COMPLETED`.
 - Info mode includes Time & Date, Network, and Version screens.
 - Notification mode reads from `NOTIFICATION_FEED_ENTITY` in `src/local_entities.h`.
 
@@ -334,7 +338,7 @@ cp src/local_entities-example.h src/local_entities.h
 Create it from the example file:
 
 ```bash
-cp src/secrets-example.yaml src/local_secrets.yaml
+cp src/secrets-example.yaml src/secrets.yaml
 ```
 
 ### A mode does not appear in the menu

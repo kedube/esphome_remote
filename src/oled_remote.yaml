@@ -8,7 +8,7 @@ substitutions:
   DEEP_SLEEP_DURATION: "360min"
   LONG_PRESS_DURATION_MS: "2000" # hold time for lock/cover/automation actions
   LOW_BATTERY_VOLTAGE: "3.45" # boot warning threshold when battery monitoring is available
-  VERSION: "2.1"
+  VERSION: "2.2"
   PIN_WAKE: "0"
   PIN_I2C_SDA: "27"
   PIN_I2C_SCL: "25"
@@ -210,7 +210,7 @@ esphome:
               id(selected_media_index) = (state >> 38) & 0x3F;
               id(selected_automation_index) = (state >> 44) & 0x3F;
               id(selected_weather_index) = (state >> 50) & 0x3F;
-              id(selected_time_index) = (state >> 56) & 0x1F;
+              id(selected_misc_index) = (state >> 56) & 0x1F;
               id(selected_fan_index) = id(persisted_ui_state_aux) & 0x3F;
               id(selected_humidifier_index) = (id(persisted_ui_state_aux) >> 6) & 0x3F;
             } else if ((state & UI_STATE_FORMAT_V2) != 0) {
@@ -224,7 +224,7 @@ esphome:
                 id(selected_media_index) = (state >> 38) & 0x3F;
                 id(selected_automation_index) = (state >> 44) & 0x3F;
                 id(selected_weather_index) = (state >> 50) & 0x3F;
-                id(selected_time_index) = (state >> 56) & 0x1F;
+                id(selected_misc_index) = (state >> 56) & 0x1F;
                 id(selected_fan_index) = 0;
                 id(selected_humidifier_index) = 0;
               } else if ((state & UI_STATE_FORMAT_V3) == UI_STATE_FORMAT_V3) {
@@ -237,7 +237,7 @@ esphome:
                 id(selected_media_index) = (state >> 38) & 0x3F;
                 id(selected_automation_index) = (state >> 44) & 0x3F;
                 id(selected_weather_index) = (state >> 50) & 0x3F;
-                id(selected_time_index) = (state >> 56) & 0x3F;
+                id(selected_misc_index) = (state >> 56) & 0x3F;
                 id(selected_fan_index) = 0;
                 id(selected_humidifier_index) = 0;
               } else {
@@ -250,7 +250,7 @@ esphome:
                 id(selected_media_index) = (state >> 38) & 0x3F;
                 id(selected_automation_index) = (state >> 44) & 0x3F;
                 id(selected_weather_index) = (state >> 50) & 0x3F;
-                id(selected_time_index) = (state >> 56) & 0x3F;
+                id(selected_misc_index) = (state >> 56) & 0x3F;
                 id(selected_fan_index) = 0;
                 id(selected_humidifier_index) = 0;
               }
@@ -273,7 +273,7 @@ esphome:
               id(selected_media_index) = (state >> 31) & 0x3F;
               id(selected_automation_index) = (state >> 37) & 0x3F;
               id(selected_weather_index) = (state >> 43) & 0x3F;
-              id(selected_time_index) = (state >> 49) & 0x3F;
+              id(selected_misc_index) = (state >> 49) & 0x3F;
               id(selected_fan_index) = 0;
               id(selected_humidifier_index) = 0;
             }
@@ -524,7 +524,7 @@ globals:
     type: int
     initial_value: '0'
 
-  - id: selected_time_index
+  - id: selected_misc_index
     type: int
     initial_value: '0'
 
@@ -769,7 +769,6 @@ binary_sensor:
                   id(contrast) += 1;
                   if (id(contrast) > 10) id(contrast) = 1;
                   float contrast_value = id(contrast) * 1.0 / 10;
-                  ESP_LOGD("display", "Contrast = %f", contrast_value);
                   id(oled_display).set_contrast(contrast_value);
                   id(last_contrast_interaction) = millis();
                   id(updated_ui) = true;
@@ -972,7 +971,7 @@ script:
           constexpr uint64_t UI_STATE_FORMAT_V5 = (1ULL << 63) | (1ULL << 62) | (1ULL << 61) | (1ULL << 60);
           id(persisted_ui_state) =
               UI_STATE_FORMAT_V5 |
-              (uint64_t(id(selected_time_index) & 0x1F) << 56) |
+              (uint64_t(id(selected_misc_index) & 0x1F) << 56) |
               (uint64_t(id(selected_weather_index) & 0x3F) << 50) |
               (uint64_t(id(selected_automation_index) & 0x3F) << 44) |
               (uint64_t(id(selected_media_index) & 0x3F) << 38) |
@@ -1005,9 +1004,9 @@ script:
             return;
           }
 
-          int &selected_index = selected_index_ref(
+          int &selected_index = selected_mode_index_ref(
               mode, id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index), id(selected_cover_index),
-              id(selected_media_index), id(selected_automation_index), id(selected_weather_index), id(selected_time_index), id(selected_fan_index), id(selected_humidifier_index));
+              id(selected_media_index), id(selected_automation_index), id(selected_weather_index), id(selected_misc_index), id(selected_fan_index), id(selected_humidifier_index));
           selected_index = clamp_mode_index(selected_index, count);
           int idx = selected_index;
 
@@ -1016,9 +1015,9 @@ script:
       - script.execute: reset_selected_item_state
       - lambda: |-
           RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
-          int idx = selected_index_ref(
+          int idx = selected_mode_index_ref(
               mode, id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index), id(selected_cover_index),
-              id(selected_media_index), id(selected_automation_index), id(selected_weather_index), id(selected_time_index), id(selected_fan_index), id(selected_humidifier_index));
+              id(selected_media_index), id(selected_automation_index), id(selected_weather_index), id(selected_misc_index), id(selected_fan_index), id(selected_humidifier_index));
           idx = clamp_mode_index(idx, mode_item_count(mode));
           if (mode == REMOTE_MODE_MEDIA) {
             const std::string &state = selected_media_state(idx);
@@ -1133,10 +1132,50 @@ script:
     then:
       - lambda: |-
           RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
-          int idx = selected_index_ref(
+          int idx = selected_mode_index_ref(
               mode, id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index), id(selected_cover_index),
-              id(selected_media_index), id(selected_automation_index), id(selected_weather_index), id(selected_time_index), id(selected_fan_index), id(selected_humidifier_index));
+              id(selected_media_index), id(selected_automation_index), id(selected_weather_index), id(selected_misc_index), id(selected_fan_index), id(selected_humidifier_index));
           idx = clamp_mode_index(idx, mode_item_count(mode));
+          auto assign_string_if_changed = [](std::string &target, const std::string &value) -> bool {
+            if (target != value) {
+              target = value;
+              return true;
+            }
+            return false;
+          };
+          auto assign_int_if_changed = [](int &target, int value) -> bool {
+            if (target != value) {
+              target = value;
+              return true;
+            }
+            return false;
+          };
+          auto assign_float_if_changed = [](float &target, float value) -> bool {
+            if (!isnan(value) && target != value) {
+              target = value;
+              return true;
+            }
+            return false;
+          };
+          auto clamp_percent = [](float value, float scale = 1.0f, int min_value = 0) {
+            int pct = (int) roundf(value * scale);
+            if (pct < min_value) pct = min_value;
+            if (pct > 100) pct = 100;
+            return pct;
+          };
+          auto request_refresh = [&](RemoteMode refresh_mode, int refresh_idx) {
+            request_mode_status_throttled(refresh_mode, refresh_idx, millis(), 2500);
+          };
+          auto sync_simple_state = [&](const std::string &state) {
+            if (state == "unknown") {
+              request_refresh(mode, idx);
+              return;
+            }
+            if (id(selected_item_state) != state) {
+              id(selected_item_state) = state;
+              id(updated_ui) = true;
+            }
+          };
 
           if (mode == REMOTE_MODE_LIGHTS) {
             const std::string &state = selected_light_state(idx);
@@ -1147,10 +1186,7 @@ script:
             if (state == "on") {
               next_state = "on";
               if (selected_light_has_brightness(idx) && !isnan(brightness) && brightness > 0) {
-                int pct = (int) roundf((brightness / 255.0f) * 100.0f);
-                if (pct < 1) pct = 1;
-                if (pct > 100) pct = 100;
-                next_brightness_pct = pct;
+                next_brightness_pct = clamp_percent(brightness, 100.0f / 255.0f, 1);
               } else if (next_brightness_pct <= 0) {
                 next_brightness_pct = 100;
               }
@@ -1159,7 +1195,7 @@ script:
               next_brightness_pct = 0;
             } else {
               next_state = "unknown";
-              request_mode_status_throttled(mode, idx, millis(), 2500);
+              request_refresh(mode, idx);
             }
 
             if (next_state != id(selected_item_state) || next_brightness_pct != id(selected_brightness_pct)) {
@@ -1177,10 +1213,7 @@ script:
             if (state == "on") {
               next_state = "on";
               if (has_percentage && !isnan(percentage) && percentage > 0) {
-                int pct = (int) roundf(percentage);
-                if (pct < 1) pct = 1;
-                if (pct > 100) pct = 100;
-                next_speed_pct = pct;
+                next_speed_pct = clamp_percent(percentage, 1.0f, 1);
               } else if (!has_percentage) {
                 next_speed_pct = 0;
               }
@@ -1189,7 +1222,7 @@ script:
               next_speed_pct = 0;
             } else {
               next_state = "unknown";
-              request_mode_status_throttled(mode, idx, millis(), 2500);
+              request_refresh(mode, idx);
             }
 
             if (next_state != id(selected_item_state) || next_speed_pct != id(selected_fan_speed_pct)) {
@@ -1206,41 +1239,20 @@ script:
             bool changed = false;
 
             if (state == "unknown" && std::isnan(target) && std::isnan(current)) {
-              request_mode_status_throttled(mode, idx, millis(), 2500);
+              request_refresh(mode, idx);
             } else {
-              if (id(selected_item_state) != state) {
-                id(selected_item_state) = state;
-                changed = true;
-              }
-              if (id(selected_humidifier_action) != action) {
-                id(selected_humidifier_action) = action;
-                changed = true;
-              }
-              if (id(selected_humidifier_mode) != mode_value) {
-                id(selected_humidifier_mode) = mode_value;
-                changed = true;
-              }
-              if (!isnan(target) && id(selected_humidifier_target_humidity) != target) {
-                id(selected_humidifier_target_humidity) = target;
-                changed = true;
-              }
-              if (!isnan(current) && id(selected_humidifier_current_humidity) != current) {
-                id(selected_humidifier_current_humidity) = current;
-                changed = true;
-              }
+              changed = assign_string_if_changed(id(selected_item_state), state) || changed;
+              changed = assign_string_if_changed(id(selected_humidifier_action), action) || changed;
+              changed = assign_string_if_changed(id(selected_humidifier_mode), mode_value) || changed;
+              changed = assign_float_if_changed(id(selected_humidifier_target_humidity), target) || changed;
+              changed = assign_float_if_changed(id(selected_humidifier_current_humidity), current) || changed;
               if (changed) {
                 id(updated_ui) = true;
               }
             }
           } else if (mode == REMOTE_MODE_SWITCHES) {
             const std::string &state = selected_switch_state(idx);
-
-            if (state == "unknown") {
-              request_mode_status_throttled(mode, idx, millis(), 2500);
-            } else if (id(selected_item_state) != state) {
-              id(selected_item_state) = state;
-              id(updated_ui) = true;
-            }
+            sync_simple_state(state);
           } else if (mode == REMOTE_MODE_CLIMATE) {
             const std::string &state = selected_climate_state(idx);
             const std::string &hvac_action = climate_hvac_action_for_index(idx);
@@ -1252,72 +1264,41 @@ script:
             bool changed = false;
 
             if (state == "unknown") {
-              request_mode_status_throttled(mode, idx, millis(), 2500);
+              request_refresh(mode, idx);
             } else {
-              if (id(selected_item_state) != state) {
-                id(selected_item_state) = state;
-                changed = true;
-              }
+              changed = assign_string_if_changed(id(selected_item_state), state) || changed;
               if (state != "off") {
                 id(last_climate_mode) = state;
               }
-              if (!hvac_action.empty() && id(selected_climate_hvac_action) != hvac_action) {
-                id(selected_climate_hvac_action) = hvac_action;
-                changed = true;
+              if (!hvac_action.empty()) {
+                changed = assign_string_if_changed(id(selected_climate_hvac_action), hvac_action) || changed;
               }
-              if (!isnan(target) && id(selected_climate_target_temp) != target) {
-                id(selected_climate_target_temp) = target;
-                changed = true;
-              }
-              if (!isnan(target_low) && id(selected_climate_target_temp_low) != target_low) {
-                id(selected_climate_target_temp_low) = target_low;
-                changed = true;
-              }
-              if (!isnan(target_high) && id(selected_climate_target_temp_high) != target_high) {
-                id(selected_climate_target_temp_high) = target_high;
-                changed = true;
-              }
-              if (!isnan(current) && id(selected_climate_current_temp) != current) {
-                id(selected_climate_current_temp) = current;
-                changed = true;
-              }
-              if (id(selected_climate_preset) != preset) {
-                id(selected_climate_preset) = preset;
-                changed = true;
-              }
+              changed = assign_float_if_changed(id(selected_climate_target_temp), target) || changed;
+              changed = assign_float_if_changed(id(selected_climate_target_temp_low), target_low) || changed;
+              changed = assign_float_if_changed(id(selected_climate_target_temp_high), target_high) || changed;
+              changed = assign_float_if_changed(id(selected_climate_current_temp), current) || changed;
+              changed = assign_string_if_changed(id(selected_climate_preset), preset) || changed;
               if (changed) {
                 id(updated_ui) = true;
               }
             }
           } else if (mode == REMOTE_MODE_LOCKS) {
             const std::string &state = selected_lock_state(idx);
-
-            if (state == "unknown") {
-              request_mode_status_throttled(mode, idx, millis(), 2500);
-            } else if (id(selected_item_state) != state) {
-              id(selected_item_state) = state;
-              id(updated_ui) = true;
-            }
+            sync_simple_state(state);
           } else if (mode == REMOTE_MODE_COVERS) {
             const std::string &state = selected_cover_state(idx);
             float position = selected_cover_position(idx);
             bool changed = false;
 
             if (state == "unknown" && std::isnan(position)) {
-              request_mode_status_throttled(mode, idx, millis(), 2500);
+              request_refresh(mode, idx);
             } else {
-              if (state != "unknown" && id(selected_item_state) != state) {
-                id(selected_item_state) = state;
-                changed = true;
+              if (state != "unknown") {
+                changed = assign_string_if_changed(id(selected_item_state), state) || changed;
               }
               if (!std::isnan(position)) {
-                int pct = (int) roundf(position);
-                if (pct < 0) pct = 0;
-                if (pct > 100) pct = 100;
-                if (id(selected_cover_position_pct) != pct) {
-                  id(selected_cover_position_pct) = pct;
-                  changed = true;
-                }
+                int pct = clamp_percent(position);
+                changed = assign_int_if_changed(id(selected_cover_position_pct), pct) || changed;
               }
               if (changed) {
                 id(updated_ui) = true;
@@ -1333,41 +1314,22 @@ script:
             bool changed = false;
 
             if (state == "unknown") {
-              request_mode_status_throttled(mode, idx, millis(), 2500);
+              request_refresh(mode, idx);
             } else {
-              if (id(selected_item_state) != state) {
-                id(selected_item_state) = state;
-                changed = true;
-              }
-              if (id(selected_media_title) != title) {
-                id(selected_media_title) = title;
-                changed = true;
-              }
-              if (id(selected_media_artist) != artist) {
-                id(selected_media_artist) = artist;
-                changed = true;
-              }
-              if (id(selected_media_device_class) != device_class) {
-                id(selected_media_device_class) = device_class;
-                changed = true;
-              }
+              changed = assign_string_if_changed(id(selected_item_state), state) || changed;
+              changed = assign_string_if_changed(id(selected_media_title), title) || changed;
+              changed = assign_string_if_changed(id(selected_media_artist), artist) || changed;
+              changed = assign_string_if_changed(id(selected_media_device_class), device_class) || changed;
               if (device_class == "tv" || device_class == "receiver") {
-                if (!source.empty() && id(selected_media_source) != source) {
-                  id(selected_media_source) = source;
-                  changed = true;
+                if (!source.empty()) {
+                  changed = assign_string_if_changed(id(selected_media_source), source) || changed;
                 }
-              } else if (id(selected_media_source) != source) {
-                id(selected_media_source) = source;
-                changed = true;
+              } else {
+                changed = assign_string_if_changed(id(selected_media_source), source) || changed;
               }
               if (!isnan(volume)) {
-                int pct = (int) roundf(volume * 100.0f);
-                if (pct < 0) pct = 0;
-                if (pct > 100) pct = 100;
-                if (id(selected_media_volume_pct) != pct) {
-                  id(selected_media_volume_pct) = pct;
-                  changed = true;
-                }
+                int pct = clamp_percent(volume, 100.0f);
+                changed = assign_int_if_changed(id(selected_media_volume_pct), pct) || changed;
               }
               if (changed) {
                 id(updated_ui) = true;
@@ -1375,44 +1337,27 @@ script:
             }
           } else if (mode == REMOTE_MODE_SENSORS) {
             const std::string &state = sensor_state_for_index(idx);
-            if (state == "unknown") {
-              request_mode_status_throttled(mode, idx, millis(), 2500);
-            } else if (id(selected_item_state) != state) {
-              id(selected_item_state) = state;
-              id(updated_ui) = true;
-            }
+            sync_simple_state(state);
           } else if (mode == REMOTE_MODE_AUTOMATION) {
             const std::string &state = automation_state_for_index(idx);
             std::string next_state = automation_supports_enabled_state(idx) ? state : "ready";
             bool changed = false;
 
             if (automation_supports_enabled_state(idx)) {
-              if (id(selected_automation_state) != next_state) {
-                id(selected_automation_state) = next_state;
-                changed = true;
-              }
-            } else if (id(selected_automation_state) != "ready") {
-              id(selected_automation_state) = "ready";
-              changed = true;
+              changed = assign_string_if_changed(id(selected_automation_state), next_state) || changed;
+            } else {
+              changed = assign_string_if_changed(id(selected_automation_state), "ready") || changed;
             }
-            if (id(selected_item_state) != next_state) {
-              id(selected_item_state) = next_state;
-              changed = true;
-            }
+            changed = assign_string_if_changed(id(selected_item_state), next_state) || changed;
             if (state == "unknown") {
-              request_mode_status_throttled(mode, idx, millis(), 2500);
+              request_refresh(mode, idx);
             }
             if (changed) {
               id(updated_ui) = true;
             }
           } else if (mode == REMOTE_MODE_ALARMS) {
             const std::string &state = alarm_state_for_index(idx);
-            if (state == "unknown") {
-              request_mode_status_throttled(mode, idx, millis(), 2500);
-            } else if (id(selected_item_state) != state) {
-              id(selected_item_state) = state;
-              id(updated_ui) = true;
-            }
+            sync_simple_state(state);
           } else if (mode == REMOTE_MODE_NOTIFICATIONS) {
             int count = notification_mode_item_count();
             int clamped_idx = clamp_mode_index(idx, count);
@@ -1420,25 +1365,15 @@ script:
             std::string next_entity = notification_mode_item_entity(clamped_idx);
             std::string next_message = notification_message_for_index(clamped_idx);
 
-            if (clamped_idx != id(selected_time_index)) {
-              id(selected_time_index) = clamped_idx;
+            if (assign_int_if_changed(id(selected_misc_index), clamped_idx)) {
               idx = clamped_idx;
               id(updated_ui) = true;
             }
-            if (id(selected_item_name) != next_name) {
-              id(selected_item_name) = next_name;
-              id(updated_ui) = true;
-            }
-            if (id(selected_item_entity) != next_entity) {
-              id(selected_item_entity) = next_entity;
-              id(updated_ui) = true;
-            }
-            if (id(selected_item_state) != next_message) {
-              id(selected_item_state) = next_message;
-              id(updated_ui) = true;
-            }
+            id(updated_ui) = assign_string_if_changed(id(selected_item_name), next_name) || id(updated_ui);
+            id(updated_ui) = assign_string_if_changed(id(selected_item_entity), next_entity) || id(updated_ui);
+            id(updated_ui) = assign_string_if_changed(id(selected_item_state), next_message) || id(updated_ui);
             if (next_entity.empty() || (count > 1 && next_message.empty())) {
-              request_mode_status_throttled(mode, clamped_idx, millis(), 2500);
+              request_refresh(mode, clamped_idx);
             }
           } else if (mode == REMOTE_MODE_WEATHER) {
             const std::string &condition = weather_state_for_index(idx);
@@ -1450,32 +1385,14 @@ script:
 
             if (condition == "unknown" && std::isnan(temperature) && std::isnan(humidity) &&
                 std::isnan(high) && std::isnan(low)) {
-              request_mode_status_throttled(mode, idx, millis(), 2500);
+              request_refresh(mode, idx);
             } else {
-              if (id(selected_item_state) != condition) {
-                id(selected_item_state) = condition;
-                changed = true;
-              }
-              if (id(selected_weather_condition) != condition) {
-                id(selected_weather_condition) = condition;
-                changed = true;
-              }
-              if (id(selected_weather_temperature) != temperature) {
-                id(selected_weather_temperature) = temperature;
-                changed = true;
-              }
-              if (id(selected_weather_humidity) != humidity) {
-                id(selected_weather_humidity) = humidity;
-                changed = true;
-              }
-              if (id(selected_weather_high_temp) != high) {
-                id(selected_weather_high_temp) = high;
-                changed = true;
-              }
-              if (id(selected_weather_low_temp) != low) {
-                id(selected_weather_low_temp) = low;
-                changed = true;
-              }
+              changed = assign_string_if_changed(id(selected_item_state), condition) || changed;
+              changed = assign_string_if_changed(id(selected_weather_condition), condition) || changed;
+              changed = assign_float_if_changed(id(selected_weather_temperature), temperature) || changed;
+              changed = assign_float_if_changed(id(selected_weather_humidity), humidity) || changed;
+              changed = assign_float_if_changed(id(selected_weather_high_temp), high) || changed;
+              changed = assign_float_if_changed(id(selected_weather_low_temp), low) || changed;
               if (changed) {
                 id(updated_ui) = true;
               }
@@ -1507,113 +1424,167 @@ script:
               !isnan(id(selected_climate_target_temp_high)) &&
               (id(selected_item_state) == "heat_cool" ||
                id(selected_climate_target_temp_low) != id(selected_climate_target_temp_high));
+          auto mark_ui = [&]() {
+            id(updated_ui) = true;
+          };
 
-          if (action == MODE_ACTION_SECONDARY) {
-            if (mode == REMOTE_MODE_CLIMATE) {
-              id(toggle_selected_climate_power).execute();
-            } else if (mode == REMOTE_MODE_HUMIDIFIERS) {
-              id(toggle_selected_humidifier_power).execute();
-            } else if (mode == REMOTE_MODE_MEDIA) {
-              id(select_next_media_source).execute();
-            } else {
-              id(updated_ui) = true;
-            }
-            return;
-          }
-
-          if (action == MODE_ACTION_PRIMARY) {
-            if (mode == REMOTE_MODE_LIGHTS) {
-              id(toggle_selected_light).execute();
-            } else if (mode == REMOTE_MODE_FANS) {
-              id(toggle_selected_fan).execute();
-            } else if (mode == REMOTE_MODE_HUMIDIFIERS) {
-              id(cycle_selected_humidifier_mode).execute();
-            } else if (mode == REMOTE_MODE_SWITCHES) {
-              id(turn_on_selected_switch).execute();
-            } else if (mode == REMOTE_MODE_CLIMATE) {
-              if (dual_climate_target) {
-                id(climate_temperature_high_up).execute();
+          switch (action) {
+            case MODE_ACTION_SECONDARY:
+              switch (mode) {
+                case REMOTE_MODE_CLIMATE:
+                  id(toggle_selected_climate_power).execute();
+                  break;
+                case REMOTE_MODE_HUMIDIFIERS:
+                  id(toggle_selected_humidifier_power).execute();
+                  break;
+                case REMOTE_MODE_MEDIA:
+                  id(select_next_media_source).execute();
+                  break;
+                default:
+                  mark_ui();
+                  break;
               }
-            } else if (mode == REMOTE_MODE_LOCKS) {
-              id(lock_selected_lock).execute();
-            } else if (mode == REMOTE_MODE_COVERS) {
-              id(open_selected_cover).execute();
-            } else if (mode == REMOTE_MODE_MEDIA) {
-              id(select_next_item).execute();
-            } else if (mode == REMOTE_MODE_AUTOMATION) {
-              id(trigger_selected_automation).execute();
-            } else if (mode == REMOTE_MODE_NOTIFICATIONS) {
-              id(dismiss_selected_notification).execute();
-            } else {
-              id(updated_ui) = true;
-            }
-            return;
-          }
+              return;
 
-          if (action == MODE_ACTION_PLAY_PAUSE) {
-            if (mode == REMOTE_MODE_LIGHTS) {
-              id(toggle_selected_light).execute();
-            } else if (mode == REMOTE_MODE_FANS) {
-              id(toggle_selected_fan).execute();
-            } else if (mode == REMOTE_MODE_HUMIDIFIERS) {
-              id(updated_ui) = true;
-            } else if (mode == REMOTE_MODE_SWITCHES) {
-              id(turn_off_selected_switch).execute();
-            } else if (mode == REMOTE_MODE_CLIMATE) {
-              if (dual_climate_target) {
-                id(climate_temperature_high_down).execute();
+            case MODE_ACTION_PRIMARY:
+              switch (mode) {
+                case REMOTE_MODE_LIGHTS:
+                  id(toggle_selected_light).execute();
+                  break;
+                case REMOTE_MODE_FANS:
+                  id(toggle_selected_fan).execute();
+                  break;
+                case REMOTE_MODE_HUMIDIFIERS:
+                  id(cycle_selected_humidifier_mode).execute();
+                  break;
+                case REMOTE_MODE_SWITCHES:
+                  id(turn_on_selected_switch).execute();
+                  break;
+                case REMOTE_MODE_CLIMATE:
+                  if (dual_climate_target) {
+                    id(climate_temperature_high_up).execute();
+                  } else {
+                    mark_ui();
+                  }
+                  break;
+                case REMOTE_MODE_LOCKS:
+                  id(lock_selected_lock).execute();
+                  break;
+                case REMOTE_MODE_COVERS:
+                  id(open_selected_cover).execute();
+                  break;
+                case REMOTE_MODE_MEDIA:
+                  id(select_next_item).execute();
+                  break;
+                case REMOTE_MODE_AUTOMATION:
+                  id(trigger_selected_automation).execute();
+                  break;
+                case REMOTE_MODE_NOTIFICATIONS:
+                  id(dismiss_selected_notification).execute();
+                  break;
+                default:
+                  mark_ui();
+                  break;
               }
-            } else if (mode == REMOTE_MODE_LOCKS) {
-              id(unlock_selected_lock).execute();
-            } else if (mode == REMOTE_MODE_COVERS) {
-              id(close_selected_cover).execute();
-            } else if (mode == REMOTE_MODE_MEDIA) {
-              id(media_play_pause).execute();
-            } else if (mode == REMOTE_MODE_AUTOMATION) {
-              id(trigger_selected_automation).execute();
-            } else if (mode == REMOTE_MODE_NOTIFICATIONS) {
-              id(dismiss_selected_notification).execute();
-            } else {
-              id(updated_ui) = true;
-            }
-            return;
-          }
+              return;
 
-          if (action == MODE_ACTION_INCREASE) {
-            if (mode == REMOTE_MODE_LIGHTS) {
-              id(increase_brightness).execute();
-            } else if (mode == REMOTE_MODE_FANS) {
-              id(increase_fan_speed).execute();
-            } else if (mode == REMOTE_MODE_HUMIDIFIERS) {
-              id(humidifier_target_up).execute();
-            } else if (mode == REMOTE_MODE_COVERS) {
-              id(increase_cover_position).execute();
-            } else if (mode == REMOTE_MODE_CLIMATE) {
-              id(climate_temperature_up).execute();
-            } else if (mode == REMOTE_MODE_MEDIA) {
-              id(media_volume_up).execute();
-            } else {
-              id(updated_ui) = true;
-            }
-            return;
-          }
+            case MODE_ACTION_PLAY_PAUSE:
+              switch (mode) {
+                case REMOTE_MODE_LIGHTS:
+                  id(toggle_selected_light).execute();
+                  break;
+                case REMOTE_MODE_FANS:
+                  id(toggle_selected_fan).execute();
+                  break;
+                case REMOTE_MODE_HUMIDIFIERS:
+                  mark_ui();
+                  break;
+                case REMOTE_MODE_SWITCHES:
+                  id(turn_off_selected_switch).execute();
+                  break;
+                case REMOTE_MODE_CLIMATE:
+                  if (dual_climate_target) {
+                    id(climate_temperature_high_down).execute();
+                  } else {
+                    mark_ui();
+                  }
+                  break;
+                case REMOTE_MODE_LOCKS:
+                  id(unlock_selected_lock).execute();
+                  break;
+                case REMOTE_MODE_COVERS:
+                  id(close_selected_cover).execute();
+                  break;
+                case REMOTE_MODE_MEDIA:
+                  id(media_play_pause).execute();
+                  break;
+                case REMOTE_MODE_AUTOMATION:
+                  id(trigger_selected_automation).execute();
+                  break;
+                case REMOTE_MODE_NOTIFICATIONS:
+                  id(dismiss_selected_notification).execute();
+                  break;
+                default:
+                  mark_ui();
+                  break;
+              }
+              return;
 
-          if (action == MODE_ACTION_DECREASE) {
-            if (mode == REMOTE_MODE_LIGHTS) {
-              id(decrease_brightness).execute();
-            } else if (mode == REMOTE_MODE_FANS) {
-              id(decrease_fan_speed).execute();
-            } else if (mode == REMOTE_MODE_HUMIDIFIERS) {
-              id(humidifier_target_down).execute();
-            } else if (mode == REMOTE_MODE_COVERS) {
-              id(decrease_cover_position).execute();
-            } else if (mode == REMOTE_MODE_CLIMATE) {
-              id(climate_temperature_down).execute();
-            } else if (mode == REMOTE_MODE_MEDIA) {
-              id(media_volume_down).execute();
-            } else {
-              id(updated_ui) = true;
-            }
+            case MODE_ACTION_INCREASE:
+              switch (mode) {
+                case REMOTE_MODE_LIGHTS:
+                  id(increase_brightness).execute();
+                  break;
+                case REMOTE_MODE_FANS:
+                  id(increase_fan_speed).execute();
+                  break;
+                case REMOTE_MODE_HUMIDIFIERS:
+                  id(humidifier_target_up).execute();
+                  break;
+                case REMOTE_MODE_COVERS:
+                  id(increase_cover_position).execute();
+                  break;
+                case REMOTE_MODE_CLIMATE:
+                  id(climate_temperature_up).execute();
+                  break;
+                case REMOTE_MODE_MEDIA:
+                  id(media_volume_up).execute();
+                  break;
+                default:
+                  mark_ui();
+                  break;
+              }
+              return;
+
+            case MODE_ACTION_DECREASE:
+              switch (mode) {
+                case REMOTE_MODE_LIGHTS:
+                  id(decrease_brightness).execute();
+                  break;
+                case REMOTE_MODE_FANS:
+                  id(decrease_fan_speed).execute();
+                  break;
+                case REMOTE_MODE_HUMIDIFIERS:
+                  id(humidifier_target_down).execute();
+                  break;
+                case REMOTE_MODE_COVERS:
+                  id(decrease_cover_position).execute();
+                  break;
+                case REMOTE_MODE_CLIMATE:
+                  id(climate_temperature_down).execute();
+                  break;
+                case REMOTE_MODE_MEDIA:
+                  id(media_volume_down).execute();
+                  break;
+                default:
+                  mark_ui();
+                  break;
+              }
+              return;
+
+            default:
+              mark_ui();
+              return;
           }
 
   - id: shift_selected_item
@@ -1627,9 +1598,9 @@ script:
             return;
           }
 
-          int &selected_index = selected_index_ref(
+          int &selected_index = selected_mode_index_ref(
               mode, id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index), id(selected_cover_index),
-              id(selected_media_index), id(selected_automation_index), id(selected_weather_index), id(selected_time_index), id(selected_fan_index),
+              id(selected_media_index), id(selected_automation_index), id(selected_weather_index), id(selected_misc_index), id(selected_fan_index),
               id(selected_humidifier_index));
           selected_index = wrapped_mode_index(selected_index, count, step);
       - script.execute: update_selected_item
@@ -1646,25 +1617,37 @@ script:
           id: shift_selected_item
           step: -1
 
-  - id: previous_button_action
+  - id: browse_media_or_items
+    parameters:
+      step: int
     then:
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_MEDIA;'
           then:
-            - script.execute: media_previous_track
+            - if:
+                condition:
+                  lambda: 'return step < 0;'
+                then:
+                  - script.execute: media_previous_track
+                else:
+                  - script.execute: media_next_track
           else:
-            - script.execute: select_previous_item
+            - script.execute:
+                id: shift_selected_item
+                step: !lambda 'return step;'
+
+  - id: previous_button_action
+    then:
+      - script.execute:
+          id: browse_media_or_items
+          step: -1
 
   - id: next_button_action
     then:
-      - if:
-          condition:
-            lambda: 'return id(current_mode) == REMOTE_MODE_MEDIA;'
-          then:
-            - script.execute: media_next_track
-          else:
-            - script.execute: select_next_item
+      - script.execute:
+          id: browse_media_or_items
+          step: 1
 
   - id: dismiss_selected_notification
     mode: queued
@@ -1672,7 +1655,7 @@ script:
       - if:
           condition:
             lambda: |-
-              int idx = clamp_mode_index(id(selected_time_index), notification_mode_item_count());
+              int idx = clamp_mode_index(id(selected_misc_index), notification_mode_item_count());
               return notification_mode_item_count() > 0 &&
                      !notification_message_for_index(idx).empty() &&
                      !notification_id_for_index(idx).empty();
@@ -1681,7 +1664,7 @@ script:
                 service: persistent_notification.dismiss
                 data:
                   notification_id: !lambda |-
-                    int idx = clamp_mode_index(id(selected_time_index), notification_mode_item_count());
+                    int idx = clamp_mode_index(id(selected_misc_index), notification_mode_item_count());
                     return notification_id_for_index(idx);
             - lambda: |-
                 id(last_notification_dismiss_interaction) = millis();
@@ -1830,21 +1813,20 @@ script:
       - if:
           condition:
             lambda: |-
-              return id(selected_item_state) == "locked" || id(selected_item_state) == "locking";
+              const std::string state = selected_lock_state(id(selected_lock_index));
+              return state == "locked" || state == "locking";
           then:
             - script.execute:
                 id: set_lock_feedback
                 feedback: !lambda |-
-                  return id(selected_item_state) == "locking" ? std::string("LOCKING...") : std::string("ALREADY LOCKED");
+                  const std::string state = selected_lock_state(id(selected_lock_index));
+                  return state == "locking" ? std::string("LOCKING...") : std::string("ALREADY LOCKED");
             - lambda: |-
                 request_selected_lock_status(id(selected_lock_index));
             - script.stop: lock_selected_lock
       - script.execute:
           id: set_lock_feedback
           feedback: "LOCKING..."
-      - lambda: |-
-          id(selected_item_state) = "locking";
-          id(updated_ui) = true;
       - homeassistant.action:
           action: lock.lock
           data:
@@ -1869,21 +1851,20 @@ script:
       - if:
           condition:
             lambda: |-
-              return id(selected_item_state) == "unlocked" || id(selected_item_state) == "unlocking";
+              const std::string state = selected_lock_state(id(selected_lock_index));
+              return state == "unlocked" || state == "unlocking";
           then:
             - script.execute:
                 id: set_lock_feedback
                 feedback: !lambda |-
-                  return id(selected_item_state) == "unlocking" ? std::string("UNLOCKING...") : std::string("ALREADY UNLOCKED");
+                  const std::string state = selected_lock_state(id(selected_lock_index));
+                  return state == "unlocking" ? std::string("UNLOCKING...") : std::string("ALREADY UNLOCKED");
             - lambda: |-
                 request_selected_lock_status(id(selected_lock_index));
             - script.stop: unlock_selected_lock
       - script.execute:
           id: set_lock_feedback
           feedback: "UNLOCKING..."
-      - lambda: |-
-          id(selected_item_state) = "unlocking";
-          id(updated_ui) = true;
       - homeassistant.action:
           action: lock.unlock
           data:
@@ -2016,7 +1997,6 @@ script:
           id: set_cover_feedback
           feedback: "OPENING..."
       - lambda: |-
-          id(selected_item_state) = "opening";
           if (id(selected_cover_position_pct) <= 0) {
             id(selected_cover_position_pct) = 100;
           }
@@ -2045,9 +2025,6 @@ script:
       - script.execute:
           id: set_cover_feedback
           feedback: "CLOSING..."
-      - lambda: |-
-          id(selected_item_state) = "closing";
-          id(updated_ui) = true;
       - homeassistant.action:
           action: cover.close_cover
           data:
@@ -2691,15 +2668,12 @@ script:
       - lambda: |-
           AutomationKind kind = automation_kind(id(selected_automation_index));
           if (kind == AUTOMATION_KIND_SCRIPT) {
-            id(last_automation_feedback) = "RUNNING...";
+            id(set_automation_feedback).execute("RUNNING...");
           } else if (kind == AUTOMATION_KIND_SCENE) {
-            id(last_automation_feedback) = "ACTIVATING...";
+            id(set_automation_feedback).execute("ACTIVATING...");
           } else {
-            id(last_automation_feedback) = "TRIGGERING...";
+            id(set_automation_feedback).execute("TRIGGERING...");
           }
-          id(last_automation_interaction) = millis();
-          id(updated_ui) = true;
-      - script.execute: update_display
       - if:
           condition:
             lambda: 'return automation_kind(id(selected_automation_index)) == AUTOMATION_KIND_AUTOMATION;'
@@ -2750,45 +2724,68 @@ script:
                             id: set_automation_feedback
                             feedback: "FAILED"
 
+  - id: set_mode_feedback
+    parameters:
+      target: int
+      feedback: std::string
+    then:
+      - lambda: |-
+          const int FEEDBACK_AUTOMATION = 0;
+          const int FEEDBACK_SWITCH = 1;
+          const int FEEDBACK_LOCK = 2;
+          const int FEEDBACK_COVER = 3;
+
+          if (target == FEEDBACK_AUTOMATION) {
+            id(last_automation_feedback) = feedback;
+            id(last_automation_interaction) = millis();
+          } else if (target == FEEDBACK_SWITCH) {
+            id(last_switch_feedback) = feedback;
+            id(last_switch_interaction) = millis();
+          } else if (target == FEEDBACK_LOCK) {
+            id(last_lock_feedback) = feedback;
+            id(last_lock_interaction) = millis();
+          } else if (target == FEEDBACK_COVER) {
+            id(last_cover_feedback) = feedback;
+            id(last_cover_interaction) = millis();
+          }
+          id(updated_ui) = true;
+      - script.execute: update_display
+
   - id: set_automation_feedback
     parameters:
       feedback: std::string
     then:
-      - lambda: |-
-          id(last_automation_feedback) = feedback;
-          id(last_automation_interaction) = millis();
-          id(updated_ui) = true;
-      - script.execute: update_display
+      - script.execute:
+          id: set_mode_feedback
+          target: 0
+          feedback: !lambda 'return feedback;'
 
   - id: set_switch_feedback
     parameters:
       feedback: std::string
     then:
-      - lambda: |-
-          id(last_switch_feedback) = feedback;
-          id(last_switch_interaction) = millis();
-          id(updated_ui) = true;
-      - script.execute: update_display
+      - script.execute:
+          id: set_mode_feedback
+          target: 1
+          feedback: !lambda 'return feedback;'
 
   - id: set_lock_feedback
     parameters:
       feedback: std::string
     then:
-      - lambda: |-
-          id(last_lock_feedback) = feedback;
-          id(last_lock_interaction) = millis();
-          id(updated_ui) = true;
-      - script.execute: update_display
+      - script.execute:
+          id: set_mode_feedback
+          target: 2
+          feedback: !lambda 'return feedback;'
 
   - id: set_cover_feedback
     parameters:
       feedback: std::string
     then:
-      - lambda: |-
-          id(last_cover_feedback) = feedback;
-          id(last_cover_interaction) = millis();
-          id(updated_ui) = true;
-      - script.execute: update_display
+      - script.execute:
+          id: set_mode_feedback
+          target: 3
+          feedback: !lambda 'return feedback;'
 
   - id: show_sensitive_action_prompt
     parameters:
@@ -2802,21 +2799,15 @@ script:
 
           if (mode == REMOTE_MODE_LOCKS) {
             feedback = action == MODE_ACTION_PLAY_PAUSE ? "HOLD TO UNLOCK" : "HOLD TO LOCK";
-            id(last_lock_feedback) = feedback;
-            id(last_lock_interaction) = millis();
+            id(set_lock_feedback).execute(feedback);
           } else if (mode == REMOTE_MODE_COVERS) {
             feedback = action == MODE_ACTION_PLAY_PAUSE ? "HOLD TO CLOSE" : "HOLD TO OPEN";
-            id(last_cover_feedback) = feedback;
-            id(last_cover_interaction) = millis();
+            id(set_cover_feedback).execute(feedback);
           } else if (mode == REMOTE_MODE_AUTOMATION) {
-            id(last_automation_feedback) = "HOLD TO RUN";
-            id(last_automation_interaction) = millis();
+            id(set_automation_feedback).execute("HOLD TO RUN");
           } else {
             return;
           }
-
-          id(updated_ui) = true;
-      - script.execute: update_display
 
   - id: await_primary_long_press
     mode: restart
@@ -3075,6 +3066,70 @@ script:
                   snprintf(footer_line, sizeof(footer_line), "%s %d%%", label, percent);
                   draw_footer_text(footer_line);
                 };
+                auto normalized_state_label = [&](const std::string &raw, const char *fallback = "SYNCING") {
+                  std::string label = upper(raw);
+                  if (label == "UNKNOWN" || label.empty()) {
+                    label = fallback;
+                  }
+                  return label;
+                };
+                auto draw_centered_state = [&](const std::string &text, int y, bool compact = false) {
+                  if (compact) {
+                    it->print(64, y, id(small_font), COLOR_ON, display::TextAlign::CENTER, text.c_str());
+                  } else {
+                    it->print(64, y, id(medium_font), COLOR_ON, display::TextAlign::CENTER, text.c_str());
+                  }
+                };
+                auto draw_detail_text = [&](const std::string &text) {
+                  if (!text.empty()) {
+                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, text.c_str());
+                  }
+                };
+                auto draw_standard_footer = [&]() {
+                  if (show_contrast_feedback) {
+                    draw_contrast_footer();
+                  } else {
+                    draw_default_footer();
+                  }
+                };
+                auto draw_mode_footer = [&](const char *left_icon, const char *right_icon, const std::string &text = "") {
+                  if (show_contrast_feedback) {
+                    draw_contrast_footer();
+                  } else {
+                    draw_footer_chrome(left_icon, right_icon);
+                    if (!text.empty()) {
+                      draw_footer_text(text.c_str());
+                    } else {
+                      it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
+                    }
+                  }
+                };
+                auto split_notification_lines = [&](std::string message) {
+                  std::array<std::string, 3> lines;
+                  for (auto &ch : message) {
+                    if (ch == '\n' || ch == '\r' || ch == '\t') {
+                      ch = ' ';
+                    }
+                  }
+                  if (message.empty()) {
+                    message = "NO NOTIFICATIONS";
+                  }
+
+                  bool truncated = message.size() > 66;
+                  if (truncated) {
+                    message = message.substr(0, 66);
+                  }
+
+                  lines[0] = message.substr(0, std::min<size_t>(22, message.size()));
+                  lines[1] = message.size() > 22 ? message.substr(22, std::min<size_t>(22, message.size() - 22)) : "";
+                  lines[2] = message.size() > 44 ? message.substr(44, std::min<size_t>(22, message.size() - 44)) : "";
+                  if (truncated && lines[2].size() >= 3) {
+                    lines[2].replace(lines[2].size() - 3, 3, "...");
+                  } else if (truncated) {
+                    lines[2] = "...";
+                  }
+                  return lines;
+                };
                 auto format_time = [&]() -> std::string {
                   auto time_now = id(homeassistant_time).now();
                   if (!time_now.is_valid()) {
@@ -3165,34 +3220,20 @@ script:
                     break;
 
                   case REMOTE_MODE_SWITCHES: {
-                    std::string switch_state = upper(id(selected_item_state));
+                    std::string switch_state = normalized_state_label(id(selected_item_state));
                     std::string switch_feedback = upper(id(last_switch_feedback));
-                    if (switch_state == "UNKNOWN" || switch_state.empty()) {
-                      switch_state = "SYNCING";
-                    }
-                    snprintf(status_line, sizeof(status_line), "%s", switch_state.c_str());
-                    it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
-
+                    draw_centered_state(switch_state, 33);
                     if (show_switch_feedback && !switch_feedback.empty()) {
-                      snprintf(detail_line, sizeof(detail_line), "%s", switch_feedback.c_str());
-                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                      draw_detail_text(switch_feedback);
                     }
-
-                    if (show_contrast_feedback) {
-                      draw_contrast_footer();
-                    } else {
-                      draw_default_footer();
-                    }
+                    draw_standard_footer();
                     break;
                   }
 
                   case REMOTE_MODE_CLIMATE: {
-                    std::string hvac_label = upper(id(selected_item_state));
+                    std::string hvac_label = normalized_state_label(id(selected_item_state));
                     std::string action_label = upper(id(selected_climate_hvac_action));
                     bool has_dual_target = has_dual_climate_target();
-                    if (hvac_label == "UNKNOWN") {
-                      hvac_label = "SYNCING";
-                    }
                     if (show_climate_target_focus) {
                       if (!isnan(id(climate_target_focus_value))) {
                         if (!has_dual_target) {
@@ -3208,40 +3249,31 @@ script:
                     } else {
                       snprintf(status_line, sizeof(status_line), "SYNCING");
                     }
-                    it->print(64, 35, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+                    draw_centered_state(status_line, 35);
 
                     if (!show_climate_target_focus && has_dual_target && action_label != "UNKNOWN") {
                       snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°${TEMPERATURE_UNIT}   HIGH: %.0f°${TEMPERATURE_UNIT}",
                                id(selected_climate_target_temp_low), id(selected_climate_target_temp_high));
-                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                      draw_detail_text(detail_line);
                     } else if (
                         !show_climate_target_focus && !isnan(id(selected_climate_target_temp)) &&
                         action_label != "UNKNOWN") {
                       snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°${TEMPERATURE_UNIT}", id(selected_climate_target_temp));
-                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                      draw_detail_text(detail_line);
                     }
 
-                    if (show_contrast_feedback) {
-                      draw_contrast_footer();
-                    } else {
-                      draw_footer_chrome("\ueac3", "\ueac9");
-                      if (hvac_label != "SYNCING" && action_label != "UNKNOWN") {
-                        snprintf(status_line, sizeof(status_line), "%s", action_label.c_str());
-                        draw_footer_text(status_line);
-                      } else {
-                        it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
-                      }
+                    std::string footer_status;
+                    if (hvac_label != "SYNCING" && action_label != "UNKNOWN") {
+                      footer_status = action_label;
                     }
+                    draw_mode_footer("\ueac3", "\ueac9", footer_status);
                     break;
                   }
 
                   case REMOTE_MODE_HUMIDIFIERS: {
-                    std::string humidifier_state = upper(id(selected_item_state));
+                    std::string humidifier_state = normalized_state_label(id(selected_item_state));
                     std::string action_label = upper(id(selected_humidifier_action));
                     std::string humidifier_mode = upper(id(selected_humidifier_mode));
-                    if (humidifier_state == "UNKNOWN" || humidifier_state.empty()) {
-                      humidifier_state = "SYNCING";
-                    }
 
                     if (show_humidifier_target && !isnan(id(selected_humidifier_target_humidity))) {
                       snprintf(status_line, sizeof(status_line), "TARGET: %.0f%%", id(selected_humidifier_target_humidity));
@@ -3250,112 +3282,80 @@ script:
                     } else {
                       snprintf(status_line, sizeof(status_line), "SYNCING");
                     }
-                    it->print(64, 35, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+                    draw_centered_state(status_line, 35);
 
                     if (show_humidifier_mode && !humidifier_mode.empty()) {
-                      snprintf(detail_line, sizeof(detail_line), "%s", humidifier_mode.c_str());
-                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                      draw_detail_text(humidifier_mode);
                     } else if (!show_humidifier_target && !isnan(id(selected_humidifier_target_humidity))) {
                       snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f%%", id(selected_humidifier_target_humidity));
-                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                      draw_detail_text(detail_line);
                     }
 
-                    if (show_contrast_feedback) {
-                      draw_contrast_footer();
-                    } else {
-                      draw_footer_chrome("\ueac3", "\ueac9");
-                      if (action_label != "UNKNOWN" && !action_label.empty()) {
-                        snprintf(footer_line, sizeof(footer_line), "%s", action_label.c_str());
-                        draw_footer_text(footer_line);
-                      } else if (humidifier_state != "SYNCING") {
-                        snprintf(footer_line, sizeof(footer_line), "%s", humidifier_state.c_str());
-                        draw_footer_text(footer_line);
-                      } else {
-                        it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
-                      }
+                    std::string footer_status;
+                    if (action_label != "UNKNOWN" && !action_label.empty()) {
+                      footer_status = action_label;
+                    } else if (humidifier_state != "SYNCING") {
+                      footer_status = humidifier_state;
                     }
+                    draw_mode_footer("\ueac3", "\ueac9", footer_status);
                     break;
                   }
 
                   case REMOTE_MODE_LOCKS: {
-                    std::string lock_state = upper(id(selected_item_state));
+                    std::string lock_state = normalized_state_label(id(selected_item_state));
                     std::string lock_feedback = upper(id(last_lock_feedback));
-                    if (lock_state == "UNKNOWN" || lock_state.empty()) {
-                      lock_state = "SYNCING";
-                    }
-                    snprintf(status_line, sizeof(status_line), "%s", lock_state.c_str());
-                    it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, status_line);
-
+                    draw_centered_state(lock_state, 33, true);
                     if (show_lock_feedback && !lock_feedback.empty()) {
-                      snprintf(detail_line, sizeof(detail_line), "%s", lock_feedback.c_str());
-                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                      draw_detail_text(lock_feedback);
                     }
-
-                    if (show_contrast_feedback) {
-                      draw_contrast_footer();
-                    } else {
-                      draw_default_footer();
-                    }
+                    draw_standard_footer();
                     break;
                   }
 
                   case REMOTE_MODE_COVERS: {
-                    std::string cover_state = upper(id(selected_item_state));
+                    std::string cover_state = normalized_state_label(id(selected_item_state));
                     std::string cover_feedback = upper(id(last_cover_feedback));
-                    if (cover_state == "UNKNOWN" || cover_state.empty()) {
-                      cover_state = "SYNCING";
-                    }
-                    snprintf(status_line, sizeof(status_line), "%s", cover_state.c_str());
-                    it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+                    draw_centered_state(cover_state, 33, true);
 
                     if (show_cover_position_bar) {
                       draw_progress_footer(id(selected_cover_position_pct), "POSITION");
                     } else {
+                      std::string cover_detail;
                       if (show_cover_feedback && !cover_feedback.empty()) {
-                        snprintf(detail_line, sizeof(detail_line), "%s", cover_feedback.c_str());
+                        cover_detail = cover_feedback;
                       } else if (cover_state == "OPEN") {
                         snprintf(detail_line, sizeof(detail_line), "%d%%", id(selected_cover_position_pct));
+                        cover_detail = detail_line;
                       }
-                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
-
-                      if (show_contrast_feedback) {
-                        draw_contrast_footer();
-                      } else {
-                        draw_default_footer();
-                      }
+                      draw_detail_text(cover_detail);
+                      draw_standard_footer();
                     }
                     break;
                   }
 
                   case REMOTE_MODE_MEDIA: {
-                    std::string playback = upper(id(selected_item_state));
+                    std::string playback = normalized_state_label(id(selected_item_state));
                     std::string device_class = id(selected_media_device_class);
                     bool is_tv = device_class == "tv" || device_class == "receiver";
                     bool is_speaker = device_class == "speaker";
                     bool media_is_on = id(selected_item_state) != "off" && id(selected_item_state) != "unknown";
-                    if (playback == "UNKNOWN") {
-                      playback = "SYNCING";
-                    }
                     if (is_tv) {
                       snprintf(status_line, sizeof(status_line), "%s", media_is_on ? "ON" : "OFF");
-                      it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+                      draw_centered_state(status_line, 33);
                     } else if (!id(selected_media_title).empty()) {
-                      snprintf(status_line, sizeof(status_line), "%s", id(selected_media_title).c_str());
-                      it->print(64, 33, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+                      draw_centered_state(id(selected_media_title), 33, true);
                     }
+                    std::string media_detail;
                     if (!is_tv && !show_media_feedback && show_media_power_feedback && !id(last_media_power_feedback).empty()) {
-                      snprintf(detail_line, sizeof(detail_line), "%s", id(last_media_power_feedback).c_str());
-                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                      media_detail = id(last_media_power_feedback);
                     } else if (!show_media_feedback && show_media_source_feedback && !id(selected_media_source).empty()) {
-                      snprintf(detail_line, sizeof(detail_line), "%s", id(selected_media_source).c_str());
-                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                      media_detail = id(selected_media_source);
                     } else if (is_tv && media_is_on && !id(selected_media_source).empty()) {
-                      snprintf(detail_line, sizeof(detail_line), "%s", id(selected_media_source).c_str());
-                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                      media_detail = id(selected_media_source);
                     } else if (!show_media_feedback && !id(selected_media_artist).empty()) {
-                      snprintf(detail_line, sizeof(detail_line), "%s", id(selected_media_artist).c_str());
-                      it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, detail_line);
+                      media_detail = id(selected_media_artist);
                     }
+                    draw_detail_text(media_detail);
 
                     if (show_media_feedback) {
                       draw_progress_footer(id(selected_media_volume_pct), "VOLUME");
@@ -3390,55 +3390,30 @@ script:
                       sensor_value = "OFF";
                     }
 
-                    if (sensor_value.size() <= 12) {
-                      it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, sensor_value.c_str());
-                    } else {
-                      it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, sensor_value.c_str());
-                    }
-
-                    if (show_contrast_feedback) {
-                      draw_contrast_footer();
-                    } else {
-                      draw_default_footer();
-                    }
+                    draw_centered_state(sensor_value, 33, sensor_value.size() > 12);
+                    draw_standard_footer();
                     break;
                   }
 
                   case REMOTE_MODE_AUTOMATION: {
-                    std::string automation_state = upper(id(selected_item_state));
+                    std::string automation_state = normalized_state_label(id(selected_item_state), "READY");
                     std::string automation_feedback = upper(id(last_automation_feedback));
                     const char *automation_type = automation_kind_label(id(selected_automation_index));
-                    if (automation_state == "UNKNOWN" || automation_state.empty()) {
-                      automation_state = "READY";
-                    }
                     if (show_automation_feedback && !automation_feedback.empty()) {
                       snprintf(status_line, sizeof(status_line), "%s", automation_feedback.c_str());
                     } else {
                       snprintf(status_line, sizeof(status_line), "%s", automation_state.c_str());
                     }
                     it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, automation_type);
-                    it->print(64, 45, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, status_line);
-
-                    if (show_contrast_feedback) {
-                      draw_contrast_footer();
-                    } else {
-                      draw_default_footer();
-                    }
+                    draw_detail_text(status_line);
+                    draw_standard_footer();
                     break;
                   }
 
                   case REMOTE_MODE_ALARMS: {
-                    std::string alarm_state = upper(id(selected_item_state));
-                    if (alarm_state == "UNKNOWN" || alarm_state.empty()) {
-                      alarm_state = "SYNCING";
-                    }
-                    it->print(64, 33, id(small_font), COLOR_ON, display::TextAlign::CENTER, alarm_state.c_str());
-
-                    if (show_contrast_feedback) {
-                      draw_contrast_footer();
-                    } else {
-                      draw_default_footer();
-                    }
+                    std::string alarm_state = normalized_state_label(id(selected_item_state));
+                    draw_centered_state(alarm_state, 33, true);
+                    draw_standard_footer();
                     break;
                   }
 
@@ -3447,93 +3422,52 @@ script:
                     bool show_dismiss_feedback =
                         id(last_notification_dismiss_interaction) > 0 &&
                         (millis() - id(last_notification_dismiss_interaction)) <= 3000;
-                    auto sanitize_message = [](std::string text) {
-                      for (auto &ch : text) {
-                        if (ch == '\n' || ch == '\r' || ch == '\t') {
-                          ch = ' ';
-                        }
-                      }
-                      return text;
-                    };
                     auto draw_notification_line = [&](int y, const std::string &text) {
                       if (!text.empty()) {
                         it->print(64, y, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, text.c_str());
                       }
                     };
 
-                    std::string line_1;
-                    std::string line_2;
-                    std::string line_3;
-
+                    std::array<std::string, 3> lines;
                     if (show_dismiss_feedback) {
-                      line_2 = "DISMISSED";
+                      lines[1] = "DISMISSED";
                     } else {
-                      message = sanitize_message(message);
-                      if (message.empty()) {
-                        message = "NO NOTIFICATIONS";
-                      }
-
-                      bool truncated = message.size() > 66;
-                      if (message.size() > 66) {
-                        message = message.substr(0, 66);
-                      }
-
-                      line_1 = message.substr(0, std::min<size_t>(22, message.size()));
-                      line_2 = message.size() > 22 ? message.substr(22, std::min<size_t>(22, message.size() - 22)) : "";
-                      line_3 = message.size() > 44 ? message.substr(44, std::min<size_t>(22, message.size() - 44)) : "";
-                      if (truncated && line_3.size() >= 3) {
-                        line_3.replace(line_3.size() - 3, 3, "...");
-                      } else if (truncated) {
-                        line_3 = "...";
-                      }
+                      lines = split_notification_lines(message);
                     }
 
-                    draw_notification_line(20, line_1);
-                    draw_notification_line(33, line_2);
-                    draw_notification_line(45, line_3);
-
-                    if (show_contrast_feedback) {
-                      draw_contrast_footer();
-                    } else {
-                      draw_default_footer();
-                    }
+                    draw_notification_line(20, lines[0]);
+                    draw_notification_line(33, lines[1]);
+                    draw_notification_line(45, lines[2]);
+                    draw_standard_footer();
                     break;
                   }
 
                   case REMOTE_MODE_WEATHER: {
-                    std::string condition = upper(id(selected_weather_condition));
-                    if (condition == "UNKNOWN") {
-                      condition = "SYNCING";
-                    }
+                    std::string condition = normalized_state_label(id(selected_weather_condition));
 
                     if (!isnan(id(selected_weather_temperature))) {
                       snprintf(status_line, sizeof(status_line), "%.0f°${TEMPERATURE_UNIT}", id(selected_weather_temperature));
                     } else {
                       snprintf(status_line, sizeof(status_line), "SYNCING");
                     }
-                    it->print(64, 33, id(medium_font), COLOR_ON, display::TextAlign::CENTER, status_line);
+                    draw_centered_state(status_line, 33);
 
                     if (condition != "SYNCING" && !condition.empty()) {
-                       it->print(64, 45, id(small_font), COLOR_ON, display::TextAlign::CENTER, condition.c_str());
+                      it->print(64, 45, id(small_font), COLOR_ON, display::TextAlign::CENTER, condition.c_str());
                     }
 
-                    if (show_contrast_feedback) {
-                      draw_contrast_footer();
-                    } else {
-                      draw_footer_chrome("\ueac3", "\ueac9");
-                      if (condition != "SYNCING" && !isnan(id(selected_weather_humidity))) {
-                        snprintf(footer_line, sizeof(footer_line), "%.0f%%", id(selected_weather_humidity));
-                        it->print(64, 58, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, footer_line);
-                      } else {
-                        it->printf(58, 51, id(symbols), COLOR_ON, "\ue1ac");
-                      }
+                    std::string footer_status;
+                    if (condition != "SYNCING" && !isnan(id(selected_weather_humidity))) {
+                      snprintf(footer_line, sizeof(footer_line), "%.0f%%", id(selected_weather_humidity));
+                      footer_status = footer_line;
                     }
+                    draw_mode_footer("\ueac3", "\ueac9", footer_status);
                     break;
                   }
 
                   case REMOTE_MODE_INFO:
                   default:
-                    if (id(selected_time_index) == 0) {
+                    if (id(selected_misc_index) == 0) {
                       std::string time_label = format_time();
                       std::string date_label = format_date();
 
@@ -3545,7 +3479,7 @@ script:
                       } else {
                         draw_default_footer();
                       }
-                    } else if (id(selected_time_index) == 1) {
+                    } else if (id(selected_misc_index) == 1) {
                       std::string ssid_label = wifi::global_wifi_component != nullptr
                           ? wifi::global_wifi_component->wifi_ssid()
                           : "";
