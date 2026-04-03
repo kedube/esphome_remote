@@ -23,8 +23,8 @@ substitutions:
 packages:
   select_pcb: !include 
     # Select the appropriate PCB file to include based on your remote control hardware revision.
-    file: pcb_proto.yaml
-    #file: pcb_rev31.yaml
+    file: boards/pcb_proto.yaml
+    #file: boards/pcb_rev31.yaml
   remote_display: !include packages/remote_display.yaml
   remote_inputs: !include packages/remote_inputs.yaml
   remote_runtime: !include packages/remote_runtime.yaml
@@ -34,15 +34,15 @@ packages:
 #  port: 80
 
 font:
-  - file: "fonts/arial-bold.ttf"
+  - file: "../assets/fonts/arial-bold.ttf"
     id: tiny_font
     size: 9
     glyphs: &arial_glyphs ['0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_ :<>%[](){}|''!?/+-&*=$#@^°']
-  - file: "fonts/arial-bold.ttf"
+  - file: "../assets/fonts/arial-bold.ttf"
     id: small_font
     size: 10
     glyphs: *arial_glyphs
-  - file: "fonts/arial-bold.ttf"
+  - file: "../assets/fonts/arial-bold.ttf"
     id: medium_font
     size: 13
     glyphs: *arial_glyphs
@@ -99,12 +99,12 @@ esphome:
     build_flags:
       - -DREMOTE_FRAMEBUFFER_WEB_DEBUG=${FRAMEBUFFER_WEB_DEBUG}
   includes:
-    - entity_helpers.h
-    - entity_helpers_common.h
-    - entity_helpers_requests.h
-    - framebuffer_web_debug.h
-    - framebuffer_web_debug.cpp
-    - local_entities.h
+    - ../include/entity_helpers.h
+    - ../include/entity_helpers_common.h
+    - ../include/entity_helpers_requests.h
+    - ../include/framebuffer_web_debug.h
+    - ../src/framebuffer_web_debug.cpp
+    - ../include/local_entities.h
   on_boot:
     - priority: 250
       then:

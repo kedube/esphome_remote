@@ -54,11 +54,11 @@ This configuration is built around:
 - Physical navigation and action buttons
 - 3D Printed Case and Buttons
 
-Board-specific wiring is selected through the package include in [`src/remote_main.yaml`](src/remote_main.yaml):
+Board-specific wiring is selected through the package include in [`esphome/remote_control.yaml`](esphome/remote_control.yaml):
 
-- `pcb_proto.yaml`
+- `esphome/boards/pcb_proto.yaml`
   Prototype / older board mapping
-- `pcb_rev31.yaml`
+- `esphome/boards/pcb_rev31.yaml`
   Revision 3.1 mapping with OLED power control and battery monitoring
 
 ## Repo Layout
@@ -67,45 +67,52 @@ Board-specific wiring is selected through the package include in [`src/remote_ma
 esphome_remote/
 ├── LICENSE
 ├── README.md
+├── assets/
+│   └── fonts/
+│       └── arial-bold.ttf
+├── esphome/
+│   ├── boards/
+│   │   ├── pcb_proto.yaml
+│   │   └── pcb_rev31.yaml
+│   ├── examples/
+│   │   └── secrets-example.yaml
+│   ├── packages/
+│   │   ├── remote_display.yaml
+│   │   ├── remote_inputs.yaml
+│   │   └── remote_runtime.yaml
+│   ├── remote_control.yaml
+│   └── secrets.yaml
 ├── home_assistant/
 │   └── remote_notifications.yaml
+├── include/
+│   ├── entity_helpers_common.h
+│   ├── entity_helpers.h
+│   ├── entity_helpers_requests.h
+│   ├── framebuffer_web_debug.h
+│   ├── local_entities-example.h
+│   └── local_entities.h
 ├── images/
 │   ├── remote_*.jpeg
 │   └── remote_UI-*.png
 └── src/
-    ├── entity_helpers_common.h
-    ├── entity_helpers.h
-    ├── entity_helpers_requests.h
-    ├── framebuffer_web_debug.cpp
-    ├── framebuffer_web_debug.h
-    ├── fonts/
-    │   └── arial-bold.ttf
-    ├── local_entities-example.h
-    ├── remote_main.yaml
-    ├── packages/
-    │   ├── remote_display.yaml
-    │   ├── remote_inputs.yaml
-    │   └── remote_runtime.yaml
-    ├── pcb_proto.yaml
-    ├── pcb_rev31.yaml
-    └── secrets-example.yaml
+    └── framebuffer_web_debug.cpp
 ```
 
 ## Important Files
 
-- `src/remote_main.yaml`
+- `esphome/remote_control.yaml`
   Main ESPHome entrypoint that pulls together the board package, shared packages, secrets, and local entity definitions.
-- `src/entity_helpers.h`
+- `include/entity_helpers.h`
   Shared C++ helper declarations used by the display and control logic.
-- `src/entity_helpers_common.h` and `src/entity_helpers_requests.h`
+- `include/entity_helpers_common.h` and `include/entity_helpers_requests.h`
   Split helper implementations for shared entity metadata/state logic and Home Assistant request helpers.
-- `src/local_entities.h`
+- `include/local_entities.h`
   Your private Home Assistant entity definitions. This file is ignored by Git.
-- `src/local_entities-example.h`
+- `include/local_entities-example.h`
   Example entity lists you can copy and customize.
-- `src/packages/`
+- `esphome/packages/`
   Modular ESPHome packages for runtime behavior, button/input handling, and display/UI rendering.
-- `src/framebuffer_web_debug.cpp` and `src/framebuffer_web_debug.h`
+- `src/framebuffer_web_debug.cpp` and `include/framebuffer_web_debug.h`
   Optional debug-only PBM framebuffer export for screenshot capture.
 - `home_assistant/remote_notifications.yaml`
   Optional Home Assistant template sensor bridge for the Notifications mode.
@@ -136,7 +143,7 @@ cd esphome_remote
 Copy the example secrets file:
 
 ```bash
-cp src/secrets-example.yaml src/secrets.yaml
+cp esphome/examples/secrets-example.yaml esphome/secrets.yaml
 ```
 
 Then fill in your Wi-Fi, OTA, and API encryption details:
@@ -153,10 +160,10 @@ ota_password: "YourOTAPassword"
 Copy the example entity file:
 
 ```bash
-cp src/local_entities-example.h src/local_entities.h
+cp include/local_entities-example.h include/local_entities.h
 ```
 
-Edit `src/local_entities.h` so it matches your Home Assistant setup.
+Edit `include/local_entities.h` so it matches your Home Assistant setup.
 
 The example file supports these lists:
 
@@ -227,25 +234,25 @@ In Notifications mode, pressing the circle or play/pause action button dismisses
 
 ## 5. Select The Correct PCB Package
 
-Open `src/remote_main.yaml` and choose the board package that matches your hardware:
+Open `esphome/remote_control.yaml` and choose the board package that matches your hardware:
 
 ```yaml
 packages:
   select_pcb: !include
-    file: pcb_proto.yaml
-    # file: pcb_rev31.yaml
+    file: boards/pcb_proto.yaml
+    # file: boards/pcb_rev31.yaml
 ```
 
 ## 6. Validate The Configuration
 
 ```bash
-esphome config src/remote_main.yaml
+esphome config esphome/remote_control.yaml
 ```
 
 ## 7. Build And Flash
 
 ```bash
-esphome run src/remote_main.yaml
+esphome run esphome/remote_control.yaml
 ```
 
 You must connect the remote via USB to your computer in order to perform the first flash. It will prompt you after a successful build for where to upload the code. After the first flash, future updates can be done over OTA.
@@ -263,7 +270,7 @@ Found multiple options for uploading, please choose one:
 
 If you want clean screenshots of the OLED UI, the project can expose the current framebuffer as a downloadable PBM image.
 
-Enable the framebuffer debug flag in [`src/remote_main.yaml`](src/remote_main.yaml):
+Enable the framebuffer debug flag in [`esphome/remote_control.yaml`](esphome/remote_control.yaml):
 
 ```yaml
 substitutions:
@@ -280,8 +287,8 @@ web_server:
 You can also use a CLI substitution override:
 
 ```bash
-esphome -s FRAMEBUFFER_WEB_DEBUG 1 config src/remote_main.yaml
-esphome -s FRAMEBUFFER_WEB_DEBUG 1 run src/remote_main.yaml
+esphome -s FRAMEBUFFER_WEB_DEBUG 1 config esphome/remote_control.yaml
+esphome -s FRAMEBUFFER_WEB_DEBUG 1 run esphome/remote_control.yaml
 ```
 
 After flashing, browse to:
@@ -306,7 +313,7 @@ Notes:
 - In Covers mode, circle opens and play/pause closes. The remote shows temporary detail-line feedback such as `OPENING...`, `CLOSING...`, `OPENED`, `CLOSED`, and `OPEN xx%`.
 - In Automations mode, automations, scripts, and scenes show temporary feedback such as `TRIGGERING...`, `ACTIVATING...`, `RUNNING...`, `TRIGGERED`, `ACTIVATED`, `STARTED`, and `COMPLETED`.
 - Info mode includes Time & Date, Network, and Version screens.
-- Notification mode reads from `NOTIFICATION_FEED_ENTITY` in `src/local_entities.h`.
+- Notification mode reads from `NOTIFICATION_FEED_ENTITY` in `include/local_entities.h`.
 
 ## Supported Home Assistant Entity Domains
 
@@ -328,7 +335,7 @@ Notes:
 
 ## Important Settings
 
-These substitutions near the top of `src/remote_main.yaml` are the main things you may want to customize:
+These substitutions near the top of `esphome/remote_control.yaml` are the main things you may want to customize:
 
 - `TEMPERATURE_UNIT`
   Set to `"F"` or `"C"` to match your Home Assistant climate values.
@@ -350,7 +357,7 @@ These substitutions near the top of `src/remote_main.yaml` are the main things y
 Create it from the example file:
 
 ```bash
-cp src/local_entities-example.h src/local_entities.h
+cp include/local_entities-example.h include/local_entities.h
 ```
 
 ### `secrets.yaml` is missing
@@ -358,7 +365,7 @@ cp src/local_entities-example.h src/local_entities.h
 Create it from the example file:
 
 ```bash
-cp src/secrets-example.yaml src/secrets.yaml
+cp esphome/examples/secrets-example.yaml esphome/secrets.yaml
 ```
 
 ### A mode does not appear in the menu
@@ -379,21 +386,21 @@ Ensure there are no typos in the entity name. You can check the list of entity n
 
 Make sure both of these are true:
 
-- `FRAMEBUFFER_WEB_DEBUG: "1"` is set in `src/remote_main.yaml`
-- `web_server:` is uncommented in `src/remote_main.yaml`
+- `FRAMEBUFFER_WEB_DEBUG: "1"` is set in `esphome/remote_control.yaml`
+- `web_server:` is uncommented in `esphome/remote_control.yaml`
 
 ### ESPHome compile or upload fails
 
 Start with:
 
 ```bash
-esphome config src/remote_main.yaml
+esphome config esphome/remote_control.yaml
 ```
 
 If validation succeeds, retry with:
 
 ```bash
-esphome run src/remote_main.yaml
+esphome run esphome/remote_control.yaml
 ```
 
 ## Related Links
