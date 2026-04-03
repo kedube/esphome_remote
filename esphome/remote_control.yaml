@@ -1521,6 +1521,36 @@ script:
           feedback: !lambda |-
             return std::string(alarm_arm_mode_selection_label(clamp_alarm_arm_mode(id(selected_alarm_arm_mode))));
 
+  - id: set_alarm_blocked_feedback
+    then:
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: !lambda |-
+            return id(selected_item_state) == "unknown" ? std::string("SYNCING") : std::string("DISARM FIRST");
+      - lambda: |-
+          request_selected_alarm_status(id(selected_misc_index));
+
+  - id: start_alarm_transition
+    parameters:
+      feedback: std::string
+      next_state: std::string
+    then:
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: !lambda 'return feedback;'
+      - lambda: |-
+          id(selected_item_state) = next_state;
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: fail_alarm_action
+    then:
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: "FAILED"
+      - lambda: |-
+          request_selected_alarm_status(id(selected_misc_index));
+
   - id: arm_selected_alarm_away
     mode: queued
     then:
@@ -1528,20 +1558,12 @@ script:
           condition:
             lambda: 'return id(selected_item_state) != "disarmed";'
           then:
-            - script.execute:
-                id: set_alarm_feedback
-                feedback: !lambda |-
-                  return id(selected_item_state) == "unknown" ? std::string("SYNCING") : std::string("DISARM FIRST");
-            - lambda: |-
-                request_selected_alarm_status(id(selected_misc_index));
+            - script.execute: set_alarm_blocked_feedback
             - script.stop: arm_selected_alarm_away
       - script.execute:
-          id: set_alarm_feedback
+          id: start_alarm_transition
           feedback: "ARMING..."
-      - lambda: |-
-          id(selected_item_state) = "arming";
-          id(updated_ui) = true;
-      - script.execute: update_display
+          next_state: "arming"
       - if:
           condition:
             lambda: 'return !std::string("${ALARM_CODE}").empty();'
@@ -1560,11 +1582,7 @@ script:
                       success_feedback: "SUCCESS"
                       failure_feedback: "FAILED"
                 on_error:
-                  - script.execute:
-                      id: set_alarm_feedback
-                      feedback: "FAILED"
-                  - lambda: |-
-                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute: fail_alarm_action
           else:
             - homeassistant.action:
                 action: alarm_control_panel.alarm_arm_away
@@ -1579,11 +1597,7 @@ script:
                       success_feedback: "SUCCESS"
                       failure_feedback: "FAILED"
                 on_error:
-                  - script.execute:
-                      id: set_alarm_feedback
-                      feedback: "FAILED"
-                  - lambda: |-
-                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute: fail_alarm_action
 
   - id: arm_selected_alarm_home
     mode: queued
@@ -1592,20 +1606,12 @@ script:
           condition:
             lambda: 'return id(selected_item_state) != "disarmed";'
           then:
-            - script.execute:
-                id: set_alarm_feedback
-                feedback: !lambda |-
-                  return id(selected_item_state) == "unknown" ? std::string("SYNCING") : std::string("DISARM FIRST");
-            - lambda: |-
-                request_selected_alarm_status(id(selected_misc_index));
+            - script.execute: set_alarm_blocked_feedback
             - script.stop: arm_selected_alarm_home
       - script.execute:
-          id: set_alarm_feedback
+          id: start_alarm_transition
           feedback: "ARMING..."
-      - lambda: |-
-          id(selected_item_state) = "arming";
-          id(updated_ui) = true;
-      - script.execute: update_display
+          next_state: "arming"
       - if:
           condition:
             lambda: 'return !std::string("${ALARM_CODE}").empty();'
@@ -1624,11 +1630,7 @@ script:
                       success_feedback: "SUCCESS"
                       failure_feedback: "FAILED"
                 on_error:
-                  - script.execute:
-                      id: set_alarm_feedback
-                      feedback: "FAILED"
-                  - lambda: |-
-                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute: fail_alarm_action
           else:
             - homeassistant.action:
                 action: alarm_control_panel.alarm_arm_home
@@ -1643,11 +1645,7 @@ script:
                       success_feedback: "SUCCESS"
                       failure_feedback: "FAILED"
                 on_error:
-                  - script.execute:
-                      id: set_alarm_feedback
-                      feedback: "FAILED"
-                  - lambda: |-
-                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute: fail_alarm_action
 
   - id: arm_selected_alarm_night
     mode: queued
@@ -1656,20 +1654,12 @@ script:
           condition:
             lambda: 'return id(selected_item_state) != "disarmed";'
           then:
-            - script.execute:
-                id: set_alarm_feedback
-                feedback: !lambda |-
-                  return id(selected_item_state) == "unknown" ? std::string("SYNCING") : std::string("DISARM FIRST");
-            - lambda: |-
-                request_selected_alarm_status(id(selected_misc_index));
+            - script.execute: set_alarm_blocked_feedback
             - script.stop: arm_selected_alarm_night
       - script.execute:
-          id: set_alarm_feedback
+          id: start_alarm_transition
           feedback: "ARMING..."
-      - lambda: |-
-          id(selected_item_state) = "arming";
-          id(updated_ui) = true;
-      - script.execute: update_display
+          next_state: "arming"
       - if:
           condition:
             lambda: 'return !std::string("${ALARM_CODE}").empty();'
@@ -1688,11 +1678,7 @@ script:
                       success_feedback: "SUCCESS"
                       failure_feedback: "FAILED"
                 on_error:
-                  - script.execute:
-                      id: set_alarm_feedback
-                      feedback: "FAILED"
-                  - lambda: |-
-                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute: fail_alarm_action
           else:
             - homeassistant.action:
                 action: alarm_control_panel.alarm_arm_night
@@ -1707,11 +1693,7 @@ script:
                       success_feedback: "SUCCESS"
                       failure_feedback: "FAILED"
                 on_error:
-                  - script.execute:
-                      id: set_alarm_feedback
-                      feedback: "FAILED"
-                  - lambda: |-
-                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute: fail_alarm_action
 
   - id: arm_selected_alarm_vacation
     mode: queued
@@ -1720,20 +1702,12 @@ script:
           condition:
             lambda: 'return id(selected_item_state) != "disarmed";'
           then:
-            - script.execute:
-                id: set_alarm_feedback
-                feedback: !lambda |-
-                  return id(selected_item_state) == "unknown" ? std::string("SYNCING") : std::string("DISARM FIRST");
-            - lambda: |-
-                request_selected_alarm_status(id(selected_misc_index));
+            - script.execute: set_alarm_blocked_feedback
             - script.stop: arm_selected_alarm_vacation
       - script.execute:
-          id: set_alarm_feedback
+          id: start_alarm_transition
           feedback: "ARMING..."
-      - lambda: |-
-          id(selected_item_state) = "arming";
-          id(updated_ui) = true;
-      - script.execute: update_display
+          next_state: "arming"
       - if:
           condition:
             lambda: 'return !std::string("${ALARM_CODE}").empty();'
@@ -1752,11 +1726,7 @@ script:
                       success_feedback: "SUCCESS"
                       failure_feedback: "FAILED"
                 on_error:
-                  - script.execute:
-                      id: set_alarm_feedback
-                      feedback: "FAILED"
-                  - lambda: |-
-                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute: fail_alarm_action
           else:
             - homeassistant.action:
                 action: alarm_control_panel.alarm_arm_vacation
@@ -1771,19 +1741,14 @@ script:
                       success_feedback: "SUCCESS"
                       failure_feedback: "FAILED"
                 on_error:
-                  - script.execute:
-                      id: set_alarm_feedback
-                      feedback: "FAILED"
-                  - lambda: |-
-                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute: fail_alarm_action
 
   - id: arm_selected_alarm_with_selected_mode
     then:
       - lambda: |-
           AlarmArmMode arm_mode = clamp_alarm_arm_mode(id(selected_alarm_arm_mode));
           if (id(selected_item_state) != "disarmed") {
-            id(set_alarm_feedback).execute(id(selected_item_state) == "unknown" ? "SYNCING" : "DISARM FIRST");
-            request_selected_alarm_status(id(selected_misc_index));
+            id(set_alarm_blocked_feedback).execute();
             return;
           }
           switch (arm_mode) {
@@ -1826,12 +1791,9 @@ script:
                 request_selected_alarm_status(id(selected_misc_index));
             - script.stop: disarm_selected_alarm
       - script.execute:
-          id: set_alarm_feedback
+          id: start_alarm_transition
           feedback: "DISARMING..."
-      - lambda: |-
-          id(selected_item_state) = "disarming";
-          id(updated_ui) = true;
-      - script.execute: update_display
+          next_state: "disarming"
       - if:
           condition:
             lambda: 'return !std::string("${ALARM_CODE}").empty();'
@@ -1850,11 +1812,7 @@ script:
                       success_feedback: "SUCCESS"
                       failure_feedback: "FAILED"
                 on_error:
-                  - script.execute:
-                      id: set_alarm_feedback
-                      feedback: "FAILED"
-                  - lambda: |-
-                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute: fail_alarm_action
           else:
             - homeassistant.action:
                 action: alarm_control_panel.alarm_disarm
@@ -1869,11 +1827,7 @@ script:
                       success_feedback: "SUCCESS"
                       failure_feedback: "FAILED"
                 on_error:
-                  - script.execute:
-                      id: set_alarm_feedback
-                      feedback: "FAILED"
-                  - lambda: |-
-                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute: fail_alarm_action
 
   - id: trigger_selected_alarm
     mode: queued
@@ -1899,11 +1853,9 @@ script:
                 request_selected_alarm_status(id(selected_misc_index));
             - script.stop: trigger_selected_alarm
       - script.execute:
-          id: set_alarm_feedback
+          id: start_alarm_transition
           feedback: "TRIGGERING..."
-      - lambda: |-
-          id(updated_ui) = true;
-      - script.execute: update_display
+          next_state: !lambda 'return id(selected_item_state);'
       - if:
           condition:
             lambda: 'return !std::string("${ALARM_CODE}").empty();'
@@ -1922,11 +1874,7 @@ script:
                       success_feedback: "SUCCESS"
                       failure_feedback: "FAILED"
                 on_error:
-                  - script.execute:
-                      id: set_alarm_feedback
-                      feedback: "FAILED"
-                  - lambda: |-
-                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute: fail_alarm_action
           else:
             - homeassistant.action:
                 action: alarm_control_panel.alarm_trigger
@@ -1941,11 +1889,7 @@ script:
                       success_feedback: "SUCCESS"
                       failure_feedback: "FAILED"
                 on_error:
-                  - script.execute:
-                      id: set_alarm_feedback
-                      feedback: "FAILED"
-                  - lambda: |-
-                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute: fail_alarm_action
 
   - id: open_selected_cover
     mode: queued

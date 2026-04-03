@@ -603,20 +603,6 @@ static inline AlarmArmMode next_alarm_arm_mode(AlarmArmMode mode, int step = 1) 
   return static_cast<AlarmArmMode>(next);
 }
 
-static inline const char *alarm_arm_mode_state(AlarmArmMode mode) {
-  switch (mode) {
-    case ALARM_ARM_MODE_HOME:
-      return "armed_home";
-    case ALARM_ARM_MODE_NIGHT:
-      return "armed_night";
-    case ALARM_ARM_MODE_VACATION:
-      return "armed_vacation";
-    case ALARM_ARM_MODE_AWAY:
-    default:
-      return "armed_away";
-  }
-}
-
 static inline const char *alarm_arm_mode_selection_label(AlarmArmMode mode) {
   switch (mode) {
     case ALARM_ARM_MODE_HOME:
@@ -628,20 +614,6 @@ static inline const char *alarm_arm_mode_selection_label(AlarmArmMode mode) {
     case ALARM_ARM_MODE_AWAY:
     default:
       return "ARM AWAY";
-  }
-}
-
-static inline const char *alarm_arm_mode_success_label(AlarmArmMode mode) {
-  switch (mode) {
-    case ALARM_ARM_MODE_HOME:
-      return "ARMED HOME";
-    case ALARM_ARM_MODE_NIGHT:
-      return "ARMED NIGHT";
-    case ALARM_ARM_MODE_VACATION:
-      return "ARMED VACATION";
-    case ALARM_ARM_MODE_AWAY:
-    default:
-      return "ARMED AWAY";
   }
 }
 
