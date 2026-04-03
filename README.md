@@ -83,8 +83,7 @@ esphome_remote/
 │   │   ├── remote_inputs.yaml
 │   │   └── remote_runtime.yaml
 │   ├── remote_control.yaml
-│   ├── settings.yaml
-│   └── secrets.yaml
+│   └── settings.yaml
 ├── home_assistant/
 │   └── remote_notifications.yaml
 ├── include/
