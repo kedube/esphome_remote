@@ -2,12 +2,14 @@ substitutions:
   BOARD: "esp32dev"
   DEVICE_NAME: "esp32-remote"
   FRIENDLY_NAME: "ESP32 OLED Remote"
-  VERSION: "2.2"
+  VERSION: "2.3"
   FRAMEBUFFER_WEB_DEBUG: "0"
   TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
   SLEEP_DURATION: "120" # seconds until auto-sleep
   DEEP_SLEEP_DURATION: "360min"
   LONG_PRESS_DURATION_MS: "2000" # hold time for lock/cover/automation actions
+  ALARM_TRIGGER_HOLD_DURATION_MS: "10000" # hold time for triggering the alarm from the settings button
+  ALARM_STATUS_UPDATE_DELAY_MS: "16000" # wait before replacing arming/disarming status feedback
   LOW_BATTERY_VOLTAGE: "3.45" # boot warning threshold when battery monitoring is available
 
 packages:

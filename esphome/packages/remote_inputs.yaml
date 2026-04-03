@@ -97,6 +97,7 @@ binary_sensor:
         - script.execute: cycle_mode
 
   - platform: gpio
+    id: settings_mode_button
     pin:
       number: ${PIN_BTN_SETTINGS}
       mode:
@@ -109,7 +110,10 @@ binary_sensor:
     on_press:
       then:
         - script.execute: reset_idle_timer
-        - script.execute: secondary_mode_action
+        - script.execute: handle_settings_button_press
+    on_release:
+      then:
+        - script.execute: handle_settings_button_release
 
   - platform: gpio
     id: primary_mode_button

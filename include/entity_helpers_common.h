@@ -233,6 +233,23 @@ static inline std::string cover_operation_feedback_for_state(const std::string &
   return "";
 }
 
+static inline bool alarm_state_matches_expected(const std::string &state, const std::string &expected_state) {
+  return state == expected_state;
+}
+
+static inline std::string alarm_operation_feedback_for_state(const std::string &state) {
+  if (state == "arming" || state == "pending") {
+    return "ARMING...";
+  }
+  if (state == "disarming") {
+    return "DISARMING...";
+  }
+  if (state == "triggered") {
+    return "TRIGGERED";
+  }
+  return "";
+}
+
 static inline int delimited_option_count(const std::string &source_list) {
   int count = 0;
   size_t start = 0;
@@ -564,6 +581,83 @@ enum AutomationKind {
   AUTOMATION_KIND_SCRIPT = 1,
   AUTOMATION_KIND_SCENE = 2,
 };
+
+enum AlarmArmMode {
+  ALARM_ARM_MODE_AWAY = 0,
+  ALARM_ARM_MODE_HOME = 1,
+  ALARM_ARM_MODE_NIGHT = 2,
+  ALARM_ARM_MODE_VACATION = 3,
+};
+
+static constexpr int ALARM_ARM_MODE_COUNT = 4;
+
+static inline AlarmArmMode clamp_alarm_arm_mode(int value) {
+  if (value < 0 || value >= ALARM_ARM_MODE_COUNT) {
+    return ALARM_ARM_MODE_AWAY;
+  }
+  return static_cast<AlarmArmMode>(value);
+}
+
+static inline AlarmArmMode next_alarm_arm_mode(AlarmArmMode mode, int step = 1) {
+  int next = (static_cast<int>(mode) + (step % ALARM_ARM_MODE_COUNT) + ALARM_ARM_MODE_COUNT) % ALARM_ARM_MODE_COUNT;
+  return static_cast<AlarmArmMode>(next);
+}
+
+static inline const char *alarm_arm_mode_state(AlarmArmMode mode) {
+  switch (mode) {
+    case ALARM_ARM_MODE_HOME:
+      return "armed_home";
+    case ALARM_ARM_MODE_NIGHT:
+      return "armed_night";
+    case ALARM_ARM_MODE_VACATION:
+      return "armed_vacation";
+    case ALARM_ARM_MODE_AWAY:
+    default:
+      return "armed_away";
+  }
+}
+
+static inline const char *alarm_arm_mode_selection_label(AlarmArmMode mode) {
+  switch (mode) {
+    case ALARM_ARM_MODE_HOME:
+      return "ARM HOME";
+    case ALARM_ARM_MODE_NIGHT:
+      return "ARM NIGHT";
+    case ALARM_ARM_MODE_VACATION:
+      return "ARM VACATION";
+    case ALARM_ARM_MODE_AWAY:
+    default:
+      return "ARM AWAY";
+  }
+}
+
+static inline const char *alarm_arm_mode_success_label(AlarmArmMode mode) {
+  switch (mode) {
+    case ALARM_ARM_MODE_HOME:
+      return "ARMED HOME";
+    case ALARM_ARM_MODE_NIGHT:
+      return "ARMED NIGHT";
+    case ALARM_ARM_MODE_VACATION:
+      return "ARMED VACATION";
+    case ALARM_ARM_MODE_AWAY:
+    default:
+      return "ARMED AWAY";
+  }
+}
+
+static inline const char *alarm_arm_mode_hold_label(AlarmArmMode mode) {
+  switch (mode) {
+    case ALARM_ARM_MODE_HOME:
+      return "HOLD TO ARM HOME";
+    case ALARM_ARM_MODE_NIGHT:
+      return "HOLD TO ARM NIGHT";
+    case ALARM_ARM_MODE_VACATION:
+      return "HOLD TO ARM VACATION";
+    case ALARM_ARM_MODE_AWAY:
+    default:
+      return "HOLD TO ARM AWAY";
+  }
+}
 
 static inline AutomationKind automation_kind(int idx) {
   if (idx < 0 || idx >= AUTOMATION_LIST_COUNT) {

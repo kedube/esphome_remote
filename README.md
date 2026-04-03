@@ -265,12 +265,29 @@ This file also contains the most common substitutions you may want to change:
   Duration of deep sleep.
 - `LONG_PRESS_DURATION_MS`
   Hold time for protected actions.
+- `ALARM_TRIGGER_HOLD_DURATION_MS`
+  Hold time for the Settings button alarm-trigger action. Default is 10 seconds.
+- `ALARM_CODE`
+  Optional alarm code. Leave it empty or replace it with `!secret alarm_code`.
 - `LOW_BATTERY_VOLTAGE`
   Battery warning threshold for battery-monitoring boards.
 - `FRAMEBUFFER_WEB_DEBUG`
   Set to `"1"` only when using the optional framebuffer download endpoint.
 
 `esphome/remote_control.yaml` still contains the board-specific `PIN_*` substitutions that are provided by the selected PCB package.
+
+If your alarm integration requires a code, set it in `esphome/settings.yaml` like this:
+
+```yaml
+substitutions:
+  ALARM_CODE: !secret alarm_code
+```
+
+Then add the value to `esphome/secrets.yaml`:
+
+```yaml
+alarm_code: "1234"
+```
 
 ## 6. Validate The Configuration
 
@@ -341,6 +358,11 @@ Notes:
 - In Locks mode, circle locks and play/pause unlocks. The remote shows temporary detail-line feedback such as `LOCKING...`, `UNLOCKING...`, `LOCKED`, `UNLOCKED`, `JAMMED`, `ALREADY LOCKED`, and `ALREADY UNLOCKED`.
 - In Covers mode, circle opens and play/pause closes. The remote shows temporary detail-line feedback such as `OPENING...`, `CLOSING...`, `OPENED`, `CLOSED`, and `OPEN xx%`.
 - In Automations mode, automations, scripts, and scenes show temporary feedback such as `TRIGGERING...`, `ACTIVATING...`, `RUNNING...`, `TRIGGERED`, `ACTIVATED`, `STARTED`, and `COMPLETED`.
+- In Alarms mode, circle long-press arms using the currently selected arm mode when the panel is disarmed.
+- In Alarms mode, play/pause long-press disarms the panel.
+- In Alarms mode, dimmer up and dimmer down cycle `away`, `home`, `night`, and `vacation` arm modes in the details line for 5 seconds.
+- In Alarms mode, the Settings button must be held for `ALARM_TRIGGER_HOLD_DURATION_MS` to call `alarm_trigger`. The details line shows `HOLD TO TRIGGER` while held.
+- Alarm actions use temporary details-line feedback such as `ARMING...`, `DISARMING...`, `TRIGGERING...`, `ARMED HOME`, `DISARMED`, `TRIGGERED`, and `FAILED`-style responses when Home Assistant reports an error.
 - Info mode includes Time & Date, Network, and Version screens.
 - Notification mode reads from `NOTIFICATION_FEED_ENTITY` in `include/local_entities.h`.
 
@@ -374,6 +396,10 @@ These substitutions in `esphome/settings.yaml` are the main things you may want 
   Duration of deep sleep.
 - `LONG_PRESS_DURATION_MS`
   Hold time for protected actions.
+- `ALARM_TRIGGER_HOLD_DURATION_MS`
+  Hold time for the alarm trigger action on the Settings button.
+- `ALARM_CODE`
+  Optional alarm code. This can stay empty or be set from `!secret alarm_code`.
 - `LOW_BATTERY_VOLTAGE`
   Battery warning threshold for battery-monitoring boards.
 - `PIN_*`
@@ -410,6 +436,14 @@ Ensure there are no typos in the entity name. You can check the list of entity n
 {{ e.entity_id }}
 {% endfor %}
 ```
+
+### Alarm arm or disarm actions fail
+
+Check these items:
+
+- Your alarm entity supports the requested service such as `alarm_arm_home`, `alarm_arm_night`, or `alarm_disarm`.
+- If your integration requires a code, `ALARM_CODE` is set in `esphome/settings.yaml` and `alarm_code` exists in `esphome/secrets.yaml`.
+- If your integration does not require a code, leave `ALARM_CODE` empty.
 
 ### The framebuffer download URL does not work
 

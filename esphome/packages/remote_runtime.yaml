@@ -74,6 +74,10 @@ interval:
                 if (id(last_automation_interaction) > 0 && automation_elapsed > 5000 && automation_elapsed < 5500) {
                   id(updated_ui) = true;
                 }
+                uint32_t alarm_elapsed = now - id(last_alarm_interaction);
+                if (id(last_alarm_interaction) > 0 && alarm_elapsed > 5000 && alarm_elapsed < 5500) {
+                  id(updated_ui) = true;
+                }
                 uint32_t contrast_elapsed = now - id(last_contrast_interaction);
                 if (id(last_contrast_interaction) > 0 && contrast_elapsed > 3000 && contrast_elapsed < 3500) {
                   id(updated_ui) = true;

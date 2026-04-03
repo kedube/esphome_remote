@@ -1,4 +1,5 @@
 substitutions:
+  ALARM_CODE: !secret alarm_code
   PIN_WAKE: "0"
   PIN_I2C_SDA: "27"
   PIN_I2C_SCL: "25"
@@ -384,6 +385,7 @@ script:
           id(last_media_source_interaction) = 0;
           id(last_media_power_interaction) = 0;
           id(last_automation_interaction) = 0;
+          id(last_alarm_interaction) = 0;
 
   - id: reset_selected_item_state
     then:
@@ -413,11 +415,22 @@ script:
           id(selected_media_source) = "";
           id(last_media_power_feedback) = "";
           id(selected_automation_state) = "unknown";
+          id(last_alarm_feedback) = "";
+          id(last_alarm_interaction) = 0;
           id(last_lock_feedback) = "";
           id(last_lock_interaction) = 0;
           id(last_cover_feedback) = "";
           id(last_cover_interaction) = 0;
           id(last_cover_position_interaction) = 0;
+          id(primary_button_press_started_at) = 0;
+          id(play_pause_button_press_started_at) = 0;
+          id(settings_button_press_started_at) = 0;
+          id(primary_button_press_mode) = -1;
+          id(play_pause_button_press_mode) = -1;
+          id(settings_button_press_mode) = -1;
+          id(primary_button_long_press_fired) = false;
+          id(play_pause_button_long_press_fired) = false;
+          id(settings_button_long_press_fired) = false;
           id(selected_weather_temperature) = NAN;
           id(selected_weather_humidity) = NAN;
           id(selected_weather_high_temp) = NAN;
@@ -894,6 +907,9 @@ script:
                 case REMOTE_MODE_MEDIA:
                   id(select_next_media_source).execute();
                   break;
+                case REMOTE_MODE_ALARMS:
+                  id(trigger_selected_alarm).execute();
+                  break;
                 default:
                   mark_ui();
                   break;
@@ -932,6 +948,9 @@ script:
                   break;
                 case REMOTE_MODE_AUTOMATION:
                   id(trigger_selected_automation).execute();
+                  break;
+                case REMOTE_MODE_ALARMS:
+                  id(arm_selected_alarm_with_selected_mode).execute();
                   break;
                 case REMOTE_MODE_NOTIFICATIONS:
                   id(dismiss_selected_notification).execute();
@@ -975,6 +994,9 @@ script:
                 case REMOTE_MODE_AUTOMATION:
                   id(trigger_selected_automation).execute();
                   break;
+                case REMOTE_MODE_ALARMS:
+                  id(disarm_selected_alarm).execute();
+                  break;
                 case REMOTE_MODE_NOTIFICATIONS:
                   id(dismiss_selected_notification).execute();
                   break;
@@ -1004,6 +1026,9 @@ script:
                 case REMOTE_MODE_MEDIA:
                   id(media_volume_up).execute();
                   break;
+                case REMOTE_MODE_ALARMS:
+                  id(shift_selected_alarm_arm_mode).execute(1);
+                  break;
                 default:
                   mark_ui();
                   break;
@@ -1029,6 +1054,9 @@ script:
                   break;
                 case REMOTE_MODE_MEDIA:
                   id(media_volume_down).execute();
+                  break;
+                case REMOTE_MODE_ALARMS:
+                  id(shift_selected_alarm_arm_mode).execute(-1);
                   break;
                 default:
                   mark_ui();
@@ -1429,6 +1457,495 @@ script:
                   id(set_cover_feedback).execute(feedback);
                 }
                 id(cover_verification_complete) = true;
+
+  - id: verify_selected_alarm_result
+    mode: restart
+    parameters:
+      expected_state: std::string
+      success_feedback: std::string
+      failure_feedback: std::string
+    then:
+      - lambda: |-
+          id(alarm_verification_complete) = false;
+      - delay: ${ALARM_STATUS_UPDATE_DELAY_MS}ms
+      - repeat:
+          count: 6
+          then:
+            - if:
+                condition:
+                  lambda: 'return !id(alarm_verification_complete);'
+                then:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+                  - delay: 1000ms
+                  - lambda: |-
+                      const std::string state = alarm_state_for_index(id(selected_misc_index));
+                      const std::string feedback = alarm_operation_feedback_for_state(state);
+                      if (alarm_state_matches_expected(state, expected_state)) {
+                        id(set_alarm_feedback).execute(success_feedback);
+                        id(alarm_verification_complete) = true;
+                      } else if (!feedback.empty()) {
+                        id(set_alarm_feedback).execute(feedback);
+                      }
+      - lambda: |-
+          if (id(alarm_verification_complete)) {
+            return;
+          }
+          request_selected_alarm_status(id(selected_misc_index));
+      - if:
+          condition:
+            lambda: 'return !id(alarm_verification_complete);'
+          then:
+            - delay: 500ms
+            - lambda: |-
+                const std::string state = alarm_state_for_index(id(selected_misc_index));
+                const std::string feedback = alarm_operation_feedback_for_state(state);
+                if (alarm_state_matches_expected(state, expected_state)) {
+                  id(set_alarm_feedback).execute(success_feedback);
+                } else if (!feedback.empty()) {
+                  id(set_alarm_feedback).execute(feedback);
+                } else {
+                  id(set_alarm_feedback).execute(failure_feedback);
+                }
+                id(alarm_verification_complete) = true;
+
+  - id: shift_selected_alarm_arm_mode
+    parameters:
+      step: int
+    then:
+      - lambda: |-
+          AlarmArmMode next_mode = next_alarm_arm_mode(clamp_alarm_arm_mode(id(selected_alarm_arm_mode)), step);
+          id(selected_alarm_arm_mode) = static_cast<int>(next_mode);
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: !lambda |-
+            return std::string(alarm_arm_mode_selection_label(clamp_alarm_arm_mode(id(selected_alarm_arm_mode))));
+
+  - id: arm_selected_alarm_away
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) != "disarmed";'
+          then:
+            - script.execute:
+                id: set_alarm_feedback
+                feedback: !lambda |-
+                  return id(selected_item_state) == "unknown" ? std::string("SYNCING") : std::string("DISARM FIRST");
+            - lambda: |-
+                request_selected_alarm_status(id(selected_misc_index));
+            - script.stop: arm_selected_alarm_away
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: "ARMING..."
+      - lambda: |-
+          id(selected_item_state) = "arming";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - if:
+          condition:
+            lambda: 'return !std::string("${ALARM_CODE}").empty();'
+          then:
+            - homeassistant.action:
+                action: alarm_control_panel.alarm_arm_away
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  code: "${ALARM_CODE}"
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: "armed_away"
+                      success_feedback: "SUCCESS"
+                      failure_feedback: "FAILED"
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: "FAILED"
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+          else:
+            - homeassistant.action:
+                action: alarm_control_panel.alarm_arm_away
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: "armed_away"
+                      success_feedback: "SUCCESS"
+                      failure_feedback: "FAILED"
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: "FAILED"
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+
+  - id: arm_selected_alarm_home
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) != "disarmed";'
+          then:
+            - script.execute:
+                id: set_alarm_feedback
+                feedback: !lambda |-
+                  return id(selected_item_state) == "unknown" ? std::string("SYNCING") : std::string("DISARM FIRST");
+            - lambda: |-
+                request_selected_alarm_status(id(selected_misc_index));
+            - script.stop: arm_selected_alarm_home
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: "ARMING..."
+      - lambda: |-
+          id(selected_item_state) = "arming";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - if:
+          condition:
+            lambda: 'return !std::string("${ALARM_CODE}").empty();'
+          then:
+            - homeassistant.action:
+                action: alarm_control_panel.alarm_arm_home
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  code: "${ALARM_CODE}"
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: "armed_home"
+                      success_feedback: "SUCCESS"
+                      failure_feedback: "FAILED"
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: "FAILED"
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+          else:
+            - homeassistant.action:
+                action: alarm_control_panel.alarm_arm_home
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: "armed_home"
+                      success_feedback: "SUCCESS"
+                      failure_feedback: "FAILED"
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: "FAILED"
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+
+  - id: arm_selected_alarm_night
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) != "disarmed";'
+          then:
+            - script.execute:
+                id: set_alarm_feedback
+                feedback: !lambda |-
+                  return id(selected_item_state) == "unknown" ? std::string("SYNCING") : std::string("DISARM FIRST");
+            - lambda: |-
+                request_selected_alarm_status(id(selected_misc_index));
+            - script.stop: arm_selected_alarm_night
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: "ARMING..."
+      - lambda: |-
+          id(selected_item_state) = "arming";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - if:
+          condition:
+            lambda: 'return !std::string("${ALARM_CODE}").empty();'
+          then:
+            - homeassistant.action:
+                action: alarm_control_panel.alarm_arm_night
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  code: "${ALARM_CODE}"
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: "armed_night"
+                      success_feedback: "SUCCESS"
+                      failure_feedback: "FAILED"
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: "FAILED"
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+          else:
+            - homeassistant.action:
+                action: alarm_control_panel.alarm_arm_night
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: "armed_night"
+                      success_feedback: "SUCCESS"
+                      failure_feedback: "FAILED"
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: "FAILED"
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+
+  - id: arm_selected_alarm_vacation
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) != "disarmed";'
+          then:
+            - script.execute:
+                id: set_alarm_feedback
+                feedback: !lambda |-
+                  return id(selected_item_state) == "unknown" ? std::string("SYNCING") : std::string("DISARM FIRST");
+            - lambda: |-
+                request_selected_alarm_status(id(selected_misc_index));
+            - script.stop: arm_selected_alarm_vacation
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: "ARMING..."
+      - lambda: |-
+          id(selected_item_state) = "arming";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - if:
+          condition:
+            lambda: 'return !std::string("${ALARM_CODE}").empty();'
+          then:
+            - homeassistant.action:
+                action: alarm_control_panel.alarm_arm_vacation
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  code: "${ALARM_CODE}"
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: "armed_vacation"
+                      success_feedback: "SUCCESS"
+                      failure_feedback: "FAILED"
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: "FAILED"
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+          else:
+            - homeassistant.action:
+                action: alarm_control_panel.alarm_arm_vacation
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: "armed_vacation"
+                      success_feedback: "SUCCESS"
+                      failure_feedback: "FAILED"
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: "FAILED"
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+
+  - id: arm_selected_alarm_with_selected_mode
+    then:
+      - lambda: |-
+          AlarmArmMode arm_mode = clamp_alarm_arm_mode(id(selected_alarm_arm_mode));
+          if (id(selected_item_state) != "disarmed") {
+            id(set_alarm_feedback).execute(id(selected_item_state) == "unknown" ? "SYNCING" : "DISARM FIRST");
+            request_selected_alarm_status(id(selected_misc_index));
+            return;
+          }
+          switch (arm_mode) {
+            case ALARM_ARM_MODE_HOME:
+              id(arm_selected_alarm_home).execute();
+              break;
+            case ALARM_ARM_MODE_NIGHT:
+              id(arm_selected_alarm_night).execute();
+              break;
+            case ALARM_ARM_MODE_VACATION:
+              id(arm_selected_alarm_vacation).execute();
+              break;
+            case ALARM_ARM_MODE_AWAY:
+            default:
+              id(arm_selected_alarm_away).execute();
+              break;
+          }
+
+  - id: disarm_selected_alarm
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "unknown";'
+          then:
+            - script.execute:
+                id: set_alarm_feedback
+                feedback: "SYNCING"
+            - lambda: |-
+                request_selected_alarm_status(id(selected_misc_index));
+            - script.stop: disarm_selected_alarm
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "disarmed";'
+          then:
+            - script.execute:
+                id: set_alarm_feedback
+                feedback: "ALREADY DISARMED"
+            - lambda: |-
+                request_selected_alarm_status(id(selected_misc_index));
+            - script.stop: disarm_selected_alarm
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: "DISARMING..."
+      - lambda: |-
+          id(selected_item_state) = "disarming";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - if:
+          condition:
+            lambda: 'return !std::string("${ALARM_CODE}").empty();'
+          then:
+            - homeassistant.action:
+                action: alarm_control_panel.alarm_disarm
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  code: "${ALARM_CODE}"
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: "disarmed"
+                      success_feedback: "SUCCESS"
+                      failure_feedback: "FAILED"
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: "FAILED"
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+          else:
+            - homeassistant.action:
+                action: alarm_control_panel.alarm_disarm
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: "disarmed"
+                      success_feedback: "SUCCESS"
+                      failure_feedback: "FAILED"
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: "FAILED"
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+
+  - id: trigger_selected_alarm
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "unknown";'
+          then:
+            - script.execute:
+                id: set_alarm_feedback
+                feedback: "SYNCING"
+            - lambda: |-
+                request_selected_alarm_status(id(selected_misc_index));
+            - script.stop: trigger_selected_alarm
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "triggered";'
+          then:
+            - script.execute:
+                id: set_alarm_feedback
+                feedback: "ALREADY TRIGGERED"
+            - lambda: |-
+                request_selected_alarm_status(id(selected_misc_index));
+            - script.stop: trigger_selected_alarm
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: "TRIGGERING..."
+      - lambda: |-
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - if:
+          condition:
+            lambda: 'return !std::string("${ALARM_CODE}").empty();'
+          then:
+            - homeassistant.action:
+                action: alarm_control_panel.alarm_trigger
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  code: "${ALARM_CODE}"
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: "triggered"
+                      success_feedback: "SUCCESS"
+                      failure_feedback: "FAILED"
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: "FAILED"
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+          else:
+            - homeassistant.action:
+                action: alarm_control_panel.alarm_trigger
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: "triggered"
+                      success_feedback: "SUCCESS"
+                      failure_feedback: "FAILED"
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: "FAILED"
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_misc_index));
 
   - id: open_selected_cover
     mode: queued
@@ -2174,6 +2691,7 @@ script:
           const int FEEDBACK_SWITCH = 1;
           const int FEEDBACK_LOCK = 2;
           const int FEEDBACK_COVER = 3;
+          const int FEEDBACK_ALARM = 4;
 
           if (target == FEEDBACK_AUTOMATION) {
             id(last_automation_feedback) = feedback;
@@ -2187,6 +2705,9 @@ script:
           } else if (target == FEEDBACK_COVER) {
             id(last_cover_feedback) = feedback;
             id(last_cover_interaction) = millis();
+          } else if (target == FEEDBACK_ALARM) {
+            id(last_alarm_feedback) = feedback;
+            id(last_alarm_interaction) = millis();
           }
           id(updated_ui) = true;
       - script.execute: update_display
@@ -2227,12 +2748,22 @@ script:
           target: 3
           feedback: !lambda 'return feedback;'
 
+  - id: set_alarm_feedback
+    parameters:
+      feedback: std::string
+    then:
+      - script.execute:
+          id: set_mode_feedback
+          target: 4
+          feedback: !lambda 'return feedback;'
+
   - id: show_sensitive_action_prompt
     parameters:
       action: int
     then:
       - lambda: |-
           const int MODE_ACTION_PRIMARY = 0;
+          const int MODE_ACTION_SECONDARY = 1;
           const int MODE_ACTION_PLAY_PAUSE = 2;
           RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
           std::string feedback;
@@ -2245,6 +2776,18 @@ script:
             id(set_cover_feedback).execute(feedback);
           } else if (mode == REMOTE_MODE_AUTOMATION) {
             id(set_automation_feedback).execute("HOLD TO RUN");
+          } else if (mode == REMOTE_MODE_ALARMS) {
+            if (action == MODE_ACTION_SECONDARY) {
+              id(set_alarm_feedback).execute("HOLD TO TRIGGER");
+            } else if (action == MODE_ACTION_PLAY_PAUSE) {
+              id(set_alarm_feedback).execute("HOLD TO DISARM");
+            } else if (id(selected_item_state) == "unknown") {
+              id(set_alarm_feedback).execute("SYNCING");
+            } else if (id(selected_item_state) == "disarmed" || id(selected_item_state) == "arming" || id(selected_item_state) == "pending") {
+              id(set_alarm_feedback).execute(alarm_arm_mode_hold_label(clamp_alarm_arm_mode(id(selected_alarm_arm_mode))));
+            } else {
+              id(set_alarm_feedback).execute("DISARM WITH PLAY");
+            }
           } else {
             return;
           }
@@ -2281,12 +2824,28 @@ script:
           id(play_pause_button_long_press_fired) = true;
           id(play_pause_mode_action).execute();
 
+  - id: await_settings_long_press
+    mode: restart
+    then:
+      - delay: ${ALARM_TRIGGER_HOLD_DURATION_MS}ms
+      - lambda: |-
+          bool same_mode = id(settings_button_press_mode) == id(current_mode);
+          bool still_pressed = id(settings_mode_button).state;
+          bool already_fired = id(settings_button_long_press_fired);
+
+          if (id(settings_button_press_started_at) == 0 || !same_mode || !still_pressed || already_fired) {
+            return;
+          }
+
+          id(settings_button_long_press_fired) = true;
+          id(secondary_mode_action).execute();
+
   - id: handle_primary_button_press
     then:
       - lambda: |-
           RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
           bool requires_long_press =
-              mode == REMOTE_MODE_LOCKS || mode == REMOTE_MODE_COVERS || mode == REMOTE_MODE_AUTOMATION;
+              mode == REMOTE_MODE_LOCKS || mode == REMOTE_MODE_COVERS || mode == REMOTE_MODE_AUTOMATION || mode == REMOTE_MODE_ALARMS;
 
           if (!requires_long_press) {
             id(primary_button_press_started_at) = 0;
@@ -2326,7 +2885,7 @@ script:
       - lambda: |-
           RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
           bool requires_long_press =
-              mode == REMOTE_MODE_LOCKS || mode == REMOTE_MODE_COVERS || mode == REMOTE_MODE_AUTOMATION;
+              mode == REMOTE_MODE_LOCKS || mode == REMOTE_MODE_COVERS || mode == REMOTE_MODE_AUTOMATION || mode == REMOTE_MODE_ALARMS;
 
           if (!requires_long_press) {
             id(play_pause_button_press_started_at) = 0;
@@ -2357,6 +2916,50 @@ script:
           id(play_pause_button_long_press_fired) = false;
 
           if (!long_press_fired) {
+            id(updated_ui) = true;
+            id(update_display).execute();
+          }
+
+  - id: handle_settings_button_press
+    then:
+      - lambda: |-
+          RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          bool requires_long_press = mode == REMOTE_MODE_ALARMS;
+
+          if (!requires_long_press) {
+            id(settings_button_press_started_at) = 0;
+            id(settings_button_press_mode) = -1;
+            id(settings_button_long_press_fired) = false;
+            id(secondary_mode_action).execute();
+            return;
+          }
+
+          id(settings_button_press_started_at) = millis();
+          id(settings_button_press_mode) = id(current_mode);
+          id(settings_button_long_press_fired) = false;
+      - script.execute:
+          id: show_sensitive_action_prompt
+          action: 1
+      - script.execute: await_settings_long_press
+
+  - id: handle_settings_button_release
+    then:
+      - lambda: |-
+          if (id(settings_button_press_started_at) == 0) {
+            return;
+          }
+
+          bool long_press_fired = id(settings_button_long_press_fired);
+          int pressed_mode = id(settings_button_press_mode);
+          id(settings_button_press_started_at) = 0;
+          id(settings_button_press_mode) = -1;
+          id(settings_button_long_press_fired) = false;
+
+          if (!long_press_fired) {
+            if (pressed_mode == REMOTE_MODE_ALARMS) {
+              id(last_alarm_feedback) = "";
+              id(last_alarm_interaction) = 0;
+            }
             id(updated_ui) = true;
             id(update_display).execute();
           }
@@ -2457,6 +3060,15 @@ script:
                 bool show_automation_feedback =
                     recent_interaction(id(last_automation_interaction), 5000) &&
                     mode == REMOTE_MODE_AUTOMATION;
+                bool show_alarm_hold_prompt =
+                    mode == REMOTE_MODE_ALARMS &&
+                    id(settings_button_press_started_at) > 0 &&
+                    id(settings_button_press_mode) == id(current_mode) &&
+                    !id(settings_button_long_press_fired) &&
+                    id(last_alarm_feedback) == "HOLD TO TRIGGER";
+                bool show_alarm_feedback =
+                    mode == REMOTE_MODE_ALARMS &&
+                    (recent_interaction(id(last_alarm_interaction), 5000) || show_alarm_hold_prompt);
                 auto has_dual_climate_target = [&]() {
                   return !isnan(id(selected_climate_target_temp_low)) &&
                          !isnan(id(selected_climate_target_temp_high)) &&
@@ -2839,7 +3451,11 @@ script:
 
                   case REMOTE_MODE_ALARMS: {
                     std::string alarm_state = normalized_state_label(id(selected_item_state));
+                    std::string alarm_feedback = upper(id(last_alarm_feedback));
                     draw_centered_state(alarm_state, 33, true);
+                    if (show_alarm_feedback && !alarm_feedback.empty()) {
+                      draw_detail_text(alarm_feedback);
+                    }
                     draw_standard_footer();
                     break;
                   }

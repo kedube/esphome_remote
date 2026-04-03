@@ -81,6 +81,10 @@ globals:
     type: uint32_t
     initial_value: '0'
 
+  - id: last_alarm_interaction
+    type: uint32_t
+    initial_value: '0'
+
   - id: last_notification_dismiss_interaction
     type: uint32_t
     initial_value: '0'
@@ -90,6 +94,10 @@ globals:
     initial_value: 'false'
 
   - id: cover_verification_complete
+    type: bool
+    initial_value: 'false'
+
+  - id: alarm_verification_complete
     type: bool
     initial_value: 'false'
 
@@ -275,6 +283,10 @@ globals:
     type: std::string
     initial_value: '""'
 
+  - id: last_alarm_feedback
+    type: std::string
+    initial_value: '""'
+
   - id: last_switch_feedback
     type: std::string
     initial_value: '""'
@@ -331,11 +343,19 @@ globals:
     type: uint32_t
     initial_value: '0'
 
+  - id: settings_button_press_started_at
+    type: uint32_t
+    initial_value: '0'
+
   - id: primary_button_press_mode
     type: int
     initial_value: '-1'
 
   - id: play_pause_button_press_mode
+    type: int
+    initial_value: '-1'
+
+  - id: settings_button_press_mode
     type: int
     initial_value: '-1'
 
@@ -346,3 +366,11 @@ globals:
   - id: play_pause_button_long_press_fired
     type: bool
     initial_value: 'false'
+
+  - id: settings_button_long_press_fired
+    type: bool
+    initial_value: 'false'
+
+  - id: selected_alarm_arm_mode
+    type: int
+    initial_value: '0'
