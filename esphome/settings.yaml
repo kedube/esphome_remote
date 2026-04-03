@@ -1,0 +1,21 @@
+substitutions:
+  BOARD: "esp32dev"
+  DEVICE_NAME: "esp32-remote"
+  FRIENDLY_NAME: "ESP32 OLED Remote"
+  VERSION: "2.2"
+  FRAMEBUFFER_WEB_DEBUG: "0"
+  TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
+  SLEEP_DURATION: "120" # seconds until auto-sleep
+  DEEP_SLEEP_DURATION: "360min"
+  LONG_PRESS_DURATION_MS: "2000" # hold time for lock/cover/automation actions
+  LOW_BATTERY_VOLTAGE: "3.45" # boot warning threshold when battery monitoring is available
+
+packages:
+  select_pcb: !include
+    # Select the appropriate PCB file to include based on your remote control hardware revision.
+    file: boards/pcb_proto.yaml
+    #file: boards/pcb_rev31.yaml
+
+# Uncomment to enable framebuffer web debugging on port 80. Make sure to also set REMOTE_FRAMEBUFFER_WEB_DEBUG to 1 in the substitutions section above.
+#web_server:
+#  port: 80

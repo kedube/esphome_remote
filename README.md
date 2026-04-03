@@ -54,7 +54,9 @@ This configuration is built around:
 - Physical navigation and action buttons
 - 3D Printed Case and Buttons
 
-Board-specific wiring is selected through the package include in [`esphome/remote_control.yaml`](esphome/remote_control.yaml):
+Board-specific wiring is selected through the PCB package include in [`esphome/settings.yaml`](esphome/settings.yaml).
+
+`esphome/remote_control.yaml` includes that shared settings file, while [`esphome/settings.yaml`](esphome/settings.yaml) contains the common substitutions, PCB package selection, and optional `web_server` block.
 
 - `esphome/boards/pcb_proto.yaml`
   Prototype / older board mapping
@@ -81,6 +83,7 @@ esphome_remote/
 │   │   ├── remote_inputs.yaml
 │   │   └── remote_runtime.yaml
 │   ├── remote_control.yaml
+│   ├── settings.yaml
 │   └── secrets.yaml
 ├── home_assistant/
 │   └── remote_notifications.yaml
@@ -101,7 +104,9 @@ esphome_remote/
 ## Important Files
 
 - `esphome/remote_control.yaml`
-  Main ESPHome entrypoint that pulls together the board package, shared packages, secrets, and local entity definitions.
+  Main ESPHome entrypoint that pulls together shared packages, secrets, local entity definitions, fonts, and runtime logic.
+- `esphome/settings.yaml`
+  Shared configuration file for common substitutions, PCB selection, and optional web server settings.
 - `include/entity_helpers.h`
   Shared C++ helper declarations used by the display and control logic.
 - `include/entity_helpers_common.h` and `include/entity_helpers_requests.h`
@@ -232,9 +237,11 @@ This bridge is event-driven. It listens for Home Assistant `persistent_notificat
 
 In Notifications mode, pressing the circle or play/pause action button dismisses the currently selected persistent notification. The display shows `DISMISSED` for 3 seconds, then refreshes and advances to the next remaining notification.
 
-## 5. Select The Correct PCB Package
+## 5. Configure `settings.yaml`
 
-Open `esphome/remote_control.yaml` and choose the board package that matches your hardware:
+Open `esphome/settings.yaml` and update the shared settings for your remote. This file is intended to be the main place for device-level customization.
+
+At minimum, choose the board package that matches your hardware:
 
 ```yaml
 packages:
@@ -242,6 +249,29 @@ packages:
     file: boards/pcb_proto.yaml
     # file: boards/pcb_rev31.yaml
 ```
+
+This file also contains the most common substitutions you may want to change:
+
+- `BOARD`
+  ESPHome board definition, currently `esp32dev`.
+- `DEVICE_NAME`
+  Network name used by ESPHome and OTA.
+- `FRIENDLY_NAME`
+  Human-readable device name shown in Home Assistant.
+- `TEMPERATURE_UNIT`
+  Set to `"F"` or `"C"` to match your Home Assistant climate values.
+- `SLEEP_DURATION`
+  Idle time before the remote sleeps.
+- `DEEP_SLEEP_DURATION`
+  Duration of deep sleep.
+- `LONG_PRESS_DURATION_MS`
+  Hold time for protected actions.
+- `LOW_BATTERY_VOLTAGE`
+  Battery warning threshold for battery-monitoring boards.
+- `FRAMEBUFFER_WEB_DEBUG`
+  Set to `"1"` only when using the optional framebuffer download endpoint.
+
+`esphome/remote_control.yaml` still contains the board-specific `PIN_*` substitutions that are provided by the selected PCB package.
 
 ## 6. Validate The Configuration
 
@@ -270,7 +300,7 @@ Found multiple options for uploading, please choose one:
 
 If you want clean screenshots of the OLED UI, the project can expose the current framebuffer as a downloadable PBM image.
 
-Enable the framebuffer debug flag in [`esphome/remote_control.yaml`](esphome/remote_control.yaml):
+Enable the framebuffer debug flag in [`esphome/settings.yaml`](esphome/settings.yaml):
 
 ```yaml
 substitutions:
@@ -335,7 +365,7 @@ Notes:
 
 ## Important Settings
 
-These substitutions near the top of `esphome/remote_control.yaml` are the main things you may want to customize:
+These substitutions in `esphome/settings.yaml` are the main things you may want to customize:
 
 - `TEMPERATURE_UNIT`
   Set to `"F"` or `"C"` to match your Home Assistant climate values.
@@ -348,7 +378,7 @@ These substitutions near the top of `esphome/remote_control.yaml` are the main t
 - `LOW_BATTERY_VOLTAGE`
   Battery warning threshold for battery-monitoring boards.
 - `PIN_*`
-  Button, wake, and I2C pin assignments.
+  Button, wake, and I2C pin assignments are defined by the selected board package.
 
 ## Troubleshooting
 
@@ -386,8 +416,8 @@ Ensure there are no typos in the entity name. You can check the list of entity n
 
 Make sure both of these are true:
 
-- `FRAMEBUFFER_WEB_DEBUG: "1"` is set in `esphome/remote_control.yaml`
-- `web_server:` is uncommented in `esphome/remote_control.yaml`
+- `FRAMEBUFFER_WEB_DEBUG: "1"` is set in `esphome/settings.yaml`
+- `web_server:` is uncommented in `esphome/settings.yaml`
 
 ### ESPHome compile or upload fails
 
