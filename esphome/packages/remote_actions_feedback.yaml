@@ -1,0 +1,80 @@
+script:
+  - id: set_mode_feedback
+    parameters:
+      target: int
+      feedback: std::string
+    then:
+      - lambda: |-
+          RemoteFeedbackState state;
+          state.last_automation_feedback = id(last_automation_feedback);
+          state.last_switch_feedback = id(last_switch_feedback);
+          state.last_lock_feedback = id(last_lock_feedback);
+          state.last_cover_feedback = id(last_cover_feedback);
+          state.last_alarm_feedback = id(last_alarm_feedback);
+          state.last_automation_interaction = id(last_automation_interaction);
+          state.last_switch_interaction = id(last_switch_interaction);
+          state.last_lock_interaction = id(last_lock_interaction);
+          state.last_cover_interaction = id(last_cover_interaction);
+          state.last_alarm_interaction = id(last_alarm_interaction);
+          state.updated_ui = id(updated_ui);
+
+          apply_remote_feedback(
+              static_cast<RemoteFeedbackTarget>(target), feedback, millis(), state);
+
+          id(last_automation_feedback) = state.last_automation_feedback;
+          id(last_switch_feedback) = state.last_switch_feedback;
+          id(last_lock_feedback) = state.last_lock_feedback;
+          id(last_cover_feedback) = state.last_cover_feedback;
+          id(last_alarm_feedback) = state.last_alarm_feedback;
+          id(last_automation_interaction) = state.last_automation_interaction;
+          id(last_switch_interaction) = state.last_switch_interaction;
+          id(last_lock_interaction) = state.last_lock_interaction;
+          id(last_cover_interaction) = state.last_cover_interaction;
+          id(last_alarm_interaction) = state.last_alarm_interaction;
+          id(updated_ui) = state.updated_ui;
+      - script.execute: update_display
+
+  - id: set_automation_feedback
+    parameters:
+      feedback: std::string
+    then:
+      - script.execute:
+          id: set_mode_feedback
+          target: 0
+          feedback: !lambda 'return feedback;'
+
+  - id: set_switch_feedback
+    parameters:
+      feedback: std::string
+    then:
+      - script.execute:
+          id: set_mode_feedback
+          target: 1
+          feedback: !lambda 'return feedback;'
+
+  - id: set_lock_feedback
+    parameters:
+      feedback: std::string
+    then:
+      - script.execute:
+          id: set_mode_feedback
+          target: 2
+          feedback: !lambda 'return feedback;'
+
+  - id: set_cover_feedback
+    parameters:
+      feedback: std::string
+    then:
+      - script.execute:
+          id: set_mode_feedback
+          target: 3
+          feedback: !lambda 'return feedback;'
+
+  - id: set_alarm_feedback
+    parameters:
+      feedback: std::string
+    then:
+      - script.execute:
+          id: set_mode_feedback
+          target: 4
+          feedback: !lambda 'return feedback;'

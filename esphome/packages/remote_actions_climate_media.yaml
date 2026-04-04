@@ -1,0 +1,344 @@
+script:
+  - id: toggle_selected_climate_power
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "off";'
+          then:
+            - homeassistant.service:
+                service: climate.set_hvac_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  hvac_mode: !lambda 'return id(last_climate_mode);'
+            - lambda: |-
+                id(selected_item_state) = id(last_climate_mode);
+                id(updated_ui) = true;
+          else:
+            - lambda: |-
+                if (id(selected_item_state) != "unknown" && id(selected_item_state) != "off") {
+                  id(last_climate_mode) = id(selected_item_state);
+                }
+            - homeassistant.service:
+                service: climate.set_hvac_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  hvac_mode: "off"
+            - lambda: |-
+                id(selected_item_state) = "off";
+                id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: cycle_selected_climate_mode
+    mode: queued
+    then:
+      - lambda: |-
+          std::string current = id(selected_item_state);
+          if (current == "off" || current == "unknown") {
+            current = id(last_climate_mode);
+          }
+
+          std::string next = "heat";
+          if (current == "heat") {
+            next = "cool";
+          } else if (current == "cool") {
+            next = "heat_cool";
+          } else if (current == "heat_cool") {
+            next = "heat";
+          }
+
+          id(last_climate_mode) = next;
+          id(selected_item_state) = next;
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: climate.set_hvac_mode
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            hvac_mode: !lambda 'return id(last_climate_mode);'
+      - script.execute: update_display
+
+  - id: adjust_climate_temperature
+    parameters:
+      target_focus: int
+      delta: float
+    mode: queued
+    then:
+      - lambda: |-
+          bool dual_target = id(selected_item_state) == "heat_cool" &&
+                             !isnan(id(selected_climate_target_temp_low)) &&
+                             !isnan(id(selected_climate_target_temp_high));
+          bool high_focus = dual_target && target_focus == 2;
+          float next = dual_target
+                           ? (high_focus ? id(selected_climate_target_temp_high) : id(selected_climate_target_temp_low))
+                           : id(selected_climate_target_temp);
+
+          if (isnan(next)) {
+            return;
+          }
+
+          next += delta;
+
+          if (dual_target) {
+            if (high_focus) {
+              if (!isnan(id(selected_climate_target_temp_low)) && next <= id(selected_climate_target_temp_low)) {
+                next = id(selected_climate_target_temp_low) + 1.0f;
+              }
+              id(selected_climate_target_temp_high) = next;
+            } else {
+              if (!isnan(id(selected_climate_target_temp_high)) && next >= id(selected_climate_target_temp_high)) {
+                next = id(selected_climate_target_temp_high) - 1.0f;
+              }
+              id(selected_climate_target_temp_low) = next;
+            }
+            id(climate_target_focus_value) = next;
+            id(climate_target_focus) = target_focus;
+          } else {
+            id(selected_climate_target_temp) = next;
+            id(selected_climate_target_temp_low) = next;
+            id(selected_climate_target_temp_high) = next;
+            id(climate_target_focus_value) = next;
+            id(climate_target_focus) = 1;
+          }
+
+          id(last_climate_target_focus_interaction) = millis();
+          id(last_climate_interaction) = millis();
+          id(updated_ui) = true;
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "heat_cool" && !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high));'
+          then:
+            - homeassistant.service:
+                service: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  target_temp_low: !lambda 'return id(selected_climate_target_temp_low);'
+                  target_temp_high: !lambda 'return id(selected_climate_target_temp_high);'
+          else:
+            - homeassistant.service:
+                service: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  temperature: !lambda 'return id(selected_climate_target_temp);'
+      - script.execute: update_display
+
+  - id: climate_temperature_up
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_climate_temperature
+          target_focus: 1
+          delta: 1.0
+
+  - id: climate_temperature_down
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_climate_temperature
+          target_focus: 1
+          delta: -1.0
+
+  - id: climate_temperature_high_up
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_climate_temperature
+          target_focus: 2
+          delta: 1.0
+
+  - id: climate_temperature_high_down
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_climate_temperature
+          target_focus: 2
+          delta: -1.0
+
+  - id: cycle_selected_climate_preset
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return climate_supports_preset(id(selected_climate_index));'
+          then:
+            - lambda: |-
+                std::string next = "home";
+                if (id(selected_climate_preset) == "home") {
+                  next = "away";
+                } else if (id(selected_climate_preset) == "away") {
+                  next = "sleep";
+                }
+                id(selected_climate_preset) = next;
+                id(last_climate_interaction) = millis();
+                id(updated_ui) = true;
+            - homeassistant.service:
+                service: climate.set_preset_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  preset_mode: !lambda 'return id(selected_climate_preset);'
+            - script.execute: update_display
+
+  - id: media_play_pause
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "playing";'
+          then:
+            - homeassistant.service:
+                service: media_player.media_pause
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "paused";
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(selected_item_state) == "paused";'
+                then:
+                  - homeassistant.service:
+                      service: media_player.media_play
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                  - lambda: |-
+                      id(selected_item_state) = "playing";
+                else:
+                  - homeassistant.service:
+                      service: media_player.media_play_pause
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(last_media_interaction) = millis();
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: media_toggle_power
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "off";'
+          then:
+            - homeassistant.service:
+                service: media_player.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                bool show_power_feedback =
+                    id(selected_media_device_class) != "tv" && id(selected_media_device_class) != "receiver";
+                id(last_media_power_feedback) = show_power_feedback ? "ON" : "";
+                id(last_media_power_interaction) = show_power_feedback ? millis() : 0;
+                id(last_media_interaction) = millis();
+                id(updated_ui) = true;
+          else:
+            - homeassistant.service:
+                service: media_player.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "off";
+                bool show_power_feedback =
+                    id(selected_media_device_class) != "tv" && id(selected_media_device_class) != "receiver";
+                id(last_media_power_feedback) = show_power_feedback ? "OFF" : "";
+                id(last_media_power_interaction) = show_power_feedback ? millis() : 0;
+                id(last_media_interaction) = millis();
+                id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: media_previous_track
+    mode: queued
+    then:
+      - homeassistant.service:
+          service: media_player.media_previous_track
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: media_next_track
+    mode: queued
+    then:
+      - homeassistant.service:
+          service: media_player.media_next_track
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: media_play_stop
+    mode: queued
+    then:
+      - homeassistant.service:
+          service: media_player.media_stop
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(selected_item_state) = "idle";
+          id(last_media_interaction) = millis();
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: select_next_media_source
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return media_source_option_count(id(selected_media_index)) > 0;'
+          then:
+            - lambda: |-
+                std::string next_source =
+                    next_media_source_for_index(id(selected_media_index), id(selected_media_source));
+                if (next_source.empty()) {
+                  id(updated_ui) = true;
+                  return;
+                }
+                id(selected_media_source) = next_source;
+                set_media_source_for_index(id(selected_media_index), next_source);
+            - homeassistant.service:
+                service: media_player.select_source
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  source: !lambda 'return id(selected_media_source);'
+            - lambda: |-
+                id(last_media_interaction) = millis();
+                id(last_media_source_interaction) = millis();
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - lambda: |-
+                id(updated_ui) = true;
+
+  - id: adjust_media_volume
+    parameters:
+      delta: int
+    mode: queued
+    then:
+      - lambda: |-
+          int next = id(selected_media_volume_pct) + delta;
+          if (next > 100) next = 100;
+          if (next < 0) next = 0;
+          id(selected_media_volume_pct) = next;
+          id(last_media_volume_interaction) = millis();
+          id(last_media_interaction) = millis();
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: media_player.volume_set
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            volume_level: !lambda 'return id(selected_media_volume_pct) / 100.0f;'
+      - script.execute: update_display
+
+  - id: media_volume_up
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_media_volume
+          delta: 5
+
+  - id: media_volume_down
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_media_volume
+          delta: -5

@@ -1,0 +1,196 @@
+script:
+  - id: show_sensitive_action_prompt
+    parameters:
+      action: int
+    then:
+      - lambda: |-
+          auto prompt = describe_remote_button_prompt(
+              static_cast<RemoteMode>(id(current_mode)), action, id(selected_item_state), id(selected_alarm_arm_mode),
+              ${LONG_PRESS_DURATION_MS}, ${ALARM_TRIGGER_HOLD_DURATION_MS});
+          switch (prompt.feedback_target) {
+            case REMOTE_INPUT_FEEDBACK_LOCK:
+              id(set_lock_feedback).execute(prompt.feedback);
+              break;
+            case REMOTE_INPUT_FEEDBACK_COVER:
+              id(set_cover_feedback).execute(prompt.feedback);
+              break;
+            case REMOTE_INPUT_FEEDBACK_AUTOMATION:
+              id(set_automation_feedback).execute(prompt.feedback);
+              break;
+            case REMOTE_INPUT_FEEDBACK_ALARM:
+              id(set_alarm_feedback).execute(prompt.feedback);
+              break;
+            case REMOTE_INPUT_FEEDBACK_NONE:
+            default:
+              break;
+          }
+
+  - id: await_primary_long_press
+    mode: restart
+    then:
+      - delay: ${LONG_PRESS_DURATION_MS}ms
+      - lambda: |-
+          bool same_mode = id(primary_button_press_mode) == id(current_mode);
+          bool still_pressed = id(primary_mode_button).state;
+          bool already_fired = id(primary_button_long_press_fired);
+
+          if (id(primary_button_press_started_at) == 0 || !same_mode || !still_pressed || already_fired) {
+            return;
+          }
+
+          id(primary_button_long_press_fired) = true;
+          id(primary_mode_action).execute();
+
+  - id: await_play_pause_long_press
+    mode: restart
+    then:
+      - delay: ${LONG_PRESS_DURATION_MS}ms
+      - lambda: |-
+          bool same_mode = id(play_pause_button_press_mode) == id(current_mode);
+          bool still_pressed = id(play_pause_mode_button).state;
+          bool already_fired = id(play_pause_button_long_press_fired);
+
+          if (id(play_pause_button_press_started_at) == 0 || !same_mode || !still_pressed || already_fired) {
+            return;
+          }
+
+          id(play_pause_button_long_press_fired) = true;
+          id(play_pause_mode_action).execute();
+
+  - id: await_settings_long_press
+    mode: restart
+    then:
+      - delay: ${ALARM_TRIGGER_HOLD_DURATION_MS}ms
+      - lambda: |-
+          bool same_mode = id(settings_button_press_mode) == id(current_mode);
+          bool still_pressed = id(settings_mode_button).state;
+          bool already_fired = id(settings_button_long_press_fired);
+
+          if (id(settings_button_press_started_at) == 0 || !same_mode || !still_pressed || already_fired) {
+            return;
+          }
+
+          id(settings_button_long_press_fired) = true;
+          id(secondary_mode_action).execute();
+
+  - id: handle_primary_button_press
+    then:
+      - lambda: |-
+          auto prompt = describe_remote_button_prompt(
+              static_cast<RemoteMode>(id(current_mode)), 0, id(selected_item_state), id(selected_alarm_arm_mode),
+              ${LONG_PRESS_DURATION_MS}, ${ALARM_TRIGGER_HOLD_DURATION_MS});
+          if (!prompt.requires_long_press) {
+            id(primary_button_press_started_at) = 0;
+            id(primary_button_press_mode) = -1;
+            id(primary_button_long_press_fired) = false;
+            id(primary_mode_action).execute();
+            return;
+          }
+
+          id(primary_button_press_started_at) = millis();
+          id(primary_button_press_mode) = id(current_mode);
+          id(primary_button_long_press_fired) = false;
+      - script.execute:
+          id: show_sensitive_action_prompt
+          action: 0
+      - script.execute: await_primary_long_press
+
+  - id: handle_primary_button_release
+    then:
+      - lambda: |-
+          if (id(primary_button_press_started_at) == 0) {
+            return;
+          }
+
+          bool long_press_fired = id(primary_button_long_press_fired);
+          id(primary_button_press_started_at) = 0;
+          id(primary_button_press_mode) = -1;
+          id(primary_button_long_press_fired) = false;
+
+          if (!long_press_fired) {
+            id(updated_ui) = true;
+            id(update_display).execute();
+          }
+
+  - id: handle_play_pause_button_press
+    then:
+      - lambda: |-
+          auto prompt = describe_remote_button_prompt(
+              static_cast<RemoteMode>(id(current_mode)), 2, id(selected_item_state), id(selected_alarm_arm_mode),
+              ${LONG_PRESS_DURATION_MS}, ${ALARM_TRIGGER_HOLD_DURATION_MS});
+          if (!prompt.requires_long_press) {
+            id(play_pause_button_press_started_at) = 0;
+            id(play_pause_button_press_mode) = -1;
+            id(play_pause_button_long_press_fired) = false;
+            id(play_pause_mode_action).execute();
+            return;
+          }
+
+          id(play_pause_button_press_started_at) = millis();
+          id(play_pause_button_press_mode) = id(current_mode);
+          id(play_pause_button_long_press_fired) = false;
+      - script.execute:
+          id: show_sensitive_action_prompt
+          action: 2
+      - script.execute: await_play_pause_long_press
+
+  - id: handle_play_pause_button_release
+    then:
+      - lambda: |-
+          if (id(play_pause_button_press_started_at) == 0) {
+            return;
+          }
+
+          bool long_press_fired = id(play_pause_button_long_press_fired);
+          id(play_pause_button_press_started_at) = 0;
+          id(play_pause_button_press_mode) = -1;
+          id(play_pause_button_long_press_fired) = false;
+
+          if (!long_press_fired) {
+            id(updated_ui) = true;
+            id(update_display).execute();
+          }
+
+  - id: handle_settings_button_press
+    then:
+      - lambda: |-
+          auto prompt = describe_remote_button_prompt(
+              static_cast<RemoteMode>(id(current_mode)), 1, id(selected_item_state), id(selected_alarm_arm_mode),
+              ${LONG_PRESS_DURATION_MS}, ${ALARM_TRIGGER_HOLD_DURATION_MS});
+          if (!prompt.requires_long_press) {
+            id(settings_button_press_started_at) = 0;
+            id(settings_button_press_mode) = -1;
+            id(settings_button_long_press_fired) = false;
+            id(secondary_mode_action).execute();
+            return;
+          }
+
+          id(settings_button_press_started_at) = millis();
+          id(settings_button_press_mode) = id(current_mode);
+          id(settings_button_long_press_fired) = false;
+      - script.execute:
+          id: show_sensitive_action_prompt
+          action: 1
+      - script.execute: await_settings_long_press
+
+  - id: handle_settings_button_release
+    then:
+      - lambda: |-
+          if (id(settings_button_press_started_at) == 0) {
+            return;
+          }
+
+          bool long_press_fired = id(settings_button_long_press_fired);
+          int pressed_mode = id(settings_button_press_mode);
+          id(settings_button_press_started_at) = 0;
+          id(settings_button_press_mode) = -1;
+          id(settings_button_long_press_fired) = false;
+
+          if (!long_press_fired) {
+            if (pressed_mode == REMOTE_MODE_ALARMS) {
+              id(last_alarm_feedback) = "";
+              id(last_alarm_interaction) = 0;
+            }
+            id(updated_ui) = true;
+            id(update_display).execute();
+          }

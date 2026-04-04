@@ -9,79 +9,31 @@ interval:
             - script.execute: turn_off
           else:
             - lambda: |-
-                uint32_t now = millis();
-                uint32_t elapsed = now - id(last_brightness_interaction);
-                if (elapsed > 3000 && elapsed < 3500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t switch_elapsed = now - id(last_switch_interaction);
-                if (id(last_switch_interaction) > 0 && switch_elapsed > 5000 && switch_elapsed < 5500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t fan_speed_elapsed = now - id(last_fan_speed_interaction);
-                if (id(last_fan_speed_interaction) > 0 && fan_speed_elapsed > 3000 && fan_speed_elapsed < 3500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t humidifier_elapsed = now - id(last_humidifier_interaction);
-                if (id(last_humidifier_interaction) > 0 && humidifier_elapsed > 5000 && humidifier_elapsed < 5500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t humidifier_mode_elapsed = now - id(last_humidifier_mode_interaction);
-                if (id(last_humidifier_mode_interaction) > 0 && humidifier_mode_elapsed > 5000 &&
-                    humidifier_mode_elapsed < 5500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t climate_elapsed = now - id(last_climate_interaction);
-                if (id(last_climate_interaction) > 0 && climate_elapsed > 3000 && climate_elapsed < 3500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t lock_elapsed = now - id(last_lock_interaction);
-                if (id(last_lock_interaction) > 0 && lock_elapsed > 5000 && lock_elapsed < 5500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t cover_elapsed = now - id(last_cover_interaction);
-                if (id(last_cover_interaction) > 0 && cover_elapsed > 5000 && cover_elapsed < 5500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t cover_position_elapsed = now - id(last_cover_position_interaction);
-                if (id(last_cover_position_interaction) > 0 && cover_position_elapsed > 3000 &&
-                    cover_position_elapsed < 3500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t climate_target_focus_elapsed = now - id(last_climate_target_focus_interaction);
-                if (id(last_climate_target_focus_interaction) > 0 && climate_target_focus_elapsed > 5000 &&
-                    climate_target_focus_elapsed < 5500) {
-                  id(climate_target_focus) = 0;
-                  id(climate_target_focus_value) = NAN;
-                  id(last_climate_target_focus_interaction) = 0;
-                  id(updated_ui) = true;
-                }
-                uint32_t media_elapsed = now - id(last_media_volume_interaction);
-                if (id(last_media_volume_interaction) > 0 && media_elapsed > 3000 && media_elapsed < 3500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t media_source_elapsed = now - id(last_media_source_interaction);
-                if (id(last_media_source_interaction) > 0 && media_source_elapsed > 5000 &&
-                    media_source_elapsed < 5500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t media_power_elapsed = now - id(last_media_power_interaction);
-                if (id(last_media_power_interaction) > 0 && media_power_elapsed > 5000 &&
-                    media_power_elapsed < 5500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t automation_elapsed = now - id(last_automation_interaction);
-                if (id(last_automation_interaction) > 0 && automation_elapsed > 5000 && automation_elapsed < 5500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t alarm_elapsed = now - id(last_alarm_interaction);
-                if (id(last_alarm_interaction) > 0 && alarm_elapsed > 5000 && alarm_elapsed < 5500) {
-                  id(updated_ui) = true;
-                }
-                uint32_t contrast_elapsed = now - id(last_contrast_interaction);
-                if (id(last_contrast_interaction) > 0 && contrast_elapsed > 3000 && contrast_elapsed < 3500) {
-                  id(updated_ui) = true;
-                }
+                RemoteUiTimeoutState state;
+                state.last_brightness_interaction = id(last_brightness_interaction);
+                state.last_switch_interaction = id(last_switch_interaction);
+                state.last_contrast_interaction = id(last_contrast_interaction);
+                state.last_climate_interaction = id(last_climate_interaction);
+                state.last_fan_speed_interaction = id(last_fan_speed_interaction);
+                state.last_humidifier_interaction = id(last_humidifier_interaction);
+                state.last_humidifier_mode_interaction = id(last_humidifier_mode_interaction);
+                state.last_lock_interaction = id(last_lock_interaction);
+                state.last_cover_interaction = id(last_cover_interaction);
+                state.last_cover_position_interaction = id(last_cover_position_interaction);
+                state.last_climate_target_focus_interaction = id(last_climate_target_focus_interaction);
+                state.last_media_volume_interaction = id(last_media_volume_interaction);
+                state.last_media_source_interaction = id(last_media_source_interaction);
+                state.last_media_power_interaction = id(last_media_power_interaction);
+                state.last_automation_interaction = id(last_automation_interaction);
+                state.last_alarm_interaction = id(last_alarm_interaction);
+                state.climate_target_focus = id(climate_target_focus);
+                state.climate_target_focus_value = id(climate_target_focus_value);
+                state.updated_ui = id(updated_ui);
+                apply_remote_ui_timeout_updates(millis(), state);
+                id(climate_target_focus) = state.climate_target_focus;
+                id(climate_target_focus_value) = state.climate_target_focus_value;
+                id(last_climate_target_focus_interaction) = state.last_climate_target_focus_interaction;
+                id(updated_ui) = state.updated_ui;
             - if:
                 condition:
                   wifi.connected:
@@ -131,8 +83,37 @@ interval:
                                   then:
                                     - script.execute: api_disconnected_screen
                                   else:
-                                    - script.execute: sync_current_mode_status
-                                    - script.execute: update_display
+                                    - if:
+                                        condition:
+                                          lambda: 'return id(updated_ui);'
+                                        then:
+                                          - script.execute: update_display
+  - interval: 2s
+    then:
+      - if:
+          condition:
+            lambda: |-
+              if (id(low_battery_popup_active) || id(show_boot_screen)) {
+                return false;
+              }
+              if (!wifi::global_wifi_component->is_connected()) {
+                return false;
+              }
+              if (!api::global_api_server->is_connected()) {
+                return false;
+              }
+              uint32_t now = millis();
+              if (id(last_navigation_requested_at) != 0 && (now - id(last_navigation_requested_at)) < 750) {
+                return false;
+              }
+              return true;
+          then:
+            - script.execute: sync_current_mode_status
+            - if:
+                condition:
+                  lambda: 'return id(updated_ui);'
+                then:
+                  - script.execute: update_display
   - interval: 30min
     then:
       - lambda: |-

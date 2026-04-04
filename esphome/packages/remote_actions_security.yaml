@@ -1,0 +1,572 @@
+script:
+  - id: lock_selected_lock
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: |-
+              const std::string state = selected_lock_state(id(selected_lock_index));
+              return state == "locked" || state == "locking";
+          then:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: !lambda |-
+                  const std::string state = selected_lock_state(id(selected_lock_index));
+                  return state == "locking" ? std::string("LOCKING...") : std::string("ALREADY LOCKED");
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+            - script.stop: lock_selected_lock
+      - script.execute:
+          id: set_lock_feedback
+          feedback: "LOCKING..."
+      - homeassistant.action:
+          action: lock.lock
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+            - script.execute:
+                id: verify_selected_lock_result
+                expected_state: "locked"
+                success_feedback: "LOCKED"
+          on_error:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: "LOCK FAILED"
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+
+  - id: unlock_selected_lock
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: |-
+              const std::string state = selected_lock_state(id(selected_lock_index));
+              return state == "unlocked" || state == "unlocking";
+          then:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: !lambda |-
+                  const std::string state = selected_lock_state(id(selected_lock_index));
+                  return state == "unlocking" ? std::string("UNLOCKING...") : std::string("ALREADY UNLOCKED");
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+            - script.stop: unlock_selected_lock
+      - script.execute:
+          id: set_lock_feedback
+          feedback: "UNLOCKING..."
+      - homeassistant.action:
+          action: lock.unlock
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+            - script.execute:
+                id: verify_selected_lock_result
+                expected_state: "unlocked"
+                success_feedback: "UNLOCKED"
+          on_error:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: "UNLOCK FAILED"
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+
+  - id: verify_selected_lock_result
+    mode: restart
+    parameters:
+      expected_state: std::string
+      success_feedback: std::string
+    then:
+      - lambda: |-
+          id(lock_verification_complete) = false;
+      - repeat:
+          count: 5
+          then:
+            - if:
+                condition:
+                  lambda: 'return !id(lock_verification_complete);'
+                then:
+                  - lambda: |-
+                      request_selected_lock_status(id(selected_lock_index));
+                  - delay: 1000ms
+                  - lambda: |-
+                      const std::string state = selected_lock_state(id(selected_lock_index));
+                      auto result = evaluate_lock_verification(state, expected_state, success_feedback);
+                      if (!result.feedback.empty()) {
+                        id(set_lock_feedback).execute(result.feedback);
+                      }
+                      id(lock_verification_complete) = result.complete;
+      - if:
+          condition:
+            lambda: 'return !id(lock_verification_complete);'
+          then:
+            - lambda: |-
+                request_selected_lock_status(id(selected_lock_index));
+            - delay: 500ms
+            - lambda: |-
+                const std::string state = selected_lock_state(id(selected_lock_index));
+                auto result = evaluate_lock_verification(state, expected_state, success_feedback);
+                if (!result.feedback.empty()) {
+                  id(set_lock_feedback).execute(result.feedback);
+                }
+                id(lock_verification_complete) = true;
+
+  - id: verify_selected_cover_result
+    mode: restart
+    parameters:
+      expected_state: std::string
+      success_feedback: std::string
+    then:
+      - lambda: |-
+          id(cover_verification_complete) = false;
+      - repeat:
+          count: 8
+          then:
+            - if:
+                condition:
+                  lambda: 'return !id(cover_verification_complete);'
+                then:
+                  - lambda: |-
+                      request_selected_cover_status(id(selected_cover_index));
+                  - delay: 1000ms
+                  - lambda: |-
+                      const std::string state = selected_cover_state(id(selected_cover_index));
+                      const float position = selected_cover_position(id(selected_cover_index));
+                      auto result = evaluate_cover_verification(state, position, expected_state, success_feedback);
+                      if (!result.feedback.empty()) {
+                        id(set_cover_feedback).execute(result.feedback);
+                      }
+                      id(cover_verification_complete) = result.complete;
+      - if:
+          condition:
+            lambda: 'return !id(cover_verification_complete);'
+          then:
+            - lambda: |-
+                request_selected_cover_status(id(selected_cover_index));
+            - delay: 500ms
+            - lambda: |-
+                const std::string state = selected_cover_state(id(selected_cover_index));
+                const float position = selected_cover_position(id(selected_cover_index));
+                auto result = evaluate_cover_verification(state, position, expected_state, success_feedback);
+                if (!result.feedback.empty()) {
+                  id(set_cover_feedback).execute(result.feedback);
+                }
+                id(cover_verification_complete) = true;
+
+  - id: verify_selected_alarm_result
+    mode: restart
+    parameters:
+      expected_state: std::string
+      success_feedback: std::string
+      failure_feedback: std::string
+    then:
+      - lambda: |-
+          id(alarm_verification_complete) = false;
+      - delay: ${ALARM_STATUS_UPDATE_DELAY_MS}ms
+      - repeat:
+          count: 6
+          then:
+            - if:
+                condition:
+                  lambda: 'return !id(alarm_verification_complete);'
+                then:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_alarm_index));
+                  - delay: 1000ms
+                  - lambda: |-
+                      const std::string state = alarm_state_for_index(id(selected_alarm_index));
+                      auto result = evaluate_alarm_verification(
+                          state, expected_state, success_feedback, failure_feedback, false);
+                      if (!result.feedback.empty()) {
+                        id(set_alarm_feedback).execute(result.feedback);
+                      }
+                      id(alarm_verification_complete) = result.complete;
+      - lambda: |-
+          if (id(alarm_verification_complete)) {
+            return;
+          }
+          request_selected_alarm_status(id(selected_alarm_index));
+      - if:
+          condition:
+            lambda: 'return !id(alarm_verification_complete);'
+          then:
+            - delay: 500ms
+            - lambda: |-
+                const std::string state = alarm_state_for_index(id(selected_alarm_index));
+                auto result = evaluate_alarm_verification(
+                    state, expected_state, success_feedback, failure_feedback, true);
+                if (!result.feedback.empty()) {
+                  id(set_alarm_feedback).execute(result.feedback);
+                }
+                id(alarm_verification_complete) = true;
+
+  - id: shift_selected_alarm_arm_mode
+    parameters:
+      step: int
+    then:
+      - lambda: |-
+          AlarmArmMode next_mode = next_alarm_arm_mode(clamp_alarm_arm_mode(id(selected_alarm_arm_mode)), step);
+          id(selected_alarm_arm_mode) = static_cast<int>(next_mode);
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: !lambda |-
+            return std::string(alarm_arm_mode_selection_label(clamp_alarm_arm_mode(id(selected_alarm_arm_mode))));
+
+  - id: set_alarm_blocked_feedback
+    then:
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: !lambda |-
+            return id(selected_item_state) == "unknown" ? std::string("SYNCING") : std::string("DISARM FIRST");
+      - lambda: |-
+          request_selected_alarm_status(id(selected_alarm_index));
+
+  - id: start_alarm_transition
+    parameters:
+      feedback: std::string
+      next_state: std::string
+    then:
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: !lambda 'return feedback;'
+      - lambda: |-
+          id(selected_item_state) = next_state;
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: fail_alarm_action
+    then:
+      - script.execute:
+          id: set_alarm_feedback
+          feedback: "FAILED"
+      - lambda: |-
+          request_selected_alarm_status(id(selected_alarm_index));
+
+  - id: execute_selected_alarm_action
+    parameters:
+      action_name: std::string
+      expected_state: std::string
+      success_feedback: std::string
+      failure_feedback: std::string
+    then:
+      - if:
+          condition:
+            lambda: 'return !std::string("${ALARM_CODE}").empty();'
+          then:
+            - homeassistant.action:
+                action: !lambda 'return action_name;'
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  code: "${ALARM_CODE}"
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_alarm_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: !lambda 'return expected_state;'
+                      success_feedback: !lambda 'return success_feedback;'
+                      failure_feedback: !lambda 'return failure_feedback;'
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: !lambda 'return failure_feedback;'
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_alarm_index));
+          else:
+            - homeassistant.action:
+                action: !lambda 'return action_name;'
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_alarm_index));
+                  - script.execute:
+                      id: verify_selected_alarm_result
+                      expected_state: !lambda 'return expected_state;'
+                      success_feedback: !lambda 'return success_feedback;'
+                      failure_feedback: !lambda 'return failure_feedback;'
+                on_error:
+                  - script.execute:
+                      id: set_alarm_feedback
+                      feedback: !lambda 'return failure_feedback;'
+                  - lambda: |-
+                      request_selected_alarm_status(id(selected_alarm_index));
+
+  - id: arm_selected_alarm_away
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) != "disarmed";'
+          then:
+            - script.execute: set_alarm_blocked_feedback
+            - script.stop: arm_selected_alarm_away
+      - script.execute:
+          id: start_alarm_transition
+          feedback: "ARMING..."
+          next_state: "arming"
+      - script.execute:
+          id: execute_selected_alarm_action
+          action_name: "alarm_control_panel.alarm_arm_away"
+          expected_state: "armed_away"
+          success_feedback: "SUCCESS"
+          failure_feedback: "FAILED"
+
+  - id: arm_selected_alarm_home
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) != "disarmed";'
+          then:
+            - script.execute: set_alarm_blocked_feedback
+            - script.stop: arm_selected_alarm_home
+      - script.execute:
+          id: start_alarm_transition
+          feedback: "ARMING..."
+          next_state: "arming"
+      - script.execute:
+          id: execute_selected_alarm_action
+          action_name: "alarm_control_panel.alarm_arm_home"
+          expected_state: "armed_home"
+          success_feedback: "SUCCESS"
+          failure_feedback: "FAILED"
+
+  - id: arm_selected_alarm_night
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) != "disarmed";'
+          then:
+            - script.execute: set_alarm_blocked_feedback
+            - script.stop: arm_selected_alarm_night
+      - script.execute:
+          id: start_alarm_transition
+          feedback: "ARMING..."
+          next_state: "arming"
+      - script.execute:
+          id: execute_selected_alarm_action
+          action_name: "alarm_control_panel.alarm_arm_night"
+          expected_state: "armed_night"
+          success_feedback: "SUCCESS"
+          failure_feedback: "FAILED"
+
+  - id: arm_selected_alarm_vacation
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) != "disarmed";'
+          then:
+            - script.execute: set_alarm_blocked_feedback
+            - script.stop: arm_selected_alarm_vacation
+      - script.execute:
+          id: start_alarm_transition
+          feedback: "ARMING..."
+          next_state: "arming"
+      - script.execute:
+          id: execute_selected_alarm_action
+          action_name: "alarm_control_panel.alarm_arm_vacation"
+          expected_state: "armed_vacation"
+          success_feedback: "SUCCESS"
+          failure_feedback: "FAILED"
+
+  - id: arm_selected_alarm_with_selected_mode
+    then:
+      - lambda: |-
+          AlarmArmMode arm_mode = clamp_alarm_arm_mode(id(selected_alarm_arm_mode));
+          if (id(selected_item_state) != "disarmed") {
+            id(set_alarm_blocked_feedback).execute();
+            return;
+          }
+          switch (arm_mode) {
+            case ALARM_ARM_MODE_HOME:
+              id(arm_selected_alarm_home).execute();
+              break;
+            case ALARM_ARM_MODE_NIGHT:
+              id(arm_selected_alarm_night).execute();
+              break;
+            case ALARM_ARM_MODE_VACATION:
+              id(arm_selected_alarm_vacation).execute();
+              break;
+            case ALARM_ARM_MODE_AWAY:
+            default:
+              id(arm_selected_alarm_away).execute();
+              break;
+          }
+
+  - id: disarm_selected_alarm
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "unknown";'
+          then:
+            - script.execute:
+                id: set_alarm_feedback
+                feedback: "SYNCING"
+            - lambda: |-
+                request_selected_alarm_status(id(selected_alarm_index));
+            - script.stop: disarm_selected_alarm
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "disarmed";'
+          then:
+            - script.execute:
+                id: set_alarm_feedback
+                feedback: "ALREADY DISARMED"
+            - lambda: |-
+                request_selected_alarm_status(id(selected_alarm_index));
+            - script.stop: disarm_selected_alarm
+      - script.execute:
+          id: start_alarm_transition
+          feedback: "DISARMING..."
+          next_state: "disarming"
+      - script.execute:
+          id: execute_selected_alarm_action
+          action_name: "alarm_control_panel.alarm_disarm"
+          expected_state: "disarmed"
+          success_feedback: "SUCCESS"
+          failure_feedback: "FAILED"
+
+  - id: trigger_selected_alarm
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "unknown";'
+          then:
+            - script.execute:
+                id: set_alarm_feedback
+                feedback: "SYNCING"
+            - lambda: |-
+                request_selected_alarm_status(id(selected_alarm_index));
+            - script.stop: trigger_selected_alarm
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "triggered";'
+          then:
+            - script.execute:
+                id: set_alarm_feedback
+                feedback: "ALREADY TRIGGERED"
+            - lambda: |-
+                request_selected_alarm_status(id(selected_alarm_index));
+            - script.stop: trigger_selected_alarm
+      - script.execute:
+          id: start_alarm_transition
+          feedback: "TRIGGERING..."
+          next_state: !lambda 'return id(selected_item_state);'
+      - script.execute:
+          id: execute_selected_alarm_action
+          action_name: "alarm_control_panel.alarm_trigger"
+          expected_state: "triggered"
+          success_feedback: "SUCCESS"
+          failure_feedback: "FAILED"
+
+  - id: open_selected_cover
+    mode: queued
+    then:
+      - script.execute:
+          id: set_cover_feedback
+          feedback: "OPENING..."
+      - lambda: |-
+          if (id(selected_cover_position_pct) <= 0) {
+            id(selected_cover_position_pct) = 100;
+          }
+          id(updated_ui) = true;
+      - homeassistant.action:
+          action: cover.open_cover
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - lambda: |-
+                request_selected_cover_status(id(selected_cover_index));
+            - script.execute:
+                id: verify_selected_cover_result
+                expected_state: "open"
+                success_feedback: "OPENED"
+          on_error:
+            - script.execute:
+                id: set_cover_feedback
+                feedback: "OPEN FAILED"
+            - lambda: |-
+                request_selected_cover_status(id(selected_cover_index));
+
+  - id: close_selected_cover
+    mode: queued
+    then:
+      - script.execute:
+          id: set_cover_feedback
+          feedback: "CLOSING..."
+      - homeassistant.action:
+          action: cover.close_cover
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - lambda: |-
+                request_selected_cover_status(id(selected_cover_index));
+            - script.execute:
+                id: verify_selected_cover_result
+                expected_state: "closed"
+                success_feedback: "CLOSED"
+          on_error:
+            - script.execute:
+                id: set_cover_feedback
+                feedback: "CLOSE FAILED"
+            - lambda: |-
+                request_selected_cover_status(id(selected_cover_index));
+
+  - id: increase_cover_position
+    mode: queued
+    then:
+      - lambda: |-
+          int next = id(selected_cover_position_pct) + 10;
+          if (next > 100) next = 100;
+          if (next < 10) next = 10;
+          id(selected_cover_position_pct) = next;
+          id(selected_item_state) = next >= 100 ? "open" : "opening";
+          id(last_cover_position_interaction) = millis();
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: cover.set_cover_position
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            position: !lambda 'return id(selected_cover_position_pct);'
+      - script.execute: update_display
+
+  - id: decrease_cover_position
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_cover_position_pct) <= 10;'
+          then:
+            - homeassistant.service:
+                service: cover.close_cover
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_cover_position_pct) = 0;
+                id(selected_item_state) = "closed";
+                id(last_cover_position_interaction) = millis();
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - lambda: |-
+                int next = id(selected_cover_position_pct) - 10;
+                if (next < 1) next = 1;
+                id(selected_cover_position_pct) = next;
+                id(selected_item_state) = "closing";
+                id(last_cover_position_interaction) = millis();
+                id(updated_ui) = true;
+            - homeassistant.service:
+                service: cover.set_cover_position
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  position: !lambda 'return id(selected_cover_position_pct);'
+            - script.execute: update_display

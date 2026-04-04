@@ -1,27 +1,30 @@
 #pragma once
 
-static LightStatusTracker light_status_tracker_storage;
-static SwitchStatusTracker switch_status_tracker_storage(SWITCH_LIST);
-static FanStatusTracker fan_status_tracker_storage;
-static HumidifierStatusTracker humidifier_status_tracker_storage;
-static ClimateStatusTracker climate_status_tracker_storage;
-static LockStatusTracker lock_status_tracker_storage(LOCK_LIST);
-static CoverStatusTracker cover_status_tracker_storage;
-static MediaStatusTracker media_status_tracker_storage;
-static SensorStatusTracker sensor_status_tracker_storage(SENSOR_LIST);
-static AutomationStatusTracker automation_status_tracker_storage(AUTOMATION_LIST);
-static AlarmStatusTracker alarm_status_tracker_storage(ALARM_LIST);
-static NotificationFeedTracker notification_feed_tracker_storage;
-static WeatherStatusTracker weather_status_tracker_storage;
-static bool remote_status_trackers_initialized = false;
-static RemoteMode last_requested_mode = REMOTE_MODE_INFO;
-static int last_requested_mode_index = -1;
-static uint32_t last_requested_mode_at = 0;
+#include "entity_trackers.h"
+
+inline LightStatusTracker light_status_tracker_storage;
+inline SwitchStatusTracker switch_status_tracker_storage(SWITCH_LIST);
+inline FanStatusTracker fan_status_tracker_storage;
+inline HumidifierStatusTracker humidifier_status_tracker_storage;
+inline ClimateStatusTracker climate_status_tracker_storage;
+inline LockStatusTracker lock_status_tracker_storage(LOCK_LIST);
+inline CoverStatusTracker cover_status_tracker_storage;
+inline MediaStatusTracker media_status_tracker_storage;
+inline SensorStatusTracker sensor_status_tracker_storage(SENSOR_LIST);
+inline AutomationStatusTracker automation_status_tracker_storage(AUTOMATION_LIST);
+inline AlarmStatusTracker alarm_status_tracker_storage(ALARM_LIST);
+inline NotificationFeedTracker notification_feed_tracker_storage;
+inline WeatherStatusTracker weather_status_tracker_storage;
+inline bool remote_status_trackers_initialized = false;
+inline RemoteMode last_requested_mode = REMOTE_MODE_INFO;
+inline int last_requested_mode_index = -1;
+inline uint32_t last_requested_mode_at = 0;
 
 static inline void ensure_remote_status_trackers() {
   if (remote_status_trackers_initialized) {
     return;
   }
+  validate_remote_configuration();
   light_status_tracker_storage.setup();
   switch_status_tracker_storage.setup();
   fan_status_tracker_storage.setup();

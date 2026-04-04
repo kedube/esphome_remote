@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 #include "esphome/components/api/custom_api_device.h"
@@ -188,6 +189,32 @@ static inline std::string remote_state_label(const std::string &raw, const char 
   return label;
 }
 
+static inline void remote_state_label_to_buffer(
+    const std::string &raw, char *buffer, size_t buffer_size, const char *fallback = "SYNCING") {
+  if (buffer == nullptr || buffer_size == 0) {
+    return;
+  }
+
+  size_t write_idx = 0;
+  for (char ch : raw) {
+    if (write_idx + 1 >= buffer_size) {
+      break;
+    }
+    if (ch >= 'a' && ch <= 'z') {
+      buffer[write_idx++] = ch - 'a' + 'A';
+    } else if (ch == '_') {
+      buffer[write_idx++] = ' ';
+    } else {
+      buffer[write_idx++] = ch;
+    }
+  }
+  buffer[write_idx] = '\0';
+
+  if (write_idx == 0 || strcmp(buffer, "UNKNOWN") == 0) {
+    snprintf(buffer, buffer_size, "%s", fallback != nullptr ? fallback : "");
+  }
+}
+
 static inline int clamp_percent_value(float value, float scale = 1.0f, int min_value = 0) {
   int pct = (int) roundf(value * scale);
   if (pct < min_value) pct = min_value;
@@ -334,6 +361,62 @@ static inline std::string next_media_source_for_index(int idx, const std::string
   return media_source_option_at(idx, 0);
 }
 
+static inline bool entity_id_matches_domain(const char *entity_id, const char *domain) {
+  if (entity_id == nullptr || domain == nullptr) {
+    return false;
+  }
+  const std::string prefix = std::string(domain) + ".";
+  return std::string(entity_id).rfind(prefix, 0) == 0;
+}
+
+template <typename Entity>
+static inline void validate_entity_list(
+    const char *label, const Entity *entities, int count, const char *primary_domain,
+    const char *secondary_domain = nullptr, const char *tertiary_domain = nullptr) {
+  for (int i = 0; i < count; i++) {
+    const char *name = entities[i].name;
+    const char *entity_id = entities[i].entity_id;
+    if (name == nullptr || name[0] == '\0') {
+      ESP_LOGW("remote_config", "%s[%d] is missing a display name", label, i);
+    }
+    if (entity_id == nullptr || entity_id[0] == '\0') {
+      ESP_LOGW("remote_config", "%s[%d] is missing an entity_id", label, i);
+      continue;
+    }
+    bool valid_domain = entity_id_matches_domain(entity_id, primary_domain) ||
+                        entity_id_matches_domain(entity_id, secondary_domain) ||
+                        entity_id_matches_domain(entity_id, tertiary_domain);
+    if (!valid_domain) {
+      ESP_LOGW("remote_config", "%s[%d] has unexpected domain: %s", label, i, entity_id);
+    }
+  }
+}
+
+static inline void validate_notification_config() {
+  if (!notifications_mode_enabled()) {
+    return;
+  }
+  if (!entity_id_matches_domain(NOTIFICATION_FEED_ENTITY, "sensor")) {
+    ESP_LOGW("remote_config", "NOTIFICATION_FEED_ENTITY should point to a sensor.* entity: %s", NOTIFICATION_FEED_ENTITY);
+  }
+}
+
+static inline void validate_remote_configuration() {
+  validate_entity_list("LIGHT_LIST", LIGHT_LIST, LIGHT_LIST_COUNT, "light");
+  validate_entity_list("SWITCH_LIST", SWITCH_LIST, SWITCH_LIST_COUNT, "switch");
+  validate_entity_list("CLIMATE_LIST", CLIMATE_LIST, CLIMATE_LIST_COUNT, "climate");
+  validate_entity_list("HUMIDIFIER_LIST", HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, "humidifier");
+  validate_entity_list("FAN_LIST", FAN_LIST, FAN_LIST_COUNT, "fan");
+  validate_entity_list("COVER_LIST", COVER_LIST, COVER_LIST_COUNT, "cover");
+  validate_entity_list("LOCK_LIST", LOCK_LIST, LOCK_LIST_COUNT, "lock");
+  validate_entity_list("MEDIA_PLAYER_LIST", MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, "media_player");
+  validate_entity_list("SENSOR_LIST", SENSOR_LIST, SENSOR_LIST_COUNT, "sensor", "binary_sensor");
+  validate_entity_list("AUTOMATION_LIST", AUTOMATION_LIST, AUTOMATION_LIST_COUNT, "automation", "script", "scene");
+  validate_entity_list("ALARM_LIST", ALARM_LIST, ALARM_LIST_COUNT, "alarm_control_panel");
+  validate_entity_list("WEATHER_LIST", WEATHER_LIST, WEATHER_LIST_COUNT, "weather");
+  validate_notification_config();
+}
+
 template <typename Entity>
 static inline int find_entity_index(const Entity *entities, int count, const std::string &entity_id) {
   for (int i = 0; i < count; i++) {
@@ -362,6 +445,20 @@ static inline std::string indexed_entity_id(const Entity *entities, int count, i
 }
 
 static inline std::string indexed_value(const char *const *values, int count, int idx) {
+  return (idx >= 0 && idx < count) ? values[idx] : "";
+}
+
+template <typename Entity>
+static inline const char *indexed_entity_name_cstr(const Entity *entities, int count, int idx) {
+  return (idx >= 0 && idx < count) ? entities[idx].name : "";
+}
+
+template <typename Entity>
+static inline const char *indexed_entity_id_cstr(const Entity *entities, int count, int idx) {
+  return (idx >= 0 && idx < count) ? entities[idx].entity_id : "";
+}
+
+static inline const char *indexed_value_cstr(const char *const *values, int count, int idx) {
   return (idx >= 0 && idx < count) ? values[idx] : "";
 }
 
@@ -576,6 +673,74 @@ static inline std::string mode_item_entity(RemoteMode mode, int idx) {
   }
 }
 
+static inline const char *mode_item_name_cstr(RemoteMode mode, int idx) {
+  switch (mode) {
+    case REMOTE_MODE_LIGHTS:
+      return indexed_entity_name_cstr(LIGHT_LIST, LIGHT_LIST_COUNT, idx);
+    case REMOTE_MODE_SWITCHES:
+      return indexed_entity_name_cstr(SWITCH_LIST, SWITCH_LIST_COUNT, idx);
+    case REMOTE_MODE_CLIMATE:
+      return indexed_entity_name_cstr(CLIMATE_LIST, CLIMATE_LIST_COUNT, idx);
+    case REMOTE_MODE_HUMIDIFIERS:
+      return indexed_entity_name_cstr(HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, idx);
+    case REMOTE_MODE_FANS:
+      return indexed_entity_name_cstr(FAN_LIST, FAN_LIST_COUNT, idx);
+    case REMOTE_MODE_COVERS:
+      return indexed_entity_name_cstr(COVER_LIST, COVER_LIST_COUNT, idx);
+    case REMOTE_MODE_LOCKS:
+      return indexed_entity_name_cstr(LOCK_LIST, LOCK_LIST_COUNT, idx);
+    case REMOTE_MODE_MEDIA:
+      return indexed_entity_name_cstr(MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, idx);
+    case REMOTE_MODE_SENSORS:
+      return indexed_entity_name_cstr(SENSOR_LIST, SENSOR_LIST_COUNT, idx);
+    case REMOTE_MODE_AUTOMATION:
+      return indexed_entity_name_cstr(AUTOMATION_LIST, AUTOMATION_LIST_COUNT, idx);
+    case REMOTE_MODE_ALARMS:
+      return indexed_entity_name_cstr(ALARM_LIST, ALARM_LIST_COUNT, idx);
+    case REMOTE_MODE_WEATHER:
+      return indexed_entity_name_cstr(WEATHER_LIST, WEATHER_LIST_COUNT, idx);
+    case REMOTE_MODE_INFO:
+      return indexed_value_cstr(INFO_ITEM_NAMES, INFO_ITEM_COUNT, idx);
+    case REMOTE_MODE_NOTIFICATIONS:
+    default:
+      return nullptr;
+  }
+}
+
+static inline const char *mode_item_entity_cstr(RemoteMode mode, int idx) {
+  switch (mode) {
+    case REMOTE_MODE_LIGHTS:
+      return indexed_entity_id_cstr(LIGHT_LIST, LIGHT_LIST_COUNT, idx);
+    case REMOTE_MODE_SWITCHES:
+      return indexed_entity_id_cstr(SWITCH_LIST, SWITCH_LIST_COUNT, idx);
+    case REMOTE_MODE_CLIMATE:
+      return indexed_entity_id_cstr(CLIMATE_LIST, CLIMATE_LIST_COUNT, idx);
+    case REMOTE_MODE_HUMIDIFIERS:
+      return indexed_entity_id_cstr(HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, idx);
+    case REMOTE_MODE_FANS:
+      return indexed_entity_id_cstr(FAN_LIST, FAN_LIST_COUNT, idx);
+    case REMOTE_MODE_COVERS:
+      return indexed_entity_id_cstr(COVER_LIST, COVER_LIST_COUNT, idx);
+    case REMOTE_MODE_LOCKS:
+      return indexed_entity_id_cstr(LOCK_LIST, LOCK_LIST_COUNT, idx);
+    case REMOTE_MODE_MEDIA:
+      return indexed_entity_id_cstr(MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, idx);
+    case REMOTE_MODE_SENSORS:
+      return indexed_entity_id_cstr(SENSOR_LIST, SENSOR_LIST_COUNT, idx);
+    case REMOTE_MODE_AUTOMATION:
+      return indexed_entity_id_cstr(AUTOMATION_LIST, AUTOMATION_LIST_COUNT, idx);
+    case REMOTE_MODE_ALARMS:
+      return indexed_entity_id_cstr(ALARM_LIST, ALARM_LIST_COUNT, idx);
+    case REMOTE_MODE_WEATHER:
+      return indexed_entity_id_cstr(WEATHER_LIST, WEATHER_LIST_COUNT, idx);
+    case REMOTE_MODE_INFO:
+      return indexed_value_cstr(INFO_ITEM_ENTITIES, INFO_ITEM_COUNT, idx);
+    case REMOTE_MODE_NOTIFICATIONS:
+    default:
+      return nullptr;
+  }
+}
+
 enum AutomationKind {
   AUTOMATION_KIND_AUTOMATION = 0,
   AUTOMATION_KIND_SCRIPT = 1,
@@ -631,6 +796,38 @@ static inline const char *alarm_arm_mode_hold_label(AlarmArmMode mode) {
   }
 }
 
+struct ModeSelectionStateRefs {
+  int &light_idx;
+  int &switch_idx;
+  int &climate_idx;
+  int &lock_idx;
+  int &cover_idx;
+  int &media_idx;
+  int &automation_idx;
+  int &weather_idx;
+  int &fan_idx;
+  int &humidifier_idx;
+  int &sensor_idx;
+  int &alarm_idx;
+  int &notification_idx;
+  int &info_idx;
+};
+
+struct CurrentModeSelectionContext {
+  RemoteMode mode;
+  int count;
+  int index;
+  int *selected_index;
+};
+
+static inline ModeSelectionStateRefs make_mode_selection_state_refs(
+    int &light_idx, int &switch_idx, int &climate_idx, int &lock_idx, int &cover_idx, int &media_idx,
+    int &automation_idx, int &weather_idx, int &fan_idx, int &humidifier_idx, int &sensor_idx, int &alarm_idx,
+    int &notification_idx, int &info_idx) {
+  return {light_idx, switch_idx, climate_idx, lock_idx, cover_idx, media_idx, automation_idx,
+          weather_idx, fan_idx, humidifier_idx, sensor_idx, alarm_idx, notification_idx, info_idx};
+}
+
 static inline AutomationKind automation_kind(int idx) {
   if (idx < 0 || idx >= AUTOMATION_LIST_COUNT) {
     return AUTOMATION_KIND_SCRIPT;
@@ -665,39 +862,37 @@ static inline const char *automation_kind_label(int idx) {
   }
 }
 
-static inline int &selected_mode_index_ref(
-    RemoteMode mode, int &light_idx, int &switch_idx, int &climate_idx, int &lock_idx, int &cover_idx, int &media_idx,
-    int &automation_idx, int &weather_idx, int &misc_idx, int &fan_idx, int &humidifier_idx) {
+static inline int &selected_mode_index_ref(RemoteMode mode, ModeSelectionStateRefs refs) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
-      return light_idx;
+      return refs.light_idx;
     case REMOTE_MODE_SWITCHES:
-      return switch_idx;
+      return refs.switch_idx;
     case REMOTE_MODE_CLIMATE:
-      return climate_idx;
+      return refs.climate_idx;
     case REMOTE_MODE_HUMIDIFIERS:
-      return humidifier_idx;
+      return refs.humidifier_idx;
     case REMOTE_MODE_FANS:
-      return fan_idx;
+      return refs.fan_idx;
     case REMOTE_MODE_COVERS:
-      return cover_idx;
+      return refs.cover_idx;
     case REMOTE_MODE_LOCKS:
-      return lock_idx;
+      return refs.lock_idx;
     case REMOTE_MODE_MEDIA:
-      return media_idx;
+      return refs.media_idx;
     case REMOTE_MODE_SENSORS:
-      return misc_idx;
+      return refs.sensor_idx;
     case REMOTE_MODE_AUTOMATION:
-      return automation_idx;
+      return refs.automation_idx;
     case REMOTE_MODE_ALARMS:
-      return misc_idx;
+      return refs.alarm_idx;
     case REMOTE_MODE_NOTIFICATIONS:
-      return misc_idx;
+      return refs.notification_idx;
     case REMOTE_MODE_WEATHER:
-      return weather_idx;
+      return refs.weather_idx;
     case REMOTE_MODE_INFO:
     default:
-      return misc_idx;
+      return refs.info_idx;
   }
 }
 
@@ -706,6 +901,21 @@ static inline int clamp_mode_index(int idx, int count) {
     return 0;
   }
   return (idx >= 0 && idx < count) ? idx : 0;
+}
+
+static inline CurrentModeSelectionContext resolve_current_mode_selection_context(
+    int &current_mode_value, ModeSelectionStateRefs refs, bool ensure_available = true) {
+  RemoteMode mode = static_cast<RemoteMode>(current_mode_value);
+  if (ensure_available && !mode_is_available(mode)) {
+    mode = first_available_mode();
+    current_mode_value = mode;
+  }
+
+  int count = mode_item_count(mode);
+  int &selected_index = selected_mode_index_ref(mode, refs);
+  selected_index = clamp_mode_index(selected_index, count);
+
+  return {mode, count, selected_index, &selected_index};
 }
 
 static inline int wrapped_mode_index(int idx, int count, int step) {

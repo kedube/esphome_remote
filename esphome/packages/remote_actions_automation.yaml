@@ -1,0 +1,82 @@
+script:
+  - id: verify_selected_script_result
+    mode: restart
+    then:
+      - repeat:
+          count: 8
+          then:
+            - lambda: |-
+                request_selected_automation_status(id(selected_automation_index));
+            - delay: 1000ms
+            - if:
+                condition:
+                  lambda: |-
+                    const std::string state = automation_state_for_index(id(selected_automation_index));
+                    return state == "off" || state == "idle";
+                then:
+                  - script.execute:
+                      id: set_automation_feedback
+                      feedback: "COMPLETED"
+                  - script.stop: verify_selected_script_result
+
+  - id: trigger_selected_automation
+    mode: queued
+    then:
+      - lambda: |-
+          AutomationKind kind = automation_kind(id(selected_automation_index));
+          if (kind == AUTOMATION_KIND_SCRIPT) {
+            id(set_automation_feedback).execute("RUNNING...");
+          } else if (kind == AUTOMATION_KIND_SCENE) {
+            id(set_automation_feedback).execute("ACTIVATING...");
+          } else {
+            id(set_automation_feedback).execute("TRIGGERING...");
+          }
+      - if:
+          condition:
+            lambda: 'return automation_kind(id(selected_automation_index)) == AUTOMATION_KIND_AUTOMATION;'
+          then:
+            - homeassistant.action:
+                action: automation.trigger
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - script.execute:
+                      id: set_automation_feedback
+                      feedback: "TRIGGERED"
+                on_error:
+                  - script.execute:
+                      id: set_automation_feedback
+                      feedback: "FAILED"
+          else:
+            - if:
+                condition:
+                  lambda: 'return automation_kind(id(selected_automation_index)) == AUTOMATION_KIND_SCENE;'
+                then:
+                  - homeassistant.action:
+                      action: scene.turn_on
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                      on_success:
+                        - script.execute:
+                            id: set_automation_feedback
+                            feedback: "ACTIVATED"
+                      on_error:
+                        - script.execute:
+                            id: set_automation_feedback
+                            feedback: "FAILED"
+                else:
+                  - homeassistant.action:
+                      action: script.turn_on
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                      on_success:
+                        - script.execute:
+                            id: set_automation_feedback
+                            feedback: "STARTED"
+                        - lambda: |-
+                            request_selected_automation_status(id(selected_automation_index));
+                        - script.execute: verify_selected_script_result
+                      on_error:
+                        - script.execute:
+                            id: set_automation_feedback
+                            feedback: "FAILED"

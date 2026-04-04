@@ -1,0 +1,124 @@
+script:
+  - id: update_selected_item
+    mode: restart
+    then:
+      - lambda: |-
+          auto selection_refs = make_mode_selection_state_refs(
+              id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index),
+              id(selected_cover_index), id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
+              id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index), id(selected_alarm_index),
+              id(selected_notification_index), id(selected_info_index));
+          auto selection = resolve_current_mode_selection_context(id(current_mode), selection_refs);
+
+          if (selection.count <= 0) {
+            id(selected_item_name) = "NO ITEMS";
+            id(selected_item_entity) = "";
+            id(selected_item_state) = "unknown";
+            id(updated_ui) = true;
+            return;
+          }
+
+          const char *item_name = mode_item_name_cstr(selection.mode, selection.index);
+          const char *item_entity = mode_item_entity_cstr(selection.mode, selection.index);
+          if (item_name != nullptr) {
+            id(selected_item_name) = item_name;
+          } else {
+            id(selected_item_name) = mode_item_name(selection.mode, selection.index);
+          }
+          if (item_entity != nullptr) {
+            id(selected_item_entity) = item_entity;
+          } else {
+            id(selected_item_entity) = mode_item_entity(selection.mode, selection.index);
+          }
+          auto bindings = make_remote_ui_bindings(
+              id(selected_item_name), id(selected_item_entity), id(selected_item_state), id(selected_brightness_pct),
+              id(selected_fan_speed_pct), id(selected_humidifier_target_humidity),
+              id(selected_humidifier_current_humidity), id(selected_humidifier_action), id(selected_humidifier_mode),
+              id(selected_cover_position_pct), id(last_switch_feedback), id(last_switch_interaction),
+              id(selected_climate_target_temp), id(selected_climate_hvac_action), id(selected_climate_preset),
+              id(selected_climate_target_temp_low), id(selected_climate_target_temp_high),
+              id(selected_climate_current_temp), id(last_climate_mode), id(climate_target_focus),
+              id(climate_target_focus_value), id(last_climate_target_focus_interaction), id(selected_media_volume_pct),
+              id(selected_media_title), id(selected_media_artist), id(selected_media_device_class),
+              id(selected_media_source), id(last_media_power_feedback), id(selected_automation_state),
+              id(last_alarm_feedback), id(last_alarm_interaction), id(last_lock_feedback), id(last_lock_interaction),
+              id(last_cover_feedback), id(last_cover_interaction), id(last_cover_position_interaction),
+              id(primary_button_press_started_at), id(play_pause_button_press_started_at),
+              id(settings_button_press_started_at), id(primary_button_press_mode), id(play_pause_button_press_mode),
+              id(settings_button_press_mode), id(primary_button_long_press_fired),
+              id(play_pause_button_long_press_fired), id(settings_button_long_press_fired),
+              id(selected_weather_temperature), id(selected_weather_humidity), id(selected_weather_high_temp),
+              id(selected_weather_low_temp), id(selected_weather_condition), id(selected_notification_index),
+              id(updated_ui));
+          RemoteUiResetState state = make_remote_ui_reset_state(bindings);
+          reset_remote_ui_state(state);
+
+          if (selection.mode == REMOTE_MODE_MEDIA) {
+            const std::string &state = selected_media_state(selection.index);
+            const std::string &device_class = media_device_class_for_index(selection.index);
+            const std::string &title = media_title_for_index(selection.index);
+            const std::string &artist = media_artist_for_index(selection.index);
+            const std::string &source = media_source_for_index(selection.index);
+            float volume = selected_media_volume(selection.index);
+
+            if (state != "unknown") {
+              id(selected_item_state) = state;
+            }
+            id(selected_media_device_class) = device_class;
+            id(selected_media_title) = title;
+            id(selected_media_artist) = artist;
+            if ((device_class == "tv" || device_class == "receiver")) {
+              if (!source.empty()) {
+                id(selected_media_source) = source;
+              }
+            } else {
+              id(selected_media_source) = source;
+            }
+            if (!isnan(volume)) {
+              int pct = (int) roundf(volume * 100.0f);
+              if (pct < 0) pct = 0;
+              if (pct > 100) pct = 100;
+              id(selected_media_volume_pct) = pct;
+            }
+          }
+          request_mode_status_throttled(selection.mode, selection.index, millis(), 2500, true);
+      - script.execute: persist_ui_state
+      - script.execute: sync_current_mode_status
+      - script.execute: update_display
+
+  - id: sync_current_mode_status
+    mode: restart
+    then:
+      - lambda: |-
+          auto selection_refs = make_mode_selection_state_refs(
+              id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index),
+              id(selected_cover_index), id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
+              id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index), id(selected_alarm_index),
+              id(selected_notification_index), id(selected_info_index));
+          auto selection = resolve_current_mode_selection_context(id(current_mode), selection_refs);
+          auto bindings = make_remote_ui_bindings(
+              id(selected_item_name), id(selected_item_entity), id(selected_item_state), id(selected_brightness_pct),
+              id(selected_fan_speed_pct), id(selected_humidifier_target_humidity),
+              id(selected_humidifier_current_humidity), id(selected_humidifier_action), id(selected_humidifier_mode),
+              id(selected_cover_position_pct), id(last_switch_feedback), id(last_switch_interaction),
+              id(selected_climate_target_temp), id(selected_climate_hvac_action), id(selected_climate_preset),
+              id(selected_climate_target_temp_low), id(selected_climate_target_temp_high),
+              id(selected_climate_current_temp), id(last_climate_mode), id(climate_target_focus),
+              id(climate_target_focus_value), id(last_climate_target_focus_interaction), id(selected_media_volume_pct),
+              id(selected_media_title), id(selected_media_artist), id(selected_media_device_class),
+              id(selected_media_source), id(last_media_power_feedback), id(selected_automation_state),
+              id(last_alarm_feedback), id(last_alarm_interaction), id(last_lock_feedback), id(last_lock_interaction),
+              id(last_cover_feedback), id(last_cover_interaction), id(last_cover_position_interaction),
+              id(primary_button_press_started_at), id(play_pause_button_press_started_at),
+              id(settings_button_press_started_at), id(primary_button_press_mode), id(play_pause_button_press_mode),
+              id(settings_button_press_mode), id(primary_button_long_press_fired),
+              id(play_pause_button_long_press_fired), id(settings_button_long_press_fired),
+              id(selected_weather_temperature), id(selected_weather_humidity), id(selected_weather_high_temp),
+              id(selected_weather_low_temp), id(selected_weather_condition), id(selected_notification_index),
+              id(updated_ui));
+          RemoteUiSyncState ui = make_remote_ui_sync_state(bindings);
+
+          sync_remote_ui_state(selection.mode, selection.index, ui);
+          if (ui.refresh_requested) {
+            request_mode_status_throttled(selection.mode, ui.refresh_idx, millis(), 2500);
+          }

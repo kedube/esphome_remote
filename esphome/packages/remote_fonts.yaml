@@ -1,0 +1,56 @@
+font:
+  - file: "../assets/fonts/arial-bold.ttf"
+    id: tiny_font
+    size: 9
+    glyphs: &arial_glyphs ['0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_ :<>%[](){}|''!?/+-&*=$#@^°']
+  - file: "../assets/fonts/arial-bold.ttf"
+    id: small_font
+    size: 10
+    glyphs: *arial_glyphs
+  - file: "../assets/fonts/arial-bold.ttf"
+    id: medium_font
+    size: 13
+    glyphs: *arial_glyphs
+  - file:
+      type: gfonts
+      family: Material+Symbols+Rounded
+      weight: 400
+    id: symbols
+    size: 12
+    glyphs: [
+      "\ue1ac", # brightness_high
+      "\ue8ac", # power_settings_new
+      "\ue047", # stop
+      "\ue90f", # light_mode
+      "\ue1f4", # switch
+      "\uf076", # thermostat
+      "\uf165", # humidity_mid
+      "\uf168", # fan_mode
+      "\ue286", # blinds
+      "\ue897", # lock
+      "\uf4f2", # media_output
+      "\uf556", # sensors
+      "\ue88a", # home
+      "\ue7f7", # notifications_active
+      "\ue158", # mail
+      "\ue81a", # sunny
+      "\ue88e", # info
+    ]
+  - file:
+      type: gfonts
+      family: Material+Symbols+Rounded
+      weight: 400
+    id: medium_symbols
+    size: 15
+    glyphs: [
+      "\ueac3", # keyboard_double_arrow_left
+      "\ueac9", # keyboard_double_arrow_right
+      "\ueacf", # keyboard_double_arrow_up
+      "\uead0", # keyboard_double_arrow_down
+      "\ue045", # skip_previous
+      "\ue044", # skip_next
+      "\ue63e", # wifi
+      "\ue648", # wifi_off
+      "\ue8ac", # power_settings_new
+      "\ue19c", # battery_alert
+    ]

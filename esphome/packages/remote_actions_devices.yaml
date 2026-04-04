@@ -1,0 +1,331 @@
+script:
+  - id: toggle_selected_light
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "on";'
+          then:
+            - homeassistant.service:
+                service: light.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "off";
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - homeassistant.service:
+                service: light.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  brightness_pct: !lambda |-
+                    if (id(selected_brightness_pct) <= 0) {
+                      return 100;
+                    }
+                    return id(selected_brightness_pct);
+            - lambda: |-
+                id(selected_item_state) = "on";
+                if (id(selected_brightness_pct) <= 0) {
+                  id(selected_brightness_pct) = 100;
+                }
+                id(updated_ui) = true;
+            - script.execute: update_display
+
+  - id: toggle_selected_fan
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "on";'
+          then:
+            - homeassistant.service:
+                service: fan.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "off";
+                id(selected_fan_speed_pct) = 0;
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - if:
+                condition:
+                  lambda: 'return selected_fan_has_percentage(id(selected_fan_index));'
+                then:
+                  - homeassistant.service:
+                      service: fan.turn_on
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                        percentage: !lambda |-
+                          if (id(selected_fan_speed_pct) <= 0) {
+                            return 100;
+                          }
+                          return id(selected_fan_speed_pct);
+                else:
+                  - homeassistant.service:
+                      service: fan.turn_on
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "on";
+                if (selected_fan_has_percentage(id(selected_fan_index)) && id(selected_fan_speed_pct) <= 0) {
+                  id(selected_fan_speed_pct) = 100;
+                }
+                id(updated_ui) = true;
+            - script.execute: update_display
+
+  - id: turn_on_selected_switch
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_switch_feedback) = "";
+          id(selected_item_state) = "turning_on";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - homeassistant.action:
+          action: switch.turn_on
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - script.execute:
+                id: set_switch_feedback
+                feedback: "SUCCESS"
+            - lambda: |-
+                request_selected_switch_status(id(selected_switch_index));
+          on_error:
+            - script.execute:
+                id: set_switch_feedback
+                feedback: "FAILED"
+            - lambda: |-
+                request_selected_switch_status(id(selected_switch_index));
+
+  - id: turn_off_selected_switch
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_switch_feedback) = "";
+          id(selected_item_state) = "turning_off";
+          id(updated_ui) = true;
+      - script.execute: update_display
+      - homeassistant.action:
+          action: switch.turn_off
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+          on_success:
+            - script.execute:
+                id: set_switch_feedback
+                feedback: "SUCCESS"
+            - lambda: |-
+                request_selected_switch_status(id(selected_switch_index));
+          on_error:
+            - script.execute:
+                id: set_switch_feedback
+                feedback: "FAILED"
+            - lambda: |-
+                request_selected_switch_status(id(selected_switch_index));
+
+  - id: increase_brightness
+    mode: queued
+    then:
+      - lambda: |-
+          int next = id(selected_brightness_pct) + 10;
+          if (next > 100) next = 100;
+          if (next < 10) next = 10;
+          id(selected_brightness_pct) = next;
+          id(selected_item_state) = "on";
+          id(last_brightness_interaction) = millis();
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: light.turn_on
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            brightness_pct: !lambda 'return id(selected_brightness_pct);'
+      - script.execute: update_display
+
+  - id: increase_fan_speed
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return !selected_fan_has_percentage(id(selected_fan_index));'
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(selected_item_state) != "on";'
+                then:
+                  - script.execute: toggle_selected_fan
+          else:
+            - lambda: |-
+                int next = id(selected_fan_speed_pct) + 10;
+                if (next > 100) next = 100;
+                if (next < 10) next = 10;
+                id(selected_fan_speed_pct) = next;
+                id(selected_item_state) = "on";
+                id(last_fan_speed_interaction) = millis();
+                id(updated_ui) = true;
+            - homeassistant.service:
+                service: fan.set_percentage
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  percentage: !lambda 'return id(selected_fan_speed_pct);'
+            - script.execute: update_display
+
+  - id: decrease_brightness
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_brightness_pct) <= 10;'
+          then:
+            - homeassistant.service:
+                service: light.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_brightness_pct) = 0;
+                id(selected_item_state) = "off";
+                id(last_brightness_interaction) = millis();
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - lambda: |-
+                int next = id(selected_brightness_pct) - 10;
+                if (next < 1) next = 1;
+                id(selected_brightness_pct) = next;
+                id(selected_item_state) = "on";
+                id(last_brightness_interaction) = millis();
+                id(updated_ui) = true;
+            - homeassistant.service:
+                service: light.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  brightness_pct: !lambda 'return id(selected_brightness_pct);'
+            - script.execute: update_display
+
+  - id: decrease_fan_speed
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return !selected_fan_has_percentage(id(selected_fan_index));'
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(selected_item_state) == "on";'
+                then:
+                  - script.execute: toggle_selected_fan
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(selected_fan_speed_pct) <= 10;'
+                then:
+                  - homeassistant.service:
+                      service: fan.turn_off
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                  - lambda: |-
+                      id(selected_fan_speed_pct) = 0;
+                      id(selected_item_state) = "off";
+                      id(last_fan_speed_interaction) = millis();
+                      id(updated_ui) = true;
+                  - script.execute: update_display
+                else:
+                  - lambda: |-
+                      int next = id(selected_fan_speed_pct) - 10;
+                      if (next < 1) next = 1;
+                      id(selected_fan_speed_pct) = next;
+                      id(selected_item_state) = "on";
+                      id(last_fan_speed_interaction) = millis();
+                      id(updated_ui) = true;
+                  - homeassistant.service:
+                      service: fan.set_percentage
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                        percentage: !lambda 'return id(selected_fan_speed_pct);'
+                  - script.execute: update_display
+
+  - id: toggle_selected_humidifier_power
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "off";'
+          then:
+            - homeassistant.service:
+                service: humidifier.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "on";
+                id(updated_ui) = true;
+          else:
+            - homeassistant.service:
+                service: humidifier.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "off";
+                id(selected_humidifier_action) = "off";
+                id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: adjust_humidifier_target
+    parameters:
+      delta: float
+    mode: queued
+    then:
+      - lambda: |-
+          float next = id(selected_humidifier_target_humidity);
+          if (isnan(next)) {
+            next = 50.0f;
+          }
+          next += delta;
+          if (next < 0.0f) next = 0.0f;
+          if (next > 100.0f) next = 100.0f;
+          id(selected_humidifier_target_humidity) = next;
+          id(last_humidifier_interaction) = millis();
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: humidifier.set_humidity
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            humidity: !lambda 'return id(selected_humidifier_target_humidity);'
+      - script.execute: update_display
+
+  - id: humidifier_target_up
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_humidifier_target
+          delta: 1.0
+
+  - id: humidifier_target_down
+    mode: queued
+    then:
+      - script.execute:
+          id: adjust_humidifier_target
+          delta: -1.0
+
+  - id: cycle_selected_humidifier_mode
+    mode: queued
+    then:
+      - lambda: |-
+          std::string next_mode = next_humidifier_mode_for_index(id(selected_humidifier_index));
+          if (next_mode.empty()) {
+            id(updated_ui) = true;
+            return;
+          }
+          id(selected_humidifier_mode) = next_mode;
+          id(last_humidifier_mode_interaction) = millis();
+          id(updated_ui) = true;
+      - if:
+          condition:
+            lambda: 'return !id(selected_humidifier_mode).empty();'
+          then:
+            - homeassistant.service:
+                service: humidifier.set_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  mode: !lambda 'return id(selected_humidifier_mode);'
+            - script.execute: update_display

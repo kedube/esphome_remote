@@ -1,0 +1,75 @@
+# Persisted mode and selection globals.
+globals:
+  - id: persisted_ui_state
+    type: uint64_t
+    initial_value: '0'
+    restore_value: True
+
+  - id: persisted_ui_state_aux
+    type: uint32_t
+    initial_value: '0'
+    restore_value: True
+
+  - id: current_mode
+    type: int
+    initial_value: '0'
+
+  - id: selected_light_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_switch_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_fan_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_humidifier_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_climate_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_lock_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_cover_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_media_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_automation_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_weather_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_sensor_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_alarm_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_notification_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_info_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_alarm_arm_mode
+    type: int
+    initial_value: '0'

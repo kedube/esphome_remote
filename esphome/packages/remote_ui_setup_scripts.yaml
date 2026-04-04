@@ -1,0 +1,153 @@
+script:
+  - id: show_powering_off_screen
+    mode: single
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue8ac");
+          it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "POWERING OFF");
+          it->display();
+
+  - id: clear_display_for_sleep
+    mode: single
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->display();
+
+  - id: reset_mode_feedback_timers
+    then:
+      - lambda: |-
+          id(last_brightness_interaction) = 0;
+          id(last_switch_interaction) = 0;
+          id(last_fan_speed_interaction) = 0;
+          id(last_humidifier_interaction) = 0;
+          id(last_humidifier_mode_interaction) = 0;
+          id(last_climate_interaction) = 0;
+          id(last_lock_interaction) = 0;
+          id(last_cover_interaction) = 0;
+          id(last_cover_position_interaction) = 0;
+          id(last_media_interaction) = 0;
+          id(last_media_volume_interaction) = 0;
+          id(last_media_source_interaction) = 0;
+          id(last_media_power_interaction) = 0;
+          id(last_automation_interaction) = 0;
+          id(last_alarm_interaction) = 0;
+
+  - id: reset_selected_item_state
+    then:
+      - lambda: |-
+          auto bindings = make_remote_ui_bindings(
+              id(selected_item_name), id(selected_item_entity), id(selected_item_state), id(selected_brightness_pct),
+              id(selected_fan_speed_pct), id(selected_humidifier_target_humidity),
+              id(selected_humidifier_current_humidity), id(selected_humidifier_action), id(selected_humidifier_mode),
+              id(selected_cover_position_pct), id(last_switch_feedback), id(last_switch_interaction),
+              id(selected_climate_target_temp), id(selected_climate_hvac_action), id(selected_climate_preset),
+              id(selected_climate_target_temp_low), id(selected_climate_target_temp_high),
+              id(selected_climate_current_temp), id(last_climate_mode), id(climate_target_focus),
+              id(climate_target_focus_value), id(last_climate_target_focus_interaction), id(selected_media_volume_pct),
+              id(selected_media_title), id(selected_media_artist), id(selected_media_device_class),
+              id(selected_media_source), id(last_media_power_feedback), id(selected_automation_state),
+              id(last_alarm_feedback), id(last_alarm_interaction), id(last_lock_feedback), id(last_lock_interaction),
+              id(last_cover_feedback), id(last_cover_interaction), id(last_cover_position_interaction),
+              id(primary_button_press_started_at), id(play_pause_button_press_started_at),
+              id(settings_button_press_started_at), id(primary_button_press_mode), id(play_pause_button_press_mode),
+              id(settings_button_press_mode), id(primary_button_long_press_fired),
+              id(play_pause_button_long_press_fired), id(settings_button_long_press_fired),
+              id(selected_weather_temperature), id(selected_weather_humidity), id(selected_weather_high_temp),
+              id(selected_weather_low_temp), id(selected_weather_condition), id(selected_notification_index),
+              id(updated_ui));
+          RemoteUiResetState state = make_remote_ui_reset_state(bindings);
+          reset_remote_ui_state(state);
+
+  - id: persist_ui_state
+    then:
+      - lambda: |-
+          PersistedUIStateData state;
+          state.contrast = id(contrast);
+          state.current_mode = id(current_mode);
+          state.selected_light_index = id(selected_light_index);
+          state.selected_switch_index = id(selected_switch_index);
+          state.selected_climate_index = id(selected_climate_index);
+          state.selected_lock_index = id(selected_lock_index);
+          state.selected_cover_index = id(selected_cover_index);
+          state.selected_media_index = id(selected_media_index);
+          state.selected_automation_index = id(selected_automation_index);
+          state.selected_weather_index = id(selected_weather_index);
+          state.selected_fan_index = id(selected_fan_index);
+          state.selected_humidifier_index = id(selected_humidifier_index);
+          state.selected_sensor_index = id(selected_sensor_index);
+          state.selected_alarm_index = id(selected_alarm_index);
+          state.selected_notification_index = id(selected_notification_index);
+          state.selected_info_index = id(selected_info_index);
+          id(persisted_ui_state) = pack_persisted_ui_state(state);
+          id(persisted_ui_state_aux) = pack_persisted_ui_state_aux(state);
+
+  - id: boot_screen
+    then:
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - lambda: |-
+                auto it = id(oled_display);
+                it->clear();
+                it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue63e");
+                it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WIFI CONNECTED");
+                it->print(64, 36, id(small_font), COLOR_ON, display::TextAlign::CENTER, "CONNECTING TO API");
+                it->display();
+          else:
+            - lambda: |-
+                auto it = id(oled_display);
+                it->clear();
+                it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue648");
+                it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "CONNECTING TO WIFI");
+                it->print(64, 36, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WAITING FOR NETWORK");
+                it->print(64, 56, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "V${VERSION}");
+                it->display();
+
+  - id: show_low_battery_popup
+    mode: restart
+    then:
+      - lambda: |-
+          id(low_battery_popup_active) = true;
+          id(low_battery_popup_shown) = true;
+          id(show_boot_screen) = false;
+          id(updated_ui) = true;
+
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue19c");
+          it->print(64, 26, id(small_font), COLOR_ON, display::TextAlign::CENTER, "LOW BATTERY");
+          it->print(64, 38, id(small_font), COLOR_ON, display::TextAlign::CENTER, "PLEASE CHARGE");
+          if (!isnan(id(battery_voltage))) {
+            it->printf(64, 56, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "%.02fV", id(battery_voltage));
+          }
+          it->display();
+      - delay: 10s
+      - lambda: |-
+          id(low_battery_popup_active) = false;
+          id(updated_ui) = true;
+
+  - id: api_disconnected_screen
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue63e");
+          it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WIFI CONNECTED");
+          it->print(64, 36, id(small_font), COLOR_ON, display::TextAlign::CENTER, "API DISCONNECTED");
+          it->print(64, 56, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "RECONNECTING...");
+          it->display();
+
+  - id: wifi_disconnected_screen
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue648");
+          it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WIFI DISCONNECTED");
+          it->print(64, 36, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "RECONNECTING...");
+          it->display();

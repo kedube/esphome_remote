@@ -77,11 +77,16 @@ esphome_remote/
 │   │   ├── pcb_proto.yaml
 │   │   └── pcb_rev31.yaml
 │   ├── examples/
+│   │   ├── local_entities-example.h
 │   │   └── secrets-example.yaml
 │   ├── packages/
-│   │   ├── remote_display.yaml
+│   │   ├── remote_actions_*.yaml
+│   │   ├── remote_button_*.yaml
+│   │   ├── remote_display_*.yaml
 │   │   ├── remote_inputs.yaml
-│   │   └── remote_runtime.yaml
+│   │   ├── remote_runtime.yaml
+│   │   └── remote_ui_*.yaml
+│   ├── local_entities.h
 │   ├── remote_control.yaml
 │   └── settings.yaml
 ├── home_assistant/
@@ -90,14 +95,17 @@ esphome_remote/
 │   ├── entity_helpers_common.h
 │   ├── entity_helpers.h
 │   ├── entity_helpers_requests.h
+│   ├── entity_trackers.h
 │   ├── framebuffer_web_debug.h
-│   ├── local_entities-example.h
-│   └── local_entities.h
+│   ├── local_entities.h
+│   ├── remote_ui_*.h
+│   └── ui_state_helpers.h
 ├── images/
 │   ├── remote_*.jpeg
 │   └── remote_UI-*.png
 └── src/
-    └── framebuffer_web_debug.cpp
+    ├── framebuffer_web_debug.cpp
+    └── remote_ui_*.cpp
 ```
 
 ## Important Files
@@ -107,19 +115,40 @@ esphome_remote/
 - `esphome/settings.yaml`
   Shared configuration file for common substitutions, PCB selection, and optional web server settings.
 - `include/entity_helpers.h`
-  Shared C++ helper declarations used by the display and control logic.
+  Compatibility shim that includes the tracker and request helper layers.
+- `include/entity_trackers.h`
+  Home Assistant tracker classes that subscribe to and cache entity state.
 - `include/entity_helpers_common.h` and `include/entity_helpers_requests.h`
-  Split helper implementations for shared entity metadata/state logic and Home Assistant request helpers.
-- `include/local_entities.h`
-  Your private Home Assistant entity definitions. This file is ignored by Git.
-- `include/local_entities-example.h`
+  Shared entity metadata/state helpers and the request/query layer built on top of the trackers.
+- `esphome/local_entities.h`
+  Your private Home Assistant entity definitions. This file is ignored by Git and lives next to `secrets.yaml` for a simpler compile workflow.
+- `esphome/examples/local_entities-example.h`
   Example entity lists you can copy and customize.
+- `include/local_entities.h`
+  Compatibility shim that forwards to `esphome/local_entities.h`.
 - `esphome/packages/`
   Modular ESPHome packages for runtime behavior, button/input handling, and display/UI rendering.
 - `src/framebuffer_web_debug.cpp` and `include/framebuffer_web_debug.h`
   Optional debug-only PBM framebuffer export for screenshot capture.
 - `home_assistant/remote_notifications.yaml`
   Optional Home Assistant template sensor bridge for the Notifications mode.
+
+## Architecture Notes
+
+- `include/entity_helpers_common.h`
+  Shared metadata, mode ordering, selection helpers, and configuration validation.
+- `include/entity_trackers.h`
+  Home Assistant tracker classes that subscribe to and cache entity state.
+- `include/entity_helpers_requests.h`
+  Thin request/sync helpers that bridge tracker state into the UI logic.
+- `include/remote_ui_bindings.h`
+  Shared UI binding helpers used to build reset/sync state objects without duplicating YAML wiring blocks.
+- `include/ui_state_helpers.h`
+  Persistent UI save/restore packing helpers and legacy migration logic.
+- `esphome/remote_control.yaml`
+  Top-level composition file that imports the modular ESPHome packages and C++ helpers.
+
+At startup the remote validates the configured entity lists and logs warnings for missing names, missing entity IDs, or obvious domain mismatches such as a `switch.*` entry placed in `LIGHT_LIST`.
 
 ## 1. Install ESPHome
 
@@ -164,10 +193,10 @@ ota_password: "YourOTAPassword"
 Copy the example entity file:
 
 ```bash
-cp include/local_entities-example.h include/local_entities.h
+cp esphome/examples/local_entities-example.h esphome/local_entities.h
 ```
 
-Edit `include/local_entities.h` so it matches your Home Assistant setup.
+Edit `esphome/local_entities.h` so it matches your Home Assistant setup.
 
 The example file supports these lists:
 
@@ -364,7 +393,7 @@ Notes:
 - In Alarms mode, the Settings button must be held for `ALARM_TRIGGER_HOLD_DURATION_MS` to call `alarm_trigger`. The details line shows `HOLD TO TRIGGER` while held.
 - Alarm actions use temporary details-line feedback such as `ARMING...`, `DISARMING...`, `TRIGGERING...`, `ARMED HOME`, `DISARMED`, `TRIGGERED`, and `FAILED`-style responses when Home Assistant reports an error.
 - Info mode includes Time & Date, Network, and Version screens.
-- Notification mode reads from `NOTIFICATION_FEED_ENTITY` in `include/local_entities.h`.
+- Notification mode reads from `NOTIFICATION_FEED_ENTITY` in `esphome/local_entities.h`.
 
 ## Supported Home Assistant Entity Domains
 
@@ -412,7 +441,7 @@ These substitutions in `esphome/settings.yaml` are the main things you may want 
 Create it from the example file:
 
 ```bash
-cp include/local_entities-example.h include/local_entities.h
+cp esphome/examples/local_entities-example.h esphome/local_entities.h
 ```
 
 ### `secrets.yaml` is missing

@@ -2,7 +2,7 @@ substitutions:
   BOARD: "esp32dev"
   DEVICE_NAME: "esp32-remote"
   FRIENDLY_NAME: "ESP32 OLED Remote"
-  VERSION: "2.3"
+  VERSION: "2.4"
   FRAMEBUFFER_WEB_DEBUG: "0"
   TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
   SLEEP_DURATION: "120" # seconds until auto-sleep

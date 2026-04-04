@@ -1,0 +1,344 @@
+script:
+  - id: cycle_mode
+    mode: restart
+    then:
+      - lambda: |-
+          id(last_navigation_requested_at) = millis();
+          RemoteMode current = static_cast<RemoteMode>(id(current_mode));
+          id(current_mode) = next_available_mode(current, 1);
+          id(updated_ui) = true;
+      - script.execute: reset_mode_feedback_timers
+      - script.execute: update_selected_item
+
+  - id: execute_toggle_mode_action
+    then:
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_TOGGLE_LIGHT;'
+          then:
+            - script.execute: toggle_selected_light
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_TOGGLE_FAN;'
+          then:
+            - script.execute: toggle_selected_fan
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_TOGGLE_CLIMATE_POWER;'
+          then:
+            - script.execute: toggle_selected_climate_power
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_TOGGLE_HUMIDIFIER_POWER;'
+          then:
+            - script.execute: toggle_selected_humidifier_power
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_CYCLE_HUMIDIFIER_MODE;'
+          then:
+            - script.execute: cycle_selected_humidifier_mode
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_TURN_ON_SWITCH;'
+          then:
+            - script.execute: turn_on_selected_switch
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_TURN_OFF_SWITCH;'
+          then:
+            - script.execute: turn_off_selected_switch
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_MEDIA_PLAY_PAUSE;'
+          then:
+            - script.execute: media_play_pause
+
+  - id: execute_selection_mode_action
+    then:
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_SELECT_NEXT_ITEM;'
+          then:
+            - script.execute: select_next_item
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_TRIGGER_AUTOMATION;'
+          then:
+            - script.execute: trigger_selected_automation
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_DISMISS_NOTIFICATION;'
+          then:
+            - script.execute: dismiss_selected_notification
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_SELECT_NEXT_MEDIA_SOURCE;'
+          then:
+            - script.execute: select_next_media_source
+
+  - id: execute_adjust_mode_action
+    then:
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_CLIMATE_TEMP_HIGH_UP;'
+          then:
+            - script.execute: climate_temperature_high_up
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_CLIMATE_TEMP_HIGH_DOWN;'
+          then:
+            - script.execute: climate_temperature_high_down
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_INCREASE_BRIGHTNESS;'
+          then:
+            - script.execute: increase_brightness
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_DECREASE_BRIGHTNESS;'
+          then:
+            - script.execute: decrease_brightness
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_INCREASE_FAN_SPEED;'
+          then:
+            - script.execute: increase_fan_speed
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_DECREASE_FAN_SPEED;'
+          then:
+            - script.execute: decrease_fan_speed
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_HUMIDIFIER_TARGET_UP;'
+          then:
+            - script.execute: humidifier_target_up
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_HUMIDIFIER_TARGET_DOWN;'
+          then:
+            - script.execute: humidifier_target_down
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_INCREASE_COVER_POSITION;'
+          then:
+            - script.execute: increase_cover_position
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_DECREASE_COVER_POSITION;'
+          then:
+            - script.execute: decrease_cover_position
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_CLIMATE_TEMP_UP;'
+          then:
+            - script.execute: climate_temperature_up
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_CLIMATE_TEMP_DOWN;'
+          then:
+            - script.execute: climate_temperature_down
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_MEDIA_VOLUME_UP;'
+          then:
+            - script.execute: media_volume_up
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_MEDIA_VOLUME_DOWN;'
+          then:
+            - script.execute: media_volume_down
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_SHIFT_ALARM_MODE_FORWARD;'
+          then:
+            - script.execute:
+                id: shift_selected_alarm_arm_mode
+                step: 1
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_SHIFT_ALARM_MODE_BACKWARD;'
+          then:
+            - script.execute:
+                id: shift_selected_alarm_arm_mode
+                step: -1
+
+  - id: execute_security_mode_action
+    then:
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_LOCK;'
+          then:
+            - script.execute: lock_selected_lock
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_UNLOCK;'
+          then:
+            - script.execute: unlock_selected_lock
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_OPEN_COVER;'
+          then:
+            - script.execute: open_selected_cover
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_CLOSE_COVER;'
+          then:
+            - script.execute: close_selected_cover
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_ARM_ALARM;'
+          then:
+            - script.execute: arm_selected_alarm_with_selected_mode
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_DISARM_ALARM;'
+          then:
+            - script.execute: disarm_selected_alarm
+      - if:
+          condition:
+            lambda: 'return id(last_mode_action_command) == REMOTE_UI_ACTION_TRIGGER_ALARM;'
+          then:
+            - script.execute: trigger_selected_alarm
+
+  - id: dispatch_mode_action
+    parameters:
+      action: int
+    then:
+      - lambda: |-
+          RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          bool dual_climate_target = remote_ui_has_dual_climate_target(
+              id(selected_item_state), id(selected_climate_target_temp_low), id(selected_climate_target_temp_high));
+          id(last_mode_action_command) = static_cast<int>(
+              resolve_remote_mode_action_command(mode, action, dual_climate_target));
+          if (id(last_mode_action_command) == REMOTE_UI_ACTION_MARK_UI ||
+              id(last_mode_action_command) == REMOTE_UI_ACTION_NONE) {
+            id(updated_ui) = true;
+          }
+      - if:
+          condition:
+            lambda: |-
+              return group_remote_mode_action_command(
+                         static_cast<RemoteUiActionCommand>(id(last_mode_action_command))) ==
+                     REMOTE_UI_ACTION_GROUP_TOGGLE;
+          then:
+            - script.execute: execute_toggle_mode_action
+      - if:
+          condition:
+            lambda: |-
+              return group_remote_mode_action_command(
+                         static_cast<RemoteUiActionCommand>(id(last_mode_action_command))) ==
+                     REMOTE_UI_ACTION_GROUP_SELECTION;
+          then:
+            - script.execute: execute_selection_mode_action
+      - if:
+          condition:
+            lambda: |-
+              return group_remote_mode_action_command(
+                         static_cast<RemoteUiActionCommand>(id(last_mode_action_command))) ==
+                     REMOTE_UI_ACTION_GROUP_ADJUST;
+          then:
+            - script.execute: execute_adjust_mode_action
+      - if:
+          condition:
+            lambda: |-
+              return group_remote_mode_action_command(
+                         static_cast<RemoteUiActionCommand>(id(last_mode_action_command))) ==
+                     REMOTE_UI_ACTION_GROUP_SECURITY;
+          then:
+            - script.execute: execute_security_mode_action
+
+  - id: shift_selected_item
+    mode: restart
+    parameters:
+      step: int
+    then:
+      - lambda: |-
+          id(last_navigation_requested_at) = millis();
+          auto selection_refs = make_mode_selection_state_refs(
+              id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index),
+              id(selected_cover_index), id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
+              id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index), id(selected_alarm_index),
+              id(selected_notification_index), id(selected_info_index));
+          auto selection = resolve_current_mode_selection_context(id(current_mode), selection_refs);
+          if (selection.count <= 0 || selection.selected_index == nullptr) {
+            return;
+          }
+          *selection.selected_index = wrapped_mode_index(selection.index, selection.count, step);
+      - script.execute: update_selected_item
+
+  - id: select_next_item
+    then:
+      - script.execute:
+          id: shift_selected_item
+          step: 1
+
+  - id: select_previous_item
+    then:
+      - script.execute:
+          id: shift_selected_item
+          step: -1
+
+  - id: browse_media_or_items
+    mode: restart
+    parameters:
+      step: int
+    then:
+      - if:
+          condition:
+            lambda: 'return id(current_mode) == REMOTE_MODE_MEDIA;'
+          then:
+            - if:
+                condition:
+                  lambda: 'return step < 0;'
+                then:
+                  - script.execute: media_previous_track
+                else:
+                  - script.execute: media_next_track
+          else:
+            - script.execute:
+                id: shift_selected_item
+                step: !lambda 'return step;'
+
+  - id: previous_button_action
+    then:
+      - script.execute:
+          id: browse_media_or_items
+          step: -1
+
+  - id: next_button_action
+    then:
+      - script.execute:
+          id: browse_media_or_items
+          step: 1
+
+  - id: dismiss_selected_notification
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: |-
+              int idx = clamp_mode_index(id(selected_notification_index), notification_mode_item_count());
+              return notification_mode_item_count() > 0 &&
+                     !notification_message_for_index(idx).empty() &&
+                     !notification_id_for_index(idx).empty();
+          then:
+            - homeassistant.service:
+                service: persistent_notification.dismiss
+                data:
+                  notification_id: !lambda |-
+                    int idx = clamp_mode_index(id(selected_notification_index), notification_mode_item_count());
+                    return notification_id_for_index(idx);
+            - lambda: |-
+                id(last_notification_dismiss_interaction) = millis();
+                id(updated_ui) = true;
+            - script.execute: update_display
+            - script.execute: refresh_notifications_after_dismiss
+
+  - id: refresh_notifications_after_dismiss
+    mode: restart
+    then:
+      - delay: 3s
+      - lambda: |-
+          id(last_notification_dismiss_interaction) = 0;
+      - script.execute: update_selected_item

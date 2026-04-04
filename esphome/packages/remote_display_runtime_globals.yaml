@@ -1,0 +1,170 @@
+# Runtime, feedback, and transient UI globals.
+globals:
+  - id: contrast
+    type: int
+    initial_value: '5'
+
+  - id: last_active
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  - id: last_brightness_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_switch_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_contrast_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_climate_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_fan_speed_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_humidifier_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_humidifier_mode_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_lock_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_cover_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_cover_position_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_climate_target_focus_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_media_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_media_volume_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_media_source_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_media_power_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_automation_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_alarm_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: last_notification_dismiss_interaction
+    type: uint32_t
+    initial_value: '0'
+
+  - id: lock_verification_complete
+    type: bool
+    initial_value: 'false'
+
+  - id: cover_verification_complete
+    type: bool
+    initial_value: 'false'
+
+  - id: alarm_verification_complete
+    type: bool
+    initial_value: 'false'
+
+  - id: updated_ui
+    type: bool
+    initial_value: 'true'
+
+  - id: show_boot_screen
+    type: bool
+    initial_value: 'true'
+
+  - id: low_battery_popup_active
+    type: bool
+    initial_value: 'false'
+
+  - id: low_battery_popup_shown
+    type: bool
+    initial_value: 'false'
+
+  - id: battery_monitoring_available
+    type: bool
+    initial_value: 'false'
+
+  - id: battery_percentage
+    type: int
+    initial_value: '0'
+
+  - id: battery_voltage
+    type: float
+    initial_value: 'NAN'
+
+  - id: last_battery_update
+    type: uint32_t
+    initial_value: '0'
+
+  - id: primary_button_press_started_at
+    type: uint32_t
+    initial_value: '0'
+
+  - id: play_pause_button_press_started_at
+    type: uint32_t
+    initial_value: '0'
+
+  - id: settings_button_press_started_at
+    type: uint32_t
+    initial_value: '0'
+
+  - id: primary_button_press_mode
+    type: int
+    initial_value: '-1'
+
+  - id: play_pause_button_press_mode
+    type: int
+    initial_value: '-1'
+
+  - id: settings_button_press_mode
+    type: int
+    initial_value: '-1'
+
+  - id: primary_button_long_press_fired
+    type: bool
+    initial_value: 'false'
+
+  - id: play_pause_button_long_press_fired
+    type: bool
+    initial_value: 'false'
+
+  - id: settings_button_long_press_fired
+    type: bool
+    initial_value: 'false'
+
+  - id: last_mode_action_command
+    type: int
+    initial_value: '0'
+
+  - id: last_navigation_requested_at
+    type: uint32_t
+    initial_value: '0'
