@@ -52,7 +52,6 @@ script:
                 ctx.selected_weather_humidity = id(selected_weather_humidity);
                 ctx.selected_weather_high_temp = id(selected_weather_high_temp);
                 ctx.selected_weather_low_temp = id(selected_weather_low_temp);
-                ctx.selected_weather_precipitation = id(selected_weather_precipitation);
                 ctx.battery_voltage = id(battery_voltage);
                 ctx.selected_item_name = &id(selected_item_name);
                 ctx.selected_item_state = &id(selected_item_state);
@@ -71,13 +70,19 @@ script:
                 ctx.last_cover_feedback = &id(last_cover_feedback);
                 ctx.selected_weather_condition = &id(selected_weather_condition);
                 ctx.temperature_unit = "${TEMPERATURE_UNIT}";
+                auto current_time = id(homeassistant_time).now();
+                if (current_time.is_valid()) {
+                  ctx.weather_is_night = current_time.hour < 6 || current_time.hour >= 18;
+                }
 
                 if (mode == REMOTE_MODE_INFO) {
                   populate_remote_info_text(
-                      ctx.info_index, id(homeassistant_time).now(), "${VERSION}", ctx.battery_monitoring_available,
+                      ctx.info_index, current_time, "${VERSION}", ctx.battery_monitoring_available,
                       ctx.battery_percentage, ctx.battery_voltage, ctx.info_primary_text, ctx.info_secondary_text);
                 }
 
-                render_remote_ui(it, id(tiny_font), id(small_font), id(medium_font), id(symbols), id(medium_symbols), ctx);
+                render_remote_ui(
+                    it, id(tiny_font), id(small_font), id(medium_font), id(symbols), id(medium_symbols),
+                    id(weather_symbols), ctx);
                 it->display();
                 id(updated_ui) = false;

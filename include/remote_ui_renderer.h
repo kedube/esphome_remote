@@ -46,6 +46,7 @@ struct RemoteRenderContext {
   int settings_button_press_mode = -1;
   bool settings_button_long_press_fired = false;
   bool battery_monitoring_available = false;
+  bool weather_is_night = false;
   float selected_humidifier_target_humidity = NAN;
   float selected_humidifier_current_humidity = NAN;
   float selected_climate_target_temp = NAN;
@@ -57,7 +58,6 @@ struct RemoteRenderContext {
   float selected_weather_humidity = NAN;
   float selected_weather_high_temp = NAN;
   float selected_weather_low_temp = NAN;
-  float selected_weather_precipitation = NAN;
   float battery_voltage = NAN;
   const std::string *selected_item_name = nullptr;
   const std::string *selected_item_state = nullptr;
@@ -82,6 +82,6 @@ struct RemoteRenderContext {
 
 void render_remote_ui(
     display::Display *display, font::Font *tiny_font, font::Font *small_font, font::Font *medium_font,
-    font::Font *symbols, font::Font *medium_symbols, const RemoteRenderContext &ctx);
+    font::Font *symbols, font::Font *medium_symbols, font::Font *weather_symbols, const RemoteRenderContext &ctx);
 
 }  // namespace esphome

@@ -25,6 +25,43 @@ static inline std::string ui_power_state_label(const std::string &raw) {
   return "SYNCING";
 }
 
+static inline void weather_condition_label(const std::string &raw, char *buffer, size_t buffer_size) {
+  remote_state_label_to_buffer(raw, buffer, buffer_size, "SYNCING");
+  for (size_t i = 0; buffer[i] != '\0'; i++) {
+    if (buffer[i] == '-') {
+      buffer[i] = ' ';
+    }
+  }
+  if (strcmp(buffer, "PARTLYCLOUDY") == 0) {
+    snprintf(buffer, buffer_size, "PARTLY CLOUDY");
+  } else if (strcmp(buffer, "CLEAR NIGHT") == 0) {
+    snprintf(buffer, buffer_size, "CLEAR");
+  }
+}
+
+static inline const char *weather_condition_icon(const std::string &raw) {
+  if (raw == "clear-night") {
+    return "\ue51c";
+  }
+  if (raw == "sunny" || raw == "clear") {
+    return "\ue81a";
+  }
+  if (raw == "cloudy" || raw == "fog" || raw == "windy" || raw == "windy-variant") {
+    return "\ue2bd";
+  }
+  if (raw == "rainy" || raw == "pouring" || raw == "hail" || raw == "snowy-rainy") {
+    return "\uf176";
+  }
+  if (raw == "lightning" || raw == "lightning-rainy" || raw == "exceptional") {
+    return "\uebdb";
+  }
+  return "\ue2bd";
+}
+
+static inline bool weather_condition_is_partly_cloudy(const std::string &raw) {
+  return raw == "partlycloudy";
+}
+
 static inline std::array<std::string, 3> split_notification_lines(std::string message) {
   std::array<std::string, 3> lines;
   for (auto &ch : message) {
@@ -54,7 +91,7 @@ static inline std::array<std::string, 3> split_notification_lines(std::string me
 
 void render_remote_ui(
     display::Display *it, font::Font *tiny_font, font::Font *small_font, font::Font *medium_font,
-    font::Font *symbols, font::Font *medium_symbols, const RemoteRenderContext &ctx) {
+    font::Font *symbols, font::Font *medium_symbols, font::Font *weather_symbols, const RemoteRenderContext &ctx) {
   const std::string &selected_item_name = render_string(ctx.selected_item_name);
   const std::string &selected_item_state = render_string(ctx.selected_item_state);
   const std::string &selected_humidifier_action = render_string(ctx.selected_humidifier_action);
@@ -458,32 +495,34 @@ void render_remote_ui(
     }
 
     case REMOTE_MODE_WEATHER: {
-      write_state_label(selected_weather_condition, label_primary, sizeof(label_primary));
+      weather_condition_label(selected_weather_condition, label_primary, sizeof(label_primary));
       if (!std::isnan(ctx.selected_weather_temperature)) {
         snprintf(status_line, sizeof(status_line), "%.0f°%s", ctx.selected_weather_temperature, ctx.temperature_unit);
       } else {
         snprintf(status_line, sizeof(status_line), "SYNCING");
       }
-      draw_centered_state(status_line, 33);
-
-      detail_line[0] = '\0';
-      if (!std::isnan(ctx.selected_weather_high_temp) && !std::isnan(ctx.selected_weather_low_temp)) {
-        snprintf(
-            detail_line, sizeof(detail_line), "HI %.0f  LO %.0f",
-            ctx.selected_weather_high_temp, ctx.selected_weather_low_temp);
-      } else if (strcmp(label_primary, "SYNCING") != 0 && label_primary[0] != '\0') {
-        snprintf(detail_line, sizeof(detail_line), "%s", label_primary);
+      bool weather_ready = strcmp(status_line, "SYNCING") != 0 && strcmp(label_primary, "SYNCING") != 0;
+      if (!weather_ready) {
+        draw_centered_state("SYNCING", 33);
+      } else {
+        if (weather_condition_is_partly_cloudy(selected_weather_condition)) {
+          it->print(
+              34, 29, weather_symbols, display::COLOR_ON, display::TextAlign::CENTER,
+              ctx.weather_is_night ? "\ue51c" : "\ue81a");
+          it->print(45, 35, weather_symbols, display::COLOR_ON, display::TextAlign::CENTER, "\ue2bd");
+        } else {
+          it->print(46, 32, weather_symbols, display::COLOR_ON, display::TextAlign::CENTER,
+                    weather_condition_icon(selected_weather_condition));
+        }
+        it->print(76, 33, medium_font, display::COLOR_ON, display::TextAlign::CENTER, status_line);
+        it->print(64, 45, small_font, display::COLOR_ON, display::TextAlign::CENTER, label_primary);
       }
-      draw_detail_text(detail_line);
 
       const char *footer_status = nullptr;
-      if (!std::isnan(ctx.selected_weather_precipitation)) {
-        snprintf(footer_line, sizeof(footer_line), "RAIN %.0f%%", ctx.selected_weather_precipitation);
-        footer_status = footer_line;
-      } else if (!std::isnan(ctx.selected_weather_humidity)) {
+      if (!std::isnan(ctx.selected_weather_humidity)) {
         snprintf(footer_line, sizeof(footer_line), "HUM %.0f%%", ctx.selected_weather_humidity);
         footer_status = footer_line;
-      } else if (strcmp(label_primary, "SYNCING") != 0 && label_primary[0] != '\0') {
+      } else if (weather_ready && label_primary[0] != '\0') {
         footer_status = label_primary;
       }
       draw_mode_footer("\ueac3", "\ueac9", footer_status);

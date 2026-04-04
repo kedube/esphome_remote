@@ -53,4 +53,22 @@ font:
       "\ue648", # wifi_off
       "\ue8ac", # power_settings_new
       "\ue19c", # battery_alert
+      "\ue81a", # sunny
+      "\ue51c", # dark_mode
+      "\ue2bd", # cloud
+      "\uf176", # rainy
+      "\uebdb", # thunderstorm
+    ]
+  - file:
+      type: gfonts
+      family: Material+Symbols+Rounded
+      weight: 400
+    id: weather_symbols
+    size: 9
+    glyphs: [
+      "\ue81a", # sunny
+      "\ue51c", # dark_mode
+      "\ue2bd", # cloud
+      "\uf176", # rainy
+      "\uebdb", # thunderstorm
     ]

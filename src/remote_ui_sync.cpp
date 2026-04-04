@@ -262,11 +262,10 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     float humidity = weather_humidity_for_index(idx);
     float high = weather_high_temperature_for_index(idx);
     float low = weather_low_temperature_for_index(idx);
-    float precipitation = weather_precipitation_for_index(idx);
     bool changed = false;
 
     if (condition == "unknown" && std::isnan(temperature) && std::isnan(humidity) &&
-        std::isnan(high) && std::isnan(low) && std::isnan(precipitation)) {
+        std::isnan(high) && std::isnan(low)) {
       request_refresh(ui, idx);
     } else {
       changed = assign_string_if_changed(ui.selected_item_state, condition) || changed;
@@ -275,7 +274,6 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
       changed = assign_float_if_changed(ui.selected_weather_humidity, humidity) || changed;
       changed = assign_float_if_changed(ui.selected_weather_high_temp, high) || changed;
       changed = assign_float_if_changed(ui.selected_weather_low_temp, low) || changed;
-      changed = assign_float_if_changed(ui.selected_weather_precipitation, precipitation) || changed;
       if (changed) *ui.updated_ui = true;
     }
     return;

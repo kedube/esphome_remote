@@ -958,13 +958,6 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
     return this->low_temperature_[idx];
   }
 
-  float precipitation(int idx) const {
-    if (idx < 0 || idx >= WEATHER_LIST_COUNT) {
-      return NAN;
-    }
-    return this->precipitation_[idx];
-  }
-
  protected:
   void on_state_(const std::string &entity_id, esphome::StringRef state) {
     int idx = this->find_index_(entity_id);
@@ -1009,7 +1002,6 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
   void store_forecast_(int idx, esphome::StringRef state) {
     this->high_temperature_[idx] = NAN;
     this->low_temperature_[idx] = NAN;
-    this->precipitation_[idx] = NAN;
 
     std::string payload = state.str();
     if (ha_state_missing(payload)) {
@@ -1059,14 +1051,8 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
     if (std::isnan(low)) low = read_number(today, "native_templow");
     if (std::isnan(low)) low = read_number(today, "native_temperature_low");
 
-    float precipitation = read_number(today, "precipitation_probability");
-    if (std::isnan(precipitation)) precipitation = read_number(today, "precipitation_chance");
-    if (std::isnan(precipitation)) precipitation = read_number(today, "chance_of_rain");
-    if (std::isnan(precipitation)) precipitation = read_number(today, "precipitation");
-
     this->high_temperature_[idx] = high;
     this->low_temperature_[idx] = low;
-    this->precipitation_[idx] = precipitation;
   }
 
   int find_index_(const std::string &entity_id) const {
@@ -1079,8 +1065,6 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
   std::array<float, WEATHER_LIST_COUNT> high_temperature_ =
       filled_array<float, WEATHER_LIST_COUNT>(NAN);
   std::array<float, WEATHER_LIST_COUNT> low_temperature_ =
-      filled_array<float, WEATHER_LIST_COUNT>(NAN);
-  std::array<float, WEATHER_LIST_COUNT> precipitation_ =
       filled_array<float, WEATHER_LIST_COUNT>(NAN);
 };
 
