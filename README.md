@@ -73,6 +73,7 @@ esphome_remote/
 │   └── fonts/
 │       └── arial-bold.ttf
 ├── esphome/
+│   ├── .gitignore
 │   ├── boards/
 │   │   ├── pcb_proto.yaml
 │   │   └── pcb_rev31.yaml
@@ -80,14 +81,27 @@ esphome_remote/
 │   │   ├── local_entities-example.h
 │   │   └── secrets-example.yaml
 │   ├── packages/
-│   │   ├── remote_actions_*.yaml
-│   │   ├── remote_button_*.yaml
-│   │   ├── remote_display_*.yaml
+│   │   ├── remote_actions_automation.yaml
+│   │   ├── remote_actions_climate_media.yaml
+│   │   ├── remote_actions_devices.yaml
+│   │   ├── remote_actions_feedback.yaml
+│   │   ├── remote_actions_security.yaml
+│   │   ├── remote_button_action_scripts.yaml
+│   │   ├── remote_button_press_scripts.yaml
+│   │   ├── remote_display_core.yaml
+│   │   ├── remote_display_runtime_globals.yaml
+│   │   ├── remote_display_scripts.yaml
+│   │   ├── remote_display_selection_globals.yaml
+│   │   ├── remote_display_state_globals.yaml
+│   │   ├── remote_fonts.yaml
 │   │   ├── remote_inputs.yaml
 │   │   ├── remote_runtime.yaml
-│   │   └── remote_ui_*.yaml
+│   │   ├── remote_ui_navigation_actions.yaml
+│   │   ├── remote_ui_selection_scripts.yaml
+│   │   └── remote_ui_setup_scripts.yaml
 │   ├── local_entities.h
 │   ├── remote_control.yaml
+│   ├── secrets.yaml
 │   └── settings.yaml
 ├── home_assistant/
 │   └── remote_notifications.yaml
@@ -98,14 +112,25 @@ esphome_remote/
 │   ├── entity_trackers.h
 │   ├── framebuffer_web_debug.h
 │   ├── local_entities.h
-│   ├── remote_ui_*.h
+│   ├── remote_ui_bindings.h
+│   ├── remote_ui_feedback.h
+│   ├── remote_ui_input_logic.h
+│   ├── remote_ui_logic.h
+│   ├── remote_ui_renderer.h
+│   ├── remote_ui_runtime.h
+│   ├── remote_ui_sync.h
 │   └── ui_state_helpers.h
 ├── images/
 │   ├── remote_*.jpeg
 │   └── remote_UI-*.png
 └── src/
     ├── framebuffer_web_debug.cpp
-    └── remote_ui_*.cpp
+    ├── remote_ui_feedback.cpp
+    ├── remote_ui_input_logic.cpp
+    ├── remote_ui_logic.cpp
+    ├── remote_ui_renderer.cpp
+    ├── remote_ui_runtime.cpp
+    └── remote_ui_sync.cpp
 ```
 
 ## Important Files
@@ -127,7 +152,7 @@ esphome_remote/
 - `include/local_entities.h`
   Compatibility shim that forwards to `esphome/local_entities.h`.
 - `esphome/packages/`
-  Modular ESPHome packages for runtime behavior, button/input handling, and display/UI rendering.
+  Modular ESPHome packages for actions, button/input handling, runtime behavior, display globals, fonts, and UI scripts.
 - `src/framebuffer_web_debug.cpp` and `include/framebuffer_web_debug.h`
   Optional debug-only PBM framebuffer export for screenshot capture.
 - `home_assistant/remote_notifications.yaml`
@@ -147,6 +172,21 @@ esphome_remote/
   Persistent UI save/restore packing helpers and legacy migration logic.
 - `esphome/remote_control.yaml`
   Top-level composition file that imports the modular ESPHome packages and C++ helpers.
+
+The `esphome/packages/` folder is currently split by responsibility:
+
+- `remote_actions_*.yaml`
+  Entity actions and feedback flows grouped by domain.
+- `remote_button_*.yaml`
+  Button press handling and action wrapper scripts.
+- `remote_display_*.yaml`
+  Display hardware, UI globals, and the render entry script.
+- `remote_fonts.yaml`
+  Font definitions, including the weather icon font.
+- `remote_ui_*.yaml`
+  UI setup, selection, and navigation scripts.
+- `remote_inputs.yaml` and `remote_runtime.yaml`
+  Physical input bindings and the runtime loop.
 
 At startup the remote validates the configured entity lists and logs warnings for missing names, missing entity IDs, or obvious domain mismatches such as a `switch.*` entry placed in `LIGHT_LIST`.
 
