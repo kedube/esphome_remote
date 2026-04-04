@@ -48,8 +48,8 @@ script:
               id(settings_button_press_mode), id(primary_button_long_press_fired),
               id(play_pause_button_long_press_fired), id(settings_button_long_press_fired),
               id(selected_weather_temperature), id(selected_weather_humidity), id(selected_weather_high_temp),
-              id(selected_weather_low_temp), id(selected_weather_condition), id(selected_notification_index),
-              id(updated_ui));
+              id(selected_weather_low_temp), id(selected_weather_precipitation), id(selected_weather_condition),
+              id(selected_notification_index), id(updated_ui));
           RemoteUiResetState state = make_remote_ui_reset_state(bindings);
           reset_remote_ui_state(state);
 
@@ -114,8 +114,8 @@ script:
               id(settings_button_press_mode), id(primary_button_long_press_fired),
               id(play_pause_button_long_press_fired), id(settings_button_long_press_fired),
               id(selected_weather_temperature), id(selected_weather_humidity), id(selected_weather_high_temp),
-              id(selected_weather_low_temp), id(selected_weather_condition), id(selected_notification_index),
-              id(updated_ui));
+              id(selected_weather_low_temp), id(selected_weather_precipitation), id(selected_weather_condition),
+              id(selected_notification_index), id(updated_ui));
           RemoteUiSyncState ui = make_remote_ui_sync_state(bindings);
 
           sync_remote_ui_state(selection.mode, selection.index, ui);

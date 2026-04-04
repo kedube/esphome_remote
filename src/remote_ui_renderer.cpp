@@ -465,13 +465,26 @@ void render_remote_ui(
         snprintf(status_line, sizeof(status_line), "SYNCING");
       }
       draw_centered_state(status_line, 33);
-      if (strcmp(label_primary, "SYNCING") != 0 && label_primary[0] != '\0') {
-        it->print(64, 45, small_font, display::COLOR_ON, display::TextAlign::CENTER, label_primary);
+
+      detail_line[0] = '\0';
+      if (!std::isnan(ctx.selected_weather_high_temp) && !std::isnan(ctx.selected_weather_low_temp)) {
+        snprintf(
+            detail_line, sizeof(detail_line), "HI %.0f  LO %.0f",
+            ctx.selected_weather_high_temp, ctx.selected_weather_low_temp);
+      } else if (strcmp(label_primary, "SYNCING") != 0 && label_primary[0] != '\0') {
+        snprintf(detail_line, sizeof(detail_line), "%s", label_primary);
       }
-      const char *footer_status = "";
-      if (strcmp(label_primary, "SYNCING") != 0 && !std::isnan(ctx.selected_weather_humidity)) {
-        snprintf(footer_line, sizeof(footer_line), "%.0f%%", ctx.selected_weather_humidity);
+      draw_detail_text(detail_line);
+
+      const char *footer_status = nullptr;
+      if (!std::isnan(ctx.selected_weather_precipitation)) {
+        snprintf(footer_line, sizeof(footer_line), "RAIN %.0f%%", ctx.selected_weather_precipitation);
         footer_status = footer_line;
+      } else if (!std::isnan(ctx.selected_weather_humidity)) {
+        snprintf(footer_line, sizeof(footer_line), "HUM %.0f%%", ctx.selected_weather_humidity);
+        footer_status = footer_line;
+      } else if (strcmp(label_primary, "SYNCING") != 0 && label_primary[0] != '\0') {
+        footer_status = label_primary;
       }
       draw_mode_footer("\ueac3", "\ueac9", footer_status);
       break;

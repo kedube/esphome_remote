@@ -52,6 +52,7 @@ script:
                 ctx.selected_weather_humidity = id(selected_weather_humidity);
                 ctx.selected_weather_high_temp = id(selected_weather_high_temp);
                 ctx.selected_weather_low_temp = id(selected_weather_low_temp);
+                ctx.selected_weather_precipitation = id(selected_weather_precipitation);
                 ctx.battery_voltage = id(battery_voltage);
                 ctx.selected_item_name = &id(selected_item_name);
                 ctx.selected_item_state = &id(selected_item_state);

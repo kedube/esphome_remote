@@ -55,6 +55,7 @@ struct RemoteUiBindings {
   float *selected_weather_humidity = nullptr;
   float *selected_weather_high_temp = nullptr;
   float *selected_weather_low_temp = nullptr;
+  float *selected_weather_precipitation = nullptr;
   std::string *selected_weather_condition = nullptr;
   int *selected_notification_index = nullptr;
   bool *updated_ui = nullptr;
@@ -81,7 +82,8 @@ static inline RemoteUiBindings make_remote_ui_bindings(
     bool &primary_button_long_press_fired, bool &play_pause_button_long_press_fired,
     bool &settings_button_long_press_fired, float &selected_weather_temperature,
     float &selected_weather_humidity, float &selected_weather_high_temp, float &selected_weather_low_temp,
-    std::string &selected_weather_condition, int &selected_notification_index, bool &updated_ui) {
+    float &selected_weather_precipitation, std::string &selected_weather_condition, int &selected_notification_index,
+    bool &updated_ui) {
   RemoteUiBindings bindings;
   bindings.selected_item_name = &selected_item_name;
   bindings.selected_item_entity = &selected_item_entity;
@@ -132,6 +134,7 @@ static inline RemoteUiBindings make_remote_ui_bindings(
   bindings.selected_weather_humidity = &selected_weather_humidity;
   bindings.selected_weather_high_temp = &selected_weather_high_temp;
   bindings.selected_weather_low_temp = &selected_weather_low_temp;
+  bindings.selected_weather_precipitation = &selected_weather_precipitation;
   bindings.selected_weather_condition = &selected_weather_condition;
   bindings.selected_notification_index = &selected_notification_index;
   bindings.updated_ui = &updated_ui;
@@ -185,6 +188,7 @@ static inline RemoteUiResetState make_remote_ui_reset_state(const RemoteUiBindin
   state.selected_weather_humidity = bindings.selected_weather_humidity;
   state.selected_weather_high_temp = bindings.selected_weather_high_temp;
   state.selected_weather_low_temp = bindings.selected_weather_low_temp;
+  state.selected_weather_precipitation = bindings.selected_weather_precipitation;
   state.selected_weather_condition = bindings.selected_weather_condition;
   state.updated_ui = bindings.updated_ui;
   return state;
@@ -219,6 +223,7 @@ static inline RemoteUiSyncState make_remote_ui_sync_state(const RemoteUiBindings
   state.selected_weather_humidity = bindings.selected_weather_humidity;
   state.selected_weather_high_temp = bindings.selected_weather_high_temp;
   state.selected_weather_low_temp = bindings.selected_weather_low_temp;
+  state.selected_weather_precipitation = bindings.selected_weather_precipitation;
   state.selected_weather_condition = bindings.selected_weather_condition;
   state.selected_notification_index = bindings.selected_notification_index;
   state.updated_ui = bindings.updated_ui;

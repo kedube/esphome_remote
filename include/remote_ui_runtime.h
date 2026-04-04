@@ -52,6 +52,7 @@ struct RemoteUiResetState {
   float *selected_weather_humidity = nullptr;
   float *selected_weather_high_temp = nullptr;
   float *selected_weather_low_temp = nullptr;
+  float *selected_weather_precipitation = nullptr;
   std::string *selected_weather_condition = nullptr;
   bool *updated_ui = nullptr;
 };

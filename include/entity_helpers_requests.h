@@ -373,6 +373,11 @@ static inline float weather_low_temperature_for_index(int idx) {
   return weather_status_tracker_storage.low_temperature(idx);
 }
 
+static inline float weather_precipitation_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.precipitation(idx);
+}
+
 static inline void request_mode_status(RemoteMode mode, int idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:

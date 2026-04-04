@@ -140,6 +140,10 @@ globals:
     type: float
     initial_value: 'NAN'
 
+  - id: selected_weather_precipitation
+    type: float
+    initial_value: 'NAN'
+
   - id: selected_weather_condition
     type: std::string
     initial_value: '"unknown"'

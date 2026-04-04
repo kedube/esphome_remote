@@ -57,6 +57,7 @@ struct RemoteRenderContext {
   float selected_weather_humidity = NAN;
   float selected_weather_high_temp = NAN;
   float selected_weather_low_temp = NAN;
+  float selected_weather_precipitation = NAN;
   float battery_voltage = NAN;
   const std::string *selected_item_name = nullptr;
   const std::string *selected_item_state = nullptr;

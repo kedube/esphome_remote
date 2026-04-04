@@ -48,6 +48,7 @@ void reset_remote_ui_state(RemoteUiResetState &state) {
   *state.selected_weather_humidity = NAN;
   *state.selected_weather_high_temp = NAN;
   *state.selected_weather_low_temp = NAN;
+  *state.selected_weather_precipitation = NAN;
   *state.selected_weather_condition = "unknown";
   *state.updated_ui = true;
 }
