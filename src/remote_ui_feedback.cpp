@@ -1,6 +1,6 @@
 #include "remote_ui_feedback.h"
 
-#include "entity_helpers_common.h"
+#include "entity_helpers_requests.h"
 
 namespace esphome {
 

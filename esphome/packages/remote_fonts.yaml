@@ -49,6 +49,12 @@ font:
       "\uead0", # keyboard_double_arrow_down
       "\ue045", # skip_previous
       "\ue044", # skip_next
+      "\ue145", # add
+      "\ue15b", # remove
+      "\ue04d", # volume_down
+      "\ue050", # volume_up
+      "\uf581", # thermometer_minus
+      "\uf582", # thermometer_add
       "\ue63e", # wifi
       "\ue648", # wifi_off
       "\ue8ac", # power_settings_new
@@ -58,6 +64,7 @@ font:
       "\ue2bd", # cloud
       "\uf176", # rainy
       "\uebdb", # thunderstorm
+      "\uf053", # restart_alt
     ]
   - file:
       type: gfonts

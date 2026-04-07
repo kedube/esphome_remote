@@ -58,9 +58,9 @@ Board-specific wiring is selected through the PCB package include in [`esphome/s
 
 `esphome/remote_control.yaml` includes that shared settings file, while [`esphome/settings.yaml`](esphome/settings.yaml) contains the common substitutions, PCB package selection, and optional `web_server` block.
 
-- `esphome/boards/pcb_proto.yaml`
+- `esphome/packages/pcb_proto.yaml`
   Prototype / older board mapping
-- `esphome/boards/pcb_rev31.yaml`
+- `esphome/packages/pcb_rev31.yaml`
   Revision 3.1 mapping with OLED power control and battery monitoring
 
 ## Repo Layout
@@ -74,13 +74,12 @@ esphome_remote/
 │       └── arial-bold.ttf
 ├── esphome/
 │   ├── .gitignore
-│   ├── boards/
-│   │   ├── pcb_proto.yaml
-│   │   └── pcb_rev31.yaml
 │   ├── examples/
 │   │   ├── local_entities-example.h
 │   │   └── secrets-example.yaml
 │   ├── packages/
+│   │   ├── pcb_proto.yaml
+│   │   ├── pcb_rev31.yaml
 │   │   ├── remote_actions_automation.yaml
 │   │   ├── remote_actions_climate_media.yaml
 │   │   ├── remote_actions_devices.yaml
@@ -314,8 +313,8 @@ At minimum, choose the board package that matches your hardware:
 ```yaml
 packages:
   select_pcb: !include
-    file: boards/pcb_proto.yaml
-    # file: boards/pcb_rev31.yaml
+    file: packages/pcb_proto.yaml
+    # file: packages/pcb_rev31.yaml
 ```
 
 This file also contains the most common substitutions you may want to change:

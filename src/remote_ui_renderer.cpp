@@ -97,10 +97,17 @@ void render_remote_ui(
   const std::string &selected_humidifier_action = render_string(ctx.selected_humidifier_action);
   const std::string &selected_humidifier_mode = render_string(ctx.selected_humidifier_mode);
   const std::string &selected_climate_hvac_action = render_string(ctx.selected_climate_hvac_action);
+  const std::string &selected_climate_fan_mode = render_string(ctx.selected_climate_fan_mode);
+  const std::string &selected_climate_hvac_mode = render_string(ctx.selected_climate_hvac_mode);
   const std::string &selected_media_title = render_string(ctx.selected_media_title);
   const std::string &selected_media_artist = render_string(ctx.selected_media_artist);
   const std::string &selected_media_device_class = render_string(ctx.selected_media_device_class);
   const std::string &selected_media_source = render_string(ctx.selected_media_source);
+  const std::string &selected_media_shuffle = render_string(ctx.selected_media_shuffle);
+  const std::string &selected_media_repeat = render_string(ctx.selected_media_repeat);
+  const std::string &selected_media_sound_mode = render_string(ctx.selected_media_sound_mode);
+  const std::string &selected_water_heater_mode = render_string(ctx.selected_water_heater_mode);
+  const std::string &selected_water_heater_away = render_string(ctx.selected_water_heater_away);
   const std::string &last_media_power_feedback = render_string(ctx.last_media_power_feedback);
   const std::string &last_automation_feedback = render_string(ctx.last_automation_feedback);
   const std::string &last_alarm_feedback = render_string(ctx.last_alarm_feedback);
@@ -108,6 +115,8 @@ void render_remote_ui(
   const std::string &last_lock_feedback = render_string(ctx.last_lock_feedback);
   const std::string &last_cover_feedback = render_string(ctx.last_cover_feedback);
   const std::string &selected_weather_condition = render_string(ctx.selected_weather_condition);
+  const std::string &selected_sensor_unit = render_string(ctx.selected_sensor_unit);
+  const std::string &selected_setting_detail = render_string(ctx.selected_setting_detail);
   char status_line[27];
   char footer_line[27];
   char detail_line[27];
@@ -143,7 +152,8 @@ void render_remote_ui(
   bool show_switch_feedback =
       ui_recent_interaction(ctx.now, ctx.last_switch_interaction, 5000) &&
       ctx.mode == REMOTE_MODE_SWITCHES;
-  bool show_contrast_feedback = ui_recent_interaction(ctx.now, ctx.last_contrast_interaction, 3000);
+  bool show_contrast_feedback = ui_recent_interaction(ctx.now, ctx.last_contrast_interaction, 5000);
+  bool show_setting_detail_feedback = ctx.selected_setting_option != static_cast<int>(REMOTE_SETTING_NONE);
   bool show_climate_target_focus =
       ui_recent_interaction(ctx.now, ctx.last_climate_target_focus_interaction, 5000) &&
       ctx.climate_target_focus != 0 && ctx.mode == REMOTE_MODE_CLIMATE;
@@ -181,10 +191,13 @@ void render_remote_ui(
            (selected_item_state == "heat_cool" ||
             ctx.selected_climate_target_temp_low != ctx.selected_climate_target_temp_high);
   };
+  auto draw_footer_nodividers = [&]() {
+    it->filled_rectangle(0, 52, 128, 1, display::COLOR_ON);
+  };
   auto draw_footer_dividers = [&]() {
     it->filled_rectangle(0, 52, 128, 1, display::COLOR_ON);
-    it->filled_rectangle(38, 53, 1, 11, display::COLOR_ON);
-    it->filled_rectangle(90, 53, 1, 11, display::COLOR_ON);
+    it->filled_rectangle(30, 53, 1, 11, display::COLOR_ON);
+    it->filled_rectangle(98, 53, 1, 11, display::COLOR_ON);
   };
   auto draw_contrast_footer = [&]() {
     snprintf(footer_line, sizeof(footer_line), "CONTRAST %d%%", ctx.contrast * 10);
@@ -193,12 +206,19 @@ void render_remote_ui(
   };
   auto draw_footer_chrome = [&](const char *left_icon, const char *right_icon) {
     draw_footer_dividers();
-    it->printf(10, 50, medium_symbols, display::COLOR_ON, left_icon);
-    it->printf(104, 50, medium_symbols, display::COLOR_ON, right_icon);
+    it->printf(6, 50, medium_symbols, display::COLOR_ON, left_icon);
+    it->printf(108, 50, medium_symbols, display::COLOR_ON, right_icon);
   };
-  auto draw_default_footer = [&]() {
-    draw_footer_chrome("\ueac3", "\ueac9");
-    it->printf(58, 51, symbols, display::COLOR_ON, "\ue1ac");
+
+  auto draw_blank_footer = [&]() {
+    draw_footer_nodividers();
+  };
+  auto draw_blank_or_contrast_footer = [&]() {
+    if (show_contrast_feedback) {
+      draw_contrast_footer();
+    } else {
+      draw_blank_footer();
+    }
   };
   auto draw_footer_text = [&](const char *text) {
     it->print(64, 58, small_font, display::COLOR_ON, display::TextAlign::CENTER, text);
@@ -234,8 +254,24 @@ void render_remote_ui(
     if (show_contrast_feedback) {
       draw_contrast_footer();
     } else {
-      draw_default_footer();
+      draw_blank_footer();
     }
+  };
+  auto draw_setting_footer = [&]() {
+    if (show_contrast_feedback) {
+      draw_contrast_footer();
+      return;
+    }
+    RemoteSettingOption option = static_cast<RemoteSettingOption>(ctx.selected_setting_option);
+    const char *label = remote_setting_option_label(option);
+    const char *left_icon = remote_setting_left_icon(option);
+    const char *right_icon = remote_setting_right_icon(option);
+    if (label == nullptr || label[0] == '\0') {
+      draw_blank_footer();
+      return;
+    }
+    draw_footer_chrome(left_icon, right_icon);
+    draw_footer_text(label);
   };
   auto draw_mode_footer = [&](const char *left_icon, const char *right_icon, const char *text = nullptr) {
     if (show_contrast_feedback) {
@@ -244,14 +280,12 @@ void render_remote_ui(
       draw_footer_chrome(left_icon, right_icon);
       if (text != nullptr && text[0] != '\0') {
         draw_footer_text(text);
-      } else {
-        it->printf(58, 51, symbols, display::COLOR_ON, "\ue1ac");
       }
     }
   };
   auto draw_power_mode = [&](int percent_value, bool show_progress, const char *progress_label, bool draw_center_divider) {
     draw_centered_state(ui_power_state_label(selected_item_state).c_str(), 35);
-    if (selected_item_state == "on" && !show_progress) {
+    if (selected_item_state == "on" && !show_progress && !show_setting_detail_feedback) {
       snprintf(detail_line, sizeof(detail_line), "%d%%", percent_value);
       draw_detail_text(detail_line);
     }
@@ -259,11 +293,8 @@ void render_remote_ui(
       draw_progress_footer(percent_value, progress_label);
     } else if (show_contrast_feedback) {
       draw_contrast_footer();
-    } else {
-      draw_default_footer();
-      if (draw_center_divider) {
-        it->filled_rectangle(90, 54, 1, 11, display::COLOR_ON);
-      }
+    } else if (!show_setting_detail_feedback) {
+      draw_blank_footer();
     }
   };
   auto draw_feedback_state_mode = [&](const char *state_text, const char *feedback_text, bool compact = false) {
@@ -271,7 +302,17 @@ void render_remote_ui(
     if (feedback_text != nullptr && feedback_text[0] != '\0') {
       draw_detail_text(feedback_text);
     }
-    draw_standard_footer();
+    draw_setting_footer();
+  };
+
+  auto draw_setting_detail_if_needed = [&]() {
+    if (show_setting_detail_feedback) {
+      if (!selected_setting_detail.empty()) {
+        draw_detail_text(selected_setting_detail.c_str());
+      }
+      return true;
+    }
+    return false;
   };
 
   it->clear();
@@ -288,10 +329,26 @@ void render_remote_ui(
   switch (ctx.mode) {
     case REMOTE_MODE_LIGHTS:
       draw_power_mode(ctx.selected_brightness_pct, show_brightness_bar, "BRIGHTNESS", true);
+      if (!show_brightness_bar) {
+        if (selected_item_state == "on") {
+          draw_setting_detail_if_needed();
+          draw_setting_footer();
+        } else {
+          draw_blank_or_contrast_footer();
+        }
+      }
       break;
 
     case REMOTE_MODE_FANS:
       draw_power_mode(ctx.selected_fan_speed_pct, show_fan_speed_bar, "SPEED", true);
+      if (!show_fan_speed_bar) {
+        if (selected_item_state == "on") {
+          draw_setting_detail_if_needed();
+          draw_setting_footer();
+        } else {
+          draw_blank_or_contrast_footer();
+        }
+      }
       break;
 
     case REMOTE_MODE_SWITCHES: {
@@ -299,7 +356,11 @@ void render_remote_ui(
       if (show_switch_feedback) {
         write_state_label(last_switch_feedback, label_secondary, sizeof(label_secondary), "");
       }
-      draw_feedback_state_mode(label_primary, show_switch_feedback ? label_secondary : "", false);
+      draw_centered_state(label_primary, 33, false);
+      if (!draw_setting_detail_if_needed() && show_switch_feedback) {
+        draw_detail_text(label_secondary);
+      }
+      draw_blank_or_contrast_footer();
       break;
     }
 
@@ -324,19 +385,41 @@ void render_remote_ui(
       }
       draw_centered_state(status_line, 35);
 
-      if (!show_climate_target_focus && dual_target && strcmp(label_secondary, "UNKNOWN") != 0) {
-        snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°%s   HIGH: %.0f°%s",
-                 ctx.selected_climate_target_temp_low, ctx.temperature_unit,
-                 ctx.selected_climate_target_temp_high, ctx.temperature_unit);
-        draw_detail_text(detail_line);
-      } else if (!show_climate_target_focus && !std::isnan(ctx.selected_climate_target_temp) && strcmp(label_secondary, "UNKNOWN") != 0) {
-        snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°%s", ctx.selected_climate_target_temp, ctx.temperature_unit);
-        draw_detail_text(detail_line);
+      if (!show_setting_detail_feedback) {
+        if (!show_climate_target_focus && dual_target && strcmp(label_secondary, "UNKNOWN") != 0) {
+          snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°%s   HIGH: %.0f°%s",
+                   ctx.selected_climate_target_temp_low, ctx.temperature_unit,
+                   ctx.selected_climate_target_temp_high, ctx.temperature_unit);
+          draw_detail_text(detail_line);
+        } else if (!show_climate_target_focus && !std::isnan(ctx.selected_climate_target_temp) && strcmp(label_secondary, "UNKNOWN") != 0) {
+          snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°%s", ctx.selected_climate_target_temp, ctx.temperature_unit);
+          draw_detail_text(detail_line);
+        }
       }
 
-      draw_mode_footer(
-          "\ueac3", "\ueac9",
-          (strcmp(label_primary, "SYNCING") != 0 && strcmp(label_secondary, "UNKNOWN") != 0) ? label_secondary : "");
+      if (!draw_setting_detail_if_needed()) {
+        draw_blank_or_contrast_footer();
+      } else {
+        draw_setting_footer();
+      }
+      break;
+    }
+
+    case REMOTE_MODE_WATER_HEATERS: {
+      if (!std::isnan(ctx.selected_water_heater_target_temp)) {
+        snprintf(status_line, sizeof(status_line), "TARGET: %.0f°%s", ctx.selected_water_heater_target_temp, ctx.temperature_unit);
+      } else {
+        snprintf(status_line, sizeof(status_line), "%s", ui_power_state_label(selected_item_state).c_str());
+      }
+      draw_centered_state(status_line, 35, true);
+      if (!draw_setting_detail_if_needed()) {
+        if (!selected_water_heater_mode.empty()) {
+          draw_detail_text(selected_water_heater_mode.c_str());
+        } else if (!selected_water_heater_away.empty()) {
+          draw_detail_text(selected_water_heater_away.c_str());
+        }
+      }
+      draw_setting_footer();
       break;
     }
 
@@ -354,20 +437,20 @@ void render_remote_ui(
       }
       draw_centered_state(status_line, 35);
 
-      if (show_humidifier_mode && label_tertiary[0] != '\0') {
-        draw_detail_text(label_tertiary);
-      } else if (!show_humidifier_target && !std::isnan(ctx.selected_humidifier_target_humidity)) {
-        snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f%%", ctx.selected_humidifier_target_humidity);
-        draw_detail_text(detail_line);
+      if (!show_setting_detail_feedback) {
+        if (show_humidifier_mode && label_tertiary[0] != '\0') {
+          draw_detail_text(label_tertiary);
+        } else if (!show_humidifier_target && !std::isnan(ctx.selected_humidifier_target_humidity)) {
+          snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f%%", ctx.selected_humidifier_target_humidity);
+          draw_detail_text(detail_line);
+        }
       }
 
-      const char *footer_status = "";
-      if (strcmp(label_secondary, "UNKNOWN") != 0 && label_secondary[0] != '\0') {
-        footer_status = label_secondary;
-      } else if (strcmp(label_primary, "SYNCING") != 0) {
-        footer_status = label_primary;
+      if (!draw_setting_detail_if_needed()) {
+        draw_blank_or_contrast_footer();
+      } else {
+        draw_setting_footer();
       }
-      draw_mode_footer("\ueac3", "\ueac9", footer_status);
       break;
     }
 
@@ -390,12 +473,14 @@ void render_remote_ui(
         const char *cover_detail = "";
         if (show_cover_feedback && label_secondary[0] != '\0') {
           cover_detail = label_secondary;
-        } else if (strcmp(label_primary, "OPEN") == 0) {
+        } else if (strcmp(label_primary, "OPEN") == 0 && ctx.selected_cover_position_pct > 0) {
           snprintf(detail_line, sizeof(detail_line), "%d%%", ctx.selected_cover_position_pct);
           cover_detail = detail_line;
         }
-        draw_detail_text(cover_detail);
-        draw_standard_footer();
+        if (!draw_setting_detail_if_needed()) {
+          draw_detail_text(cover_detail);
+        }
+        draw_setting_footer();
       }
       break;
     }
@@ -412,32 +497,27 @@ void render_remote_ui(
         draw_centered_state(selected_media_title.c_str(), 33, true);
       }
       const char *media_detail = "";
-      if (!is_tv && !show_media_feedback && show_media_power_feedback && !last_media_power_feedback.empty()) {
-        media_detail = last_media_power_feedback.c_str();
-      } else if (!show_media_feedback && show_media_source_feedback && !selected_media_source.empty()) {
-        media_detail = selected_media_source.c_str();
-      } else if (is_tv && media_is_on && !selected_media_source.empty()) {
-        media_detail = selected_media_source.c_str();
-      } else if (!show_media_feedback && !selected_media_artist.empty()) {
-        media_detail = selected_media_artist.c_str();
+      if (!show_media_feedback) {
+        if (!is_tv && show_media_power_feedback && !last_media_power_feedback.empty()) {
+          media_detail = last_media_power_feedback.c_str();
+        } else if (show_media_source_feedback && !selected_media_source.empty()) {
+          media_detail = selected_media_source.c_str();
+        } else if (is_tv && media_is_on && !selected_media_source.empty()) {
+          media_detail = selected_media_source.c_str();
+        } else if (!selected_media_artist.empty()) {
+          media_detail = selected_media_artist.c_str();
+        }
       }
-      draw_detail_text(media_detail);
+      if (!show_media_feedback && !draw_setting_detail_if_needed()) {
+        draw_detail_text(media_detail);
+      }
 
       if (show_media_feedback) {
         draw_progress_footer(ctx.selected_media_volume_pct, "VOLUME");
       } else if (show_contrast_feedback) {
         draw_contrast_footer();
       } else {
-        draw_footer_chrome(is_tv ? "\uead0" : "\ue045", is_tv ? "\ueacf" : "\ue044");
-        if (strcmp(label_primary, "PAUSED") == 0) {
-          it->printf(64, 58, tiny_font, display::COLOR_ON, display::TextAlign::CENTER, "PAUSED");
-        } else if (strcmp(label_primary, "PLAYING") == 0) {
-          it->printf(64, 58, tiny_font, display::COLOR_ON, display::TextAlign::CENTER, "PLAYING");
-        } else if (strcmp(label_primary, "IDLE") == 0) {
-          it->printf(64, 58, tiny_font, display::COLOR_ON, display::TextAlign::CENTER, "IDLE");
-        } else {
-          it->printf(58, 51, symbols, display::COLOR_ON, is_speaker ? "\ue047" : "\ue8ac");
-        }
+        draw_setting_footer();
       }
       break;
     }
@@ -451,8 +531,13 @@ void render_remote_ui(
       } else if (sensor_value == "off") {
         sensor_value = "OFF";
       }
-      draw_centered_state(sensor_value.c_str(), 33, sensor_value.size() > 12);
-      draw_standard_footer();
+      if (!selected_sensor_unit.empty() && sensor_value != "SYNCING" && sensor_value != "ON" && sensor_value != "OFF") {
+        snprintf(status_line, sizeof(status_line), "%s %s", sensor_value.c_str(), selected_sensor_unit.c_str());
+        draw_centered_state(status_line, 33, strlen(status_line) > 12);
+      } else {
+        draw_centered_state(sensor_value.c_str(), 33, sensor_value.size() > 12);
+      }
+      draw_blank_or_contrast_footer();
       break;
     }
 
@@ -463,8 +548,10 @@ void render_remote_ui(
       snprintf(status_line, sizeof(status_line), "%s",
                (show_automation_feedback && label_secondary[0] != '\0') ? label_secondary : label_primary);
       it->print(64, 33, small_font, display::COLOR_ON, display::TextAlign::CENTER, automation_type);
-      draw_detail_text(status_line);
-      draw_standard_footer();
+      if (!draw_setting_detail_if_needed()) {
+        draw_detail_text(status_line);
+      }
+      draw_blank_or_contrast_footer();
       break;
     }
 
@@ -473,7 +560,15 @@ void render_remote_ui(
       if (show_alarm_feedback) {
         write_state_label(last_alarm_feedback, label_secondary, sizeof(label_secondary), "");
       }
-      draw_feedback_state_mode(label_primary, show_alarm_feedback ? label_secondary : "", true);
+      draw_centered_state(label_primary, 33, true);
+      if (show_alarm_feedback) {
+        if (label_secondary[0] != '\0') {
+          draw_detail_text(label_secondary);
+        }
+      } else {
+        draw_setting_detail_if_needed();
+      }
+      draw_setting_footer();
       break;
     }
 
@@ -490,7 +585,7 @@ void render_remote_ui(
               lines[i].c_str());
         }
       }
-      draw_standard_footer();
+      draw_setting_footer();
       break;
     }
 
@@ -515,17 +610,25 @@ void render_remote_ui(
                     weather_condition_icon(selected_weather_condition));
         }
         it->print(76, 33, medium_font, display::COLOR_ON, display::TextAlign::CENTER, status_line);
-        it->print(64, 45, small_font, display::COLOR_ON, display::TextAlign::CENTER, label_primary);
+        bool show_condition_label =
+            ctx.selected_setting_option == static_cast<int>(REMOTE_SETTING_NONE) ||
+            ctx.selected_setting_option == static_cast<int>(REMOTE_SETTING_WEATHER_CONDITIONS);
+        if (show_condition_label) {
+          it->print(64, 45, small_font, display::COLOR_ON, display::TextAlign::CENTER, label_primary);
+        }
       }
 
-      const char *footer_status = nullptr;
-      if (!std::isnan(ctx.selected_weather_humidity)) {
-        snprintf(footer_line, sizeof(footer_line), "HUM %.0f%%", ctx.selected_weather_humidity);
-        footer_status = footer_line;
-      } else if (weather_ready && label_primary[0] != '\0') {
-        footer_status = label_primary;
+      if (!draw_setting_detail_if_needed()) {
+        const char *footer_status = nullptr;
+        if (!std::isnan(ctx.selected_weather_humidity)) {
+          snprintf(footer_line, sizeof(footer_line), "%.0f%%", ctx.selected_weather_humidity);
+          footer_status = footer_line;
+        } else if (weather_ready && label_primary[0] != '\0') {
+          footer_status = label_primary;
+        }
+      } else {
+        draw_setting_footer();
       }
-      draw_mode_footer("\ueac3", "\ueac9", footer_status);
       break;
     }
 
@@ -541,11 +644,7 @@ void render_remote_ui(
         it->print(64, 33, medium_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_primary_text.c_str());
         it->print(64, 45, tiny_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_secondary_text.c_str());
       }
-      if (show_contrast_feedback) {
-        draw_contrast_footer();
-      } else {
-        draw_default_footer();
-      }
+      draw_blank_or_contrast_footer();
       break;
   }
 

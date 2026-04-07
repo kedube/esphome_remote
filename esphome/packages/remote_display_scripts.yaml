@@ -15,6 +15,8 @@ script:
                 ctx.contrast = id(contrast);
                 ctx.automation_index = id(selected_automation_index);
                 ctx.info_index = id(selected_info_index);
+                ctx.selected_setting_option = id(selected_setting_option);
+                ctx.selected_weather_detail_index = id(selected_weather_detail_index);
                 ctx.climate_target_focus = id(climate_target_focus);
                 ctx.selected_brightness_pct = id(selected_brightness_pct);
                 ctx.selected_fan_speed_pct = id(selected_fan_speed_pct);
@@ -24,6 +26,7 @@ script:
                 ctx.last_brightness_interaction = id(last_brightness_interaction);
                 ctx.last_switch_interaction = id(last_switch_interaction);
                 ctx.last_contrast_interaction = id(last_contrast_interaction);
+                ctx.last_setting_interaction = id(last_setting_interaction);
                 ctx.last_fan_speed_interaction = id(last_fan_speed_interaction);
                 ctx.last_humidifier_interaction = id(last_humidifier_interaction);
                 ctx.last_humidifier_mode_interaction = id(last_humidifier_mode_interaction);
@@ -44,9 +47,11 @@ script:
                 ctx.selected_humidifier_target_humidity = id(selected_humidifier_target_humidity);
                 ctx.selected_humidifier_current_humidity = id(selected_humidifier_current_humidity);
                 ctx.selected_climate_target_temp = id(selected_climate_target_temp);
+                ctx.selected_water_heater_target_temp = id(selected_water_heater_target_temp);
                 ctx.selected_climate_target_temp_low = id(selected_climate_target_temp_low);
                 ctx.selected_climate_target_temp_high = id(selected_climate_target_temp_high);
                 ctx.selected_climate_current_temp = id(selected_climate_current_temp);
+                ctx.selected_climate_target_humidity = id(selected_climate_target_humidity);
                 ctx.climate_target_focus_value = id(climate_target_focus_value);
                 ctx.selected_weather_temperature = id(selected_weather_temperature);
                 ctx.selected_weather_humidity = id(selected_weather_humidity);
@@ -58,10 +63,17 @@ script:
                 ctx.selected_humidifier_action = &id(selected_humidifier_action);
                 ctx.selected_humidifier_mode = &id(selected_humidifier_mode);
                 ctx.selected_climate_hvac_action = &id(selected_climate_hvac_action);
+                ctx.selected_climate_fan_mode = &id(selected_climate_fan_mode);
+                ctx.selected_climate_hvac_mode = &id(selected_climate_hvac_mode);
                 ctx.selected_media_title = &id(selected_media_title);
                 ctx.selected_media_artist = &id(selected_media_artist);
                 ctx.selected_media_device_class = &id(selected_media_device_class);
                 ctx.selected_media_source = &id(selected_media_source);
+                ctx.selected_media_shuffle = &id(selected_media_shuffle);
+                ctx.selected_media_repeat = &id(selected_media_repeat);
+                ctx.selected_media_sound_mode = &id(selected_media_sound_mode);
+                ctx.selected_water_heater_mode = &id(selected_water_heater_mode);
+                ctx.selected_water_heater_away = &id(selected_water_heater_away);
                 ctx.last_media_power_feedback = &id(last_media_power_feedback);
                 ctx.last_automation_feedback = &id(last_automation_feedback);
                 ctx.last_alarm_feedback = &id(last_alarm_feedback);
@@ -69,6 +81,8 @@ script:
                 ctx.last_lock_feedback = &id(last_lock_feedback);
                 ctx.last_cover_feedback = &id(last_cover_feedback);
                 ctx.selected_weather_condition = &id(selected_weather_condition);
+                ctx.selected_sensor_unit = &id(selected_sensor_unit);
+                ctx.selected_setting_detail = &id(selected_setting_detail);
                 ctx.temperature_unit = "${TEMPERATURE_UNIT}";
                 auto current_time = id(homeassistant_time).now();
                 if (current_time.is_valid()) {

@@ -1,4 +1,58 @@
 script:
+  - id: await_wake_long_press
+    mode: restart
+    then:
+      - delay: 10s
+      - lambda: |-
+          bool still_pressed = id(wake_button).state;
+          bool already_fired = id(wake_button_long_press_fired);
+
+          if (id(wake_button_press_started_at) == 0 || !still_pressed || already_fired) {
+            return;
+          }
+
+          id(wake_button_long_press_fired) = true;
+      - if:
+          condition:
+            lambda: 'return id(wake_button_long_press_fired);'
+          then:
+            - script.execute: reboot_device
+
+  - id: handle_wake_button_press
+    then:
+      - lambda: |-
+          id(wake_button_press_started_at) = millis();
+          id(wake_button_long_press_fired) = false;
+      - script.execute: show_hold_to_reboot_screen
+      - script.execute: await_wake_long_press
+
+  - id: handle_wake_button_release
+    then:
+      - if:
+          condition:
+            lambda: 'return id(wake_button_press_started_at) == 0;'
+          then:
+            - script.stop: handle_wake_button_release
+      - lambda: |-
+          uint32_t elapsed = millis() - id(wake_button_press_started_at);
+          if (elapsed >= 10000) {
+            id(wake_button_long_press_fired) = true;
+          }
+      - if:
+          condition:
+            lambda: 'return id(wake_button_long_press_fired);'
+          then:
+            - lambda: |-
+                id(wake_button_press_started_at) = 0;
+            - script.execute: reboot_device
+            - lambda: |-
+                id(wake_button_long_press_fired) = false;
+            - script.stop: handle_wake_button_release
+      - lambda: |-
+          id(wake_button_press_started_at) = 0;
+          id(wake_button_long_press_fired) = false;
+      - script.execute: turn_off
+
   - id: show_sensitive_action_prompt
     parameters:
       action: int
@@ -187,10 +241,6 @@ script:
           id(settings_button_long_press_fired) = false;
 
           if (!long_press_fired) {
-            if (pressed_mode == REMOTE_MODE_ALARMS) {
-              id(last_alarm_feedback) = "";
-              id(last_alarm_interaction) = 0;
-            }
             id(updated_ui) = true;
             id(update_display).execute();
           }

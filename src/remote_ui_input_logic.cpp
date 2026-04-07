@@ -11,7 +11,7 @@ RemoteButtonPrompt describe_remote_button_prompt(
         prompt.requires_long_press = true;
         prompt.hold_duration_ms = default_hold_ms;
         prompt.feedback_target = REMOTE_INPUT_FEEDBACK_LOCK;
-        prompt.feedback = action == 2 ? "HOLD TO UNLOCK" : "HOLD TO LOCK";
+        prompt.feedback = action == 2 ? "HOLD TO LOCK" : "HOLD TO UNLOCK";
       }
       break;
     case REMOTE_MODE_COVERS:
@@ -38,14 +38,16 @@ RemoteButtonPrompt describe_remote_button_prompt(
         if (action == 1) {
           prompt.feedback = "HOLD TO TRIGGER";
         } else if (action == 2) {
-          prompt.feedback = "HOLD TO DISARM";
+          prompt.feedback = "HOLD TO ARM";
         } else if (selected_item_state == "unknown") {
           prompt.feedback = "SYNCING";
-        } else if (selected_item_state == "disarmed" || selected_item_state == "arming" ||
-                   selected_item_state == "pending") {
-          prompt.feedback = alarm_arm_mode_hold_label(clamp_alarm_arm_mode(selected_alarm_arm_mode));
         } else {
-          prompt.feedback = "DISARM WITH PLAY";
+          AlarmArmMode arm_mode = clamp_alarm_arm_mode(selected_alarm_arm_mode);
+          if (alarm_action_is_arm(selected_item_state, arm_mode)) {
+            prompt.feedback = alarm_arm_mode_hold_label(arm_mode);
+          } else {
+            prompt.feedback = "HOLD TO DISARM";
+          }
         }
       }
       break;

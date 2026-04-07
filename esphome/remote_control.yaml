@@ -7,9 +7,9 @@ substitutions:
   PIN_BTN_PREV: "22"
   PIN_BTN_MODE: "14"
   PIN_BTN_SETTINGS: "26"
-  PIN_BTN_CIRCLE: "23"
-  PIN_BTN_DIMMER_UP: "19"
-  PIN_BTN_DIMMER_DOWN: "18"
+  PIN_BTN_SQUARE: "23"
+  PIN_BTN_MINUS: "19"
+  PIN_BTN_PLUS: "18"
 
 packages:
   settings: !include settings.yaml
@@ -73,6 +73,7 @@ esphome:
             id(selected_light_index) = restored.selected_light_index;
             id(selected_switch_index) = restored.selected_switch_index;
             id(selected_climate_index) = restored.selected_climate_index;
+            id(selected_water_heater_index) = restored.selected_water_heater_index;
             id(selected_lock_index) = restored.selected_lock_index;
             id(selected_cover_index) = restored.selected_cover_index;
             id(selected_media_index) = restored.selected_media_index;

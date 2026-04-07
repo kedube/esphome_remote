@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <string>
 
-#include "entity_helpers_common.h"
+#include "entity_helpers_requests.h"
 
 namespace esphome {
 namespace display {
@@ -20,6 +20,8 @@ struct RemoteRenderContext {
   int contrast = 5;
   int automation_index = 0;
   int info_index = 0;
+  int selected_setting_option = 0;
+  int selected_weather_detail_index = 0;
   int climate_target_focus = 0;
   int selected_brightness_pct = 0;
   int selected_fan_speed_pct = 0;
@@ -29,6 +31,7 @@ struct RemoteRenderContext {
   uint32_t last_brightness_interaction = 0;
   uint32_t last_switch_interaction = 0;
   uint32_t last_contrast_interaction = 0;
+  uint32_t last_setting_interaction = 0;
   uint32_t last_fan_speed_interaction = 0;
   uint32_t last_humidifier_interaction = 0;
   uint32_t last_humidifier_mode_interaction = 0;
@@ -50,9 +53,11 @@ struct RemoteRenderContext {
   float selected_humidifier_target_humidity = NAN;
   float selected_humidifier_current_humidity = NAN;
   float selected_climate_target_temp = NAN;
+  float selected_water_heater_target_temp = NAN;
   float selected_climate_target_temp_low = NAN;
   float selected_climate_target_temp_high = NAN;
   float selected_climate_current_temp = NAN;
+  float selected_climate_target_humidity = NAN;
   float climate_target_focus_value = NAN;
   float selected_weather_temperature = NAN;
   float selected_weather_humidity = NAN;
@@ -64,10 +69,17 @@ struct RemoteRenderContext {
   const std::string *selected_humidifier_action = nullptr;
   const std::string *selected_humidifier_mode = nullptr;
   const std::string *selected_climate_hvac_action = nullptr;
+  const std::string *selected_climate_fan_mode = nullptr;
+  const std::string *selected_climate_hvac_mode = nullptr;
   const std::string *selected_media_title = nullptr;
   const std::string *selected_media_artist = nullptr;
   const std::string *selected_media_device_class = nullptr;
   const std::string *selected_media_source = nullptr;
+  const std::string *selected_media_shuffle = nullptr;
+  const std::string *selected_media_repeat = nullptr;
+  const std::string *selected_media_sound_mode = nullptr;
+  const std::string *selected_water_heater_mode = nullptr;
+  const std::string *selected_water_heater_away = nullptr;
   const std::string *last_media_power_feedback = nullptr;
   const std::string *last_automation_feedback = nullptr;
   const std::string *last_alarm_feedback = nullptr;
@@ -75,6 +87,8 @@ struct RemoteRenderContext {
   const std::string *last_lock_feedback = nullptr;
   const std::string *last_cover_feedback = nullptr;
   const std::string *selected_weather_condition = nullptr;
+  const std::string *selected_sensor_unit = nullptr;
+  const std::string *selected_setting_detail = nullptr;
   std::string info_primary_text;
   std::string info_secondary_text;
   const char *temperature_unit = "F";

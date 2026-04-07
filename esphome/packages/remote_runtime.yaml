@@ -13,6 +13,7 @@ interval:
                 state.last_brightness_interaction = id(last_brightness_interaction);
                 state.last_switch_interaction = id(last_switch_interaction);
                 state.last_contrast_interaction = id(last_contrast_interaction);
+                state.last_setting_interaction = id(last_setting_interaction);
                 state.last_climate_interaction = id(last_climate_interaction);
                 state.last_fan_speed_interaction = id(last_fan_speed_interaction);
                 state.last_humidifier_interaction = id(last_humidifier_interaction);

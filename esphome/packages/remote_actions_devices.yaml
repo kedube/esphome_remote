@@ -1,4 +1,18 @@
 script:
+  - id: refresh_selected_switch_status
+    then:
+      - lambda: |-
+          request_selected_switch_status(id(selected_switch_index));
+
+  - id: set_switch_feedback_and_refresh
+    parameters:
+      feedback: std::string
+    then:
+      - script.execute:
+          id: set_switch_feedback
+          feedback: !lambda 'return feedback;'
+      - script.execute: refresh_selected_switch_status
+
   - id: toggle_selected_light
     mode: queued
     then:
@@ -78,52 +92,64 @@ script:
   - id: turn_on_selected_switch
     mode: queued
     then:
-      - lambda: |-
-          id(last_switch_feedback) = "";
-          id(selected_item_state) = "turning_on";
-          id(updated_ui) = true;
-      - script.execute: update_display
-      - homeassistant.action:
-          action: switch.turn_on
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-          on_success:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "on";'
+          then:
             - script.execute:
                 id: set_switch_feedback
-                feedback: "SUCCESS"
+                feedback: "ALREADY ON"
+            - lambda: 'id(updated_ui) = true;'
+            - script.execute: update_display
+          else:
             - lambda: |-
-                request_selected_switch_status(id(selected_switch_index));
-          on_error:
-            - script.execute:
-                id: set_switch_feedback
-                feedback: "FAILED"
-            - lambda: |-
-                request_selected_switch_status(id(selected_switch_index));
+                id(last_switch_feedback) = "";
+                id(selected_item_state) = "turning_on";
+                id(updated_ui) = true;
+            - script.execute: update_display
+            - homeassistant.action:
+                action: switch.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - script.execute:
+                      id: set_switch_feedback_and_refresh
+                      feedback: "SUCCESS"
+                on_error:
+                  - script.execute:
+                      id: set_switch_feedback_and_refresh
+                      feedback: "FAILED"
 
   - id: turn_off_selected_switch
     mode: queued
     then:
-      - lambda: |-
-          id(last_switch_feedback) = "";
-          id(selected_item_state) = "turning_off";
-          id(updated_ui) = true;
-      - script.execute: update_display
-      - homeassistant.action:
-          action: switch.turn_off
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-          on_success:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) == "off";'
+          then:
             - script.execute:
                 id: set_switch_feedback
-                feedback: "SUCCESS"
+                feedback: "ALREADY OFF"
+            - lambda: 'id(updated_ui) = true;'
+            - script.execute: update_display
+          else:
             - lambda: |-
-                request_selected_switch_status(id(selected_switch_index));
-          on_error:
-            - script.execute:
-                id: set_switch_feedback
-                feedback: "FAILED"
-            - lambda: |-
-                request_selected_switch_status(id(selected_switch_index));
+                id(last_switch_feedback) = "";
+                id(selected_item_state) = "turning_off";
+                id(updated_ui) = true;
+            - script.execute: update_display
+            - homeassistant.action:
+                action: switch.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - script.execute:
+                      id: set_switch_feedback_and_refresh
+                      feedback: "SUCCESS"
+                on_error:
+                  - script.execute:
+                      id: set_switch_feedback_and_refresh
+                      feedback: "FAILED"
 
   - id: increase_brightness
     mode: queued
@@ -329,3 +355,119 @@ script:
                   entity_id: !lambda 'return id(selected_item_entity);'
                   mode: !lambda 'return id(selected_humidifier_mode);'
             - script.execute: update_display
+
+  - id: cycle_selected_humidifier_mode_step
+    parameters:
+      step: int
+    mode: queued
+    then:
+      - lambda: |-
+          std::string next_mode = step > 0
+              ? next_humidifier_mode_for_index(id(selected_humidifier_index))
+              : previous_humidifier_mode_for_index(id(selected_humidifier_index));
+          if (next_mode.empty()) {
+            id(updated_ui) = true;
+            return;
+          }
+          id(selected_humidifier_mode) = next_mode;
+          id(last_humidifier_mode_interaction) = millis();
+          id(updated_ui) = true;
+      - if:
+          condition:
+            lambda: 'return !id(selected_humidifier_mode).empty();'
+          then:
+            - homeassistant.service:
+                service: humidifier.set_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  mode: !lambda 'return id(selected_humidifier_mode);'
+            - script.execute:
+                id: set_setting_preview
+                text: !lambda 'return esphome::str_upper_case(id(selected_humidifier_mode));'
+            - script.execute: update_display
+
+  - id: adjust_light_effect
+    parameters:
+      step: int
+    mode: queued
+    then:
+      - lambda: |-
+          std::string next_effect = step > 0
+              ? next_light_effect_for_index(id(selected_light_index))
+              : previous_light_effect_for_index(id(selected_light_index));
+          if (next_effect.empty()) {
+            id(updated_ui) = true;
+            return;
+          }
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = next_effect;
+          id(updated_ui) = true;
+      - if:
+          condition:
+            lambda: 'return !id(selected_setting_detail).empty();'
+          then:
+            - homeassistant.service:
+                service: light.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  effect: !lambda 'return id(selected_setting_detail);'
+            - script.execute: update_display
+
+  - id: adjust_fan_preset
+    parameters:
+      step: int
+    mode: queued
+    then:
+      - lambda: |-
+          std::string next_preset = step > 0
+              ? next_fan_preset_for_index(id(selected_fan_index))
+              : previous_fan_preset_for_index(id(selected_fan_index));
+          if (next_preset.empty()) {
+            id(updated_ui) = true;
+            return;
+          }
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = next_preset;
+          id(updated_ui) = true;
+      - if:
+          condition:
+            lambda: 'return !id(selected_setting_detail).empty();'
+          then:
+            - homeassistant.service:
+                service: fan.set_preset_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  preset_mode: !lambda 'return id(selected_setting_detail);'
+            - script.execute: update_display
+
+  - id: set_fan_oscillation
+    parameters:
+      enabled: bool
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = enabled ? "ON" : "OFF";
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: fan.oscillate
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            oscillating: !lambda 'return enabled;'
+      - script.execute: update_display
+
+  - id: set_fan_direction_value
+    parameters:
+      direction: std::string
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = direction;
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: fan.set_direction
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            direction: !lambda 'return direction;'
+      - script.execute: update_display

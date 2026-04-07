@@ -129,10 +129,13 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     const std::string &state = selected_climate_state(idx);
     const std::string &hvac_action = climate_hvac_action_for_index(idx);
     const std::string &preset = selected_climate_preset_mode(idx);
+    const std::string &fan_mode = climate_fan_mode_for_index(idx);
+    const std::string &hvac_mode = climate_hvac_mode_for_index(idx);
     float target = selected_climate_target_temperature(idx);
     float target_low = selected_climate_target_temperature_low(idx);
     float target_high = selected_climate_target_temperature_high(idx);
     float current = selected_climate_current_temperature(idx);
+    float humidity = climate_target_humidity_for_index(idx);
     bool changed = false;
 
     if (state == "unknown") {
@@ -145,11 +148,32 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
       if (!hvac_action.empty()) {
         changed = assign_string_if_changed(ui.selected_climate_hvac_action, hvac_action) || changed;
       }
+      changed = assign_string_if_changed(ui.selected_climate_fan_mode, fan_mode) || changed;
+      changed = assign_string_if_changed(ui.selected_climate_hvac_mode, hvac_mode) || changed;
       changed = assign_float_if_changed(ui.selected_climate_target_temp, target) || changed;
       changed = assign_float_if_changed(ui.selected_climate_target_temp_low, target_low) || changed;
       changed = assign_float_if_changed(ui.selected_climate_target_temp_high, target_high) || changed;
       changed = assign_float_if_changed(ui.selected_climate_current_temp, current) || changed;
+      changed = assign_float_if_changed(ui.selected_climate_target_humidity, humidity) || changed;
       changed = assign_string_if_changed(ui.selected_climate_preset, preset) || changed;
+      if (changed) *ui.updated_ui = true;
+    }
+    return;
+  }
+
+  if (mode == REMOTE_MODE_WATER_HEATERS) {
+    const std::string &state = selected_water_heater_state(idx);
+    const std::string &operation_mode = selected_water_heater_operation_mode(idx);
+    const std::string &away_mode = selected_water_heater_away_mode(idx);
+    float target = selected_water_heater_target_temperature(idx);
+    bool changed = false;
+    if (state == "unknown" && std::isnan(target)) {
+      request_refresh(ui, idx);
+    } else {
+      changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
+      changed = assign_string_if_changed(ui.selected_water_heater_mode, operation_mode) || changed;
+      changed = assign_string_if_changed(ui.selected_water_heater_away, away_mode) || changed;
+      changed = assign_float_if_changed(ui.selected_water_heater_target_temp, target) || changed;
       if (changed) *ui.updated_ui = true;
     }
     return;
@@ -185,6 +209,9 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     const std::string &title = media_title_for_index(idx);
     const std::string &artist = media_artist_for_index(idx);
     const std::string &source = media_source_for_index(idx);
+    const std::string &shuffle = media_shuffle_for_index(idx);
+    const std::string &repeat = media_repeat_for_index(idx);
+    const std::string &sound_mode = media_sound_mode_for_index(idx);
     float volume = selected_media_volume(idx);
     bool changed = false;
 
@@ -195,6 +222,9 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
       changed = assign_string_if_changed(ui.selected_media_title, title) || changed;
       changed = assign_string_if_changed(ui.selected_media_artist, artist) || changed;
       changed = assign_string_if_changed(ui.selected_media_device_class, device_class) || changed;
+      changed = assign_string_if_changed(ui.selected_media_shuffle, shuffle) || changed;
+      changed = assign_string_if_changed(ui.selected_media_repeat, repeat) || changed;
+      changed = assign_string_if_changed(ui.selected_media_sound_mode, sound_mode) || changed;
       if (device_class == "tv" || device_class == "receiver") {
         if (!source.empty()) {
           changed = assign_string_if_changed(ui.selected_media_source, source) || changed;
@@ -211,7 +241,16 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
   }
 
   if (mode == REMOTE_MODE_SENSORS) {
-    sync_simple_state(ui, sensor_state_for_index(idx), idx);
+    bool changed = false;
+    const std::string &state = sensor_state_for_index(idx);
+    const std::string &unit = sensor_unit_for_index(idx);
+    if (state == "unknown") {
+      request_refresh(ui, idx);
+    } else {
+      changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
+      changed = assign_string_if_changed(ui.selected_sensor_unit, unit) || changed;
+      if (changed) *ui.updated_ui = true;
+    }
     return;
   }
 
@@ -262,6 +301,15 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     float humidity = weather_humidity_for_index(idx);
     float high = weather_high_temperature_for_index(idx);
     float low = weather_low_temperature_for_index(idx);
+    float wind_speed = weather_wind_speed_for_index(idx);
+    float wind_bearing = weather_wind_bearing_for_index(idx);
+    float wind_gust_speed = weather_wind_gust_speed_for_index(idx);
+    float pressure = weather_pressure_for_index(idx);
+    float cloud_coverage = weather_cloud_coverage_for_index(idx);
+    float uv_index = weather_uv_index_for_index(idx);
+    float dew_point = weather_dew_point_for_index(idx);
+    float apparent_temperature = weather_apparent_temperature_for_index(idx);
+    float precipitation = weather_precipitation_for_index(idx);
     bool changed = false;
 
     if (condition == "unknown" && std::isnan(temperature) && std::isnan(humidity) &&
@@ -274,6 +322,15 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
       changed = assign_float_if_changed(ui.selected_weather_humidity, humidity) || changed;
       changed = assign_float_if_changed(ui.selected_weather_high_temp, high) || changed;
       changed = assign_float_if_changed(ui.selected_weather_low_temp, low) || changed;
+      changed = assign_float_if_changed(ui.selected_weather_wind_speed, wind_speed) || changed;
+      changed = assign_float_if_changed(ui.selected_weather_wind_bearing, wind_bearing) || changed;
+      changed = assign_float_if_changed(ui.selected_weather_wind_gust_speed, wind_gust_speed) || changed;
+      changed = assign_float_if_changed(ui.selected_weather_pressure, pressure) || changed;
+      changed = assign_float_if_changed(ui.selected_weather_cloud_coverage, cloud_coverage) || changed;
+      changed = assign_float_if_changed(ui.selected_weather_uv_index, uv_index) || changed;
+      changed = assign_float_if_changed(ui.selected_weather_dew_point, dew_point) || changed;
+      changed = assign_float_if_changed(ui.selected_weather_apparent_temperature, apparent_temperature) || changed;
+      changed = assign_float_if_changed(ui.selected_weather_precipitation, precipitation) || changed;
       if (changed) *ui.updated_ui = true;
     }
     return;

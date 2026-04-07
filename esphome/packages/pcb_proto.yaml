@@ -1,6 +1,6 @@
 substitutions:
-  PIN_BTN_CONTRAST: "32"
-  PIN_BTN_PLAY_PAUSE: "5"
+  PIN_BTN_DIMMER: "32"
+  PIN_BTN_CIRCLE: "5"
 
 script:
   - id: turn_off

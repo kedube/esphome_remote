@@ -177,6 +177,277 @@ script:
                   preset_mode: !lambda 'return id(selected_climate_preset);'
             - script.execute: update_display
 
+  - id: cycle_selected_climate_preset_step
+    parameters:
+      step: int
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return climate_supports_preset(id(selected_climate_index));'
+          then:
+            - lambda: |-
+                std::string next = step > 0
+                    ? next_climate_preset_for_index(id(selected_climate_index))
+                    : previous_climate_preset_for_index(id(selected_climate_index));
+                if (next.empty()) {
+                  id(updated_ui) = true;
+                  return;
+                }
+                id(selected_climate_preset) = next;
+                id(last_climate_interaction) = millis();
+                id(last_setting_interaction) = millis();
+                id(selected_setting_detail) = next;
+                id(updated_ui) = true;
+            - homeassistant.service:
+                service: climate.set_preset_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  preset_mode: !lambda 'return id(selected_climate_preset);'
+            - script.execute: update_display
+
+  - id: set_selected_climate_fan_mode
+    parameters:
+      mode_name: std::string
+    mode: queued
+    then:
+      - lambda: |-
+          if (mode_name.empty()) {
+            id(updated_ui) = true;
+            return;
+          }
+          id(selected_climate_fan_mode) = mode_name;
+          id(last_climate_interaction) = millis();
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = mode_name;
+          id(updated_ui) = true;
+      - if:
+          condition:
+            lambda: 'return !mode_name.empty();'
+          then:
+            - homeassistant.service:
+                service: climate.set_fan_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  fan_mode: !lambda 'return mode_name;'
+            - script.execute: update_display
+
+  - id: set_selected_climate_hvac_mode
+    parameters:
+      mode_name: std::string
+    mode: queued
+    then:
+      - lambda: |-
+          if (mode_name.empty()) {
+            id(updated_ui) = true;
+            return;
+          }
+          id(selected_climate_hvac_mode) = mode_name;
+          id(selected_item_state) = mode_name;
+          if (mode_name != "off") {
+            id(last_climate_mode) = mode_name;
+          }
+          id(last_climate_interaction) = millis();
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = mode_name;
+          id(updated_ui) = true;
+      - if:
+          condition:
+            lambda: 'return !mode_name.empty();'
+          then:
+            - homeassistant.service:
+                service: climate.set_hvac_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  hvac_mode: !lambda 'return mode_name;'
+            - script.execute: update_display
+
+  - id: adjust_selected_climate_humidity
+    parameters:
+      delta: float
+    mode: queued
+    then:
+      - lambda: |-
+          float next = id(selected_climate_target_humidity);
+          if (isnan(next)) {
+            next = 50.0f;
+          }
+          next += delta;
+          if (next < 0.0f) next = 0.0f;
+          if (next > 100.0f) next = 100.0f;
+          id(selected_climate_target_humidity) = next;
+          id(last_climate_interaction) = millis();
+          id(last_setting_interaction) = millis();
+          char buffer[24];
+          snprintf(buffer, sizeof(buffer), "HUMIDITY %.0f%%", next);
+          id(selected_setting_detail) = buffer;
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: climate.set_humidity
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            humidity: !lambda 'return id(selected_climate_target_humidity);'
+      - script.execute: update_display
+
+  - id: media_set_shuffle
+    parameters:
+      enabled: bool
+    mode: queued
+    then:
+      - lambda: |-
+          id(selected_media_shuffle) = enabled ? "on" : "off";
+          id(last_media_interaction) = millis();
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = enabled ? "SHUFFLE ON" : "SHUFFLE OFF";
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: media_player.shuffle_set
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            shuffle: !lambda 'return enabled;'
+      - script.execute: update_display
+
+  - id: cycle_selected_media_repeat
+    parameters:
+      step: int
+    mode: queued
+    then:
+      - lambda: |-
+          const std::string options = "off|all|one";
+          std::string next = step > 0
+              ? next_delimited_option(options, id(selected_media_repeat))
+              : previous_delimited_option(options, id(selected_media_repeat));
+          if (next.empty()) {
+            id(updated_ui) = true;
+            return;
+          }
+          id(selected_media_repeat) = next;
+          id(last_media_interaction) = millis();
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = next;
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: media_player.repeat_set
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            repeat: !lambda 'return id(selected_media_repeat);'
+      - script.execute: update_display
+
+  - id: cycle_selected_media_sound_mode
+    parameters:
+      step: int
+    mode: queued
+    then:
+      - lambda: |-
+          std::string next = step > 0
+              ? next_media_sound_mode_for_index(id(selected_media_index))
+              : previous_media_sound_mode_for_index(id(selected_media_index));
+          if (next.empty()) {
+            id(updated_ui) = true;
+            return;
+          }
+          id(selected_media_sound_mode) = next;
+          id(last_media_interaction) = millis();
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = next;
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: media_player.select_sound_mode
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            sound_mode: !lambda 'return id(selected_media_sound_mode);'
+      - script.execute: update_display
+
+  - id: water_heater_turn_on_selected
+    mode: queued
+    then:
+      - homeassistant.service:
+          service: water_heater.turn_on
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(selected_item_state) = "on";
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: water_heater_turn_off_selected
+    mode: queued
+    then:
+      - homeassistant.service:
+          service: water_heater.turn_off
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(selected_item_state) = "off";
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: adjust_water_heater_target
+    parameters:
+      delta: float
+    mode: queued
+    then:
+      - lambda: |-
+          float next = id(selected_water_heater_target_temp);
+          if (isnan(next)) {
+            next = 120.0f;
+          }
+          next += delta;
+          id(selected_water_heater_target_temp) = next;
+          id(last_setting_interaction) = millis();
+          char buffer[24];
+          snprintf(buffer, sizeof(buffer), "TARGET %.0f°%s", next, "${TEMPERATURE_UNIT}");
+          id(selected_setting_detail) = buffer;
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: water_heater.set_temperature
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            temperature: !lambda 'return id(selected_water_heater_target_temp);'
+      - script.execute: update_display
+
+  - id: set_water_heater_operation_mode
+    parameters:
+      mode_name: std::string
+    mode: queued
+    then:
+      - lambda: |-
+          if (mode_name.empty()) {
+            id(updated_ui) = true;
+            return;
+          }
+          id(selected_water_heater_mode) = mode_name;
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = mode_name;
+          id(updated_ui) = true;
+      - if:
+          condition:
+            lambda: 'return !mode_name.empty();'
+          then:
+            - homeassistant.service:
+                service: water_heater.set_operation_mode
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  operation_mode: !lambda 'return mode_name;'
+            - script.execute: update_display
+
+  - id: set_water_heater_away_mode
+    parameters:
+      enabled: bool
+    mode: queued
+    then:
+      - lambda: |-
+          id(selected_water_heater_away) = enabled ? "on" : "off";
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = enabled ? "AWAY ON" : "AWAY OFF";
+          id(updated_ui) = true;
+      - homeassistant.service:
+          service: water_heater.set_away_mode
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            away_mode: !lambda 'return enabled;'
+      - script.execute: update_display
+
   - id: media_play_pause
     mode: queued
     then:

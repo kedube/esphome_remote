@@ -8,6 +8,7 @@ struct PersistedUIStateData {
   int selected_light_index = 0;
   int selected_switch_index = 0;
   int selected_climate_index = 0;
+  int selected_water_heater_index = 0;
   int selected_lock_index = 0;
   int selected_cover_index = 0;
   int selected_media_index = 0;
@@ -130,17 +131,18 @@ static inline PersistedUIStateData unpack_v6_ui_state(uint64_t state, uint32_t a
   data.selected_light_index = (state >> 8) & 0x3F;
   data.selected_switch_index = (state >> 14) & 0x3F;
   data.selected_climate_index = (state >> 20) & 0x3F;
-  data.selected_lock_index = (state >> 26) & 0x3F;
-  data.selected_cover_index = (state >> 32) & 0x3F;
-  data.selected_media_index = (state >> 38) & 0x3F;
-  data.selected_automation_index = (state >> 44) & 0x3F;
-  data.selected_weather_index = (state >> 50) & 0x3F;
-  data.selected_fan_index = (state >> 56) & 0x3F;
-  data.selected_humidifier_index = ((aux_state & 0x0F) << 2) | ((state >> 62) & 0x03);
-  data.selected_sensor_index = (aux_state >> 4) & 0x3F;
-  data.selected_alarm_index = (aux_state >> 10) & 0x3F;
-  data.selected_notification_index = (aux_state >> 16) & 0x3F;
-  data.selected_info_index = (aux_state >> 22) & 0x1F;
+  data.selected_water_heater_index = (state >> 26) & 0x3F;
+  data.selected_lock_index = (state >> 32) & 0x3F;
+  data.selected_cover_index = (state >> 38) & 0x3F;
+  data.selected_media_index = (state >> 44) & 0x3F;
+  data.selected_automation_index = (state >> 50) & 0x3F;
+  data.selected_weather_index = (state >> 56) & 0x3F;
+  data.selected_fan_index = ((aux_state & 0x0F) << 2) | ((state >> 62) & 0x03);
+  data.selected_humidifier_index = (aux_state >> 4) & 0x3F;
+  data.selected_sensor_index = (aux_state >> 10) & 0x3F;
+  data.selected_alarm_index = (aux_state >> 16) & 0x3F;
+  data.selected_notification_index = (aux_state >> 22) & 0x3F;
+  data.selected_info_index = (aux_state >> 28) & 0x0F;
   return data;
 }
 
@@ -227,20 +229,21 @@ static inline uint64_t pack_persisted_ui_state(const PersistedUIStateData &data)
          (uint64_t(data.selected_light_index & 0x3F) << 8) |
          (uint64_t(data.selected_switch_index & 0x3F) << 14) |
          (uint64_t(data.selected_climate_index & 0x3F) << 20) |
-         (uint64_t(data.selected_lock_index & 0x3F) << 26) |
-         (uint64_t(data.selected_cover_index & 0x3F) << 32) |
-         (uint64_t(data.selected_media_index & 0x3F) << 38) |
-         (uint64_t(data.selected_automation_index & 0x3F) << 44) |
-         (uint64_t(data.selected_weather_index & 0x3F) << 50) |
-         (uint64_t(data.selected_fan_index & 0x3F) << 56) |
-         (uint64_t(data.selected_humidifier_index & 0x03) << 62);
+         (uint64_t(data.selected_water_heater_index & 0x3F) << 26) |
+         (uint64_t(data.selected_lock_index & 0x3F) << 32) |
+         (uint64_t(data.selected_cover_index & 0x3F) << 38) |
+         (uint64_t(data.selected_media_index & 0x3F) << 44) |
+         (uint64_t(data.selected_automation_index & 0x3F) << 50) |
+         (uint64_t(data.selected_weather_index & 0x3F) << 56) |
+         (uint64_t(data.selected_fan_index & 0x03) << 62);
 }
 
 static inline uint32_t pack_persisted_ui_state_aux(const PersistedUIStateData &data) {
   return UI_STATE_AUX_FORMAT_V6 |
-         (uint32_t((data.selected_humidifier_index >> 2) & 0x0F)) |
-         (uint32_t(data.selected_sensor_index & 0x3F) << 4) |
-         (uint32_t(data.selected_alarm_index & 0x3F) << 10) |
-         (uint32_t(data.selected_notification_index & 0x3F) << 16) |
-         (uint32_t(data.selected_info_index & 0x1F) << 22);
+         (uint32_t((data.selected_fan_index >> 2) & 0x0F)) |
+         (uint32_t(data.selected_humidifier_index & 0x3F) << 4) |
+         (uint32_t(data.selected_sensor_index & 0x3F) << 10) |
+         (uint32_t(data.selected_alarm_index & 0x3F) << 16) |
+         (uint32_t(data.selected_notification_index & 0x3F) << 22) |
+         (uint32_t(data.selected_info_index & 0x0F) << 28);
 }

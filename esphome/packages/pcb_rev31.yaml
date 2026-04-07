@@ -1,7 +1,7 @@
 substitutions:
     PIN_BAT_ADC: "32"
-    PIN_BTN_CONTRAST: "5"
-    PIN_BTN_PLAY_PAUSE: "17"
+    PIN_BTN_DIMMER: "5"
+    PIN_BTN_CIRCLE: "17"
     PIN_OLED_EN: "15"
 
 esphome:

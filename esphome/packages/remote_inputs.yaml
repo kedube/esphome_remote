@@ -1,6 +1,7 @@
 # Hardware button inputs and their top-level wiring.
 binary_sensor:
   - platform: gpio
+    id: wake_button
     pin:
       allow_other_uses: true
       number: ${PIN_WAKE}
@@ -14,7 +15,10 @@ binary_sensor:
       - invert:
     on_press:
       then:
-        - script.execute: turn_off
+        - script.execute: handle_wake_button_press
+    on_release:
+      then:
+        - script.execute: handle_wake_button_release
 
   - platform: gpio
     pin:
@@ -33,7 +37,7 @@ binary_sensor:
 
   - platform: gpio
     pin:
-      number: ${PIN_BTN_CONTRAST}
+      number: ${PIN_BTN_DIMMER}
       mode:
         input: True
         pullup: True
@@ -44,27 +48,15 @@ binary_sensor:
     on_press:
       then:
         - script.execute: reset_idle_timer
-        - if:
-            condition:
-              lambda: 'return id(current_mode) == REMOTE_MODE_MEDIA;'
-            then:
-              - if:
-                  condition:
-                    lambda: 'return id(selected_media_device_class) == "speaker";'
-                  then:
-                    - script.execute: media_play_stop
-                  else:
-                    - script.execute: media_toggle_power
-            else:
-              - lambda: |-
-                  id(contrast) += 1;
-                  if (id(contrast) > 10) id(contrast) = 1;
-                  float contrast_value = id(contrast) * 1.0 / 10;
-                  id(oled_display).set_contrast(contrast_value);
-                  id(last_contrast_interaction) = millis();
-                  id(updated_ui) = true;
-              - script.execute: persist_ui_state
-              - script.execute: update_display
+        - lambda: |-
+            id(contrast) += 1;
+            if (id(contrast) > 10) id(contrast) = 1;
+            float contrast_value = id(contrast) * 1.0 / 10;
+            id(oled_display).set_contrast(contrast_value);
+            id(last_contrast_interaction) = millis();
+            id(updated_ui) = true;
+        - script.execute: persist_ui_state
+        - script.execute: update_display
 
   - platform: gpio
     pin:
@@ -118,7 +110,7 @@ binary_sensor:
   - platform: gpio
     id: primary_mode_button
     pin:
-      number: ${PIN_BTN_CIRCLE}
+      number: ${PIN_BTN_SQUARE}
       mode:
         input: True
         pullup: True
@@ -137,7 +129,7 @@ binary_sensor:
   - platform: gpio
     id: play_pause_mode_button
     pin:
-      number: ${PIN_BTN_PLAY_PAUSE}
+      number: ${PIN_BTN_CIRCLE}
       mode:
         input: True
         pullup: True
@@ -155,22 +147,7 @@ binary_sensor:
 
   - platform: gpio
     pin:
-      number: ${PIN_BTN_DIMMER_UP}
-      mode:
-        input: True
-        pullup: True
-    name: "Increase Mode Value"
-    internal: True
-    filters:
-      - invert:
-    on_press:
-      then:
-        - script.execute: reset_idle_timer
-        - script.execute: increase_mode_value
-
-  - platform: gpio
-    pin:
-      number: ${PIN_BTN_DIMMER_DOWN}
+      number: ${PIN_BTN_MINUS}
       mode:
         input: True
         pullup: True
@@ -182,3 +159,18 @@ binary_sensor:
       then:
         - script.execute: reset_idle_timer
         - script.execute: decrease_mode_value
+
+  - platform: gpio
+    pin:
+      number: ${PIN_BTN_PLUS}
+      mode:
+        input: True
+        pullup: True
+    name: "Increase Mode Value"
+    internal: True
+    filters:
+      - invert:
+    on_press:
+      then:
+        - script.execute: reset_idle_timer
+        - script.execute: increase_mode_value

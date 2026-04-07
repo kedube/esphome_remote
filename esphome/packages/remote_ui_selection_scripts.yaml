@@ -4,7 +4,8 @@ script:
     then:
       - lambda: |-
           auto selection_refs = make_mode_selection_state_refs(
-              id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index),
+              id(selected_light_index), id(selected_switch_index), id(selected_climate_index),
+              id(selected_water_heater_index), id(selected_lock_index),
               id(selected_cover_index), id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
               id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index), id(selected_alarm_index),
               id(selected_notification_index), id(selected_info_index));
@@ -35,12 +36,16 @@ script:
               id(selected_fan_speed_pct), id(selected_humidifier_target_humidity),
               id(selected_humidifier_current_humidity), id(selected_humidifier_action), id(selected_humidifier_mode),
               id(selected_cover_position_pct), id(last_switch_feedback), id(last_switch_interaction),
-              id(selected_climate_target_temp), id(selected_climate_hvac_action), id(selected_climate_preset),
+              id(selected_climate_target_temp), id(selected_water_heater_target_temp),
+              id(selected_climate_hvac_action), id(selected_climate_fan_mode), id(selected_climate_hvac_mode),
+              id(selected_climate_preset),
               id(selected_climate_target_temp_low), id(selected_climate_target_temp_high),
-              id(selected_climate_current_temp), id(last_climate_mode), id(climate_target_focus),
+              id(selected_climate_current_temp), id(selected_climate_target_humidity),
+              id(selected_water_heater_mode), id(selected_water_heater_away), id(last_climate_mode), id(climate_target_focus),
               id(climate_target_focus_value), id(last_climate_target_focus_interaction), id(selected_media_volume_pct),
               id(selected_media_title), id(selected_media_artist), id(selected_media_device_class),
-              id(selected_media_source), id(last_media_power_feedback), id(selected_automation_state),
+              id(selected_media_source), id(selected_media_shuffle), id(selected_media_repeat),
+              id(selected_media_sound_mode), id(last_media_power_feedback), id(selected_automation_state),
               id(last_alarm_feedback), id(last_alarm_interaction), id(last_lock_feedback), id(last_lock_interaction),
               id(last_cover_feedback), id(last_cover_interaction), id(last_cover_position_interaction),
               id(primary_button_press_started_at), id(play_pause_button_press_started_at),
@@ -48,7 +53,14 @@ script:
               id(settings_button_press_mode), id(primary_button_long_press_fired),
               id(play_pause_button_long_press_fired), id(settings_button_long_press_fired),
               id(selected_weather_temperature), id(selected_weather_humidity), id(selected_weather_high_temp),
-              id(selected_weather_low_temp), id(selected_weather_condition), id(selected_notification_index),
+              id(selected_weather_low_temp),
+              id(selected_weather_wind_speed), id(selected_weather_wind_bearing),
+              id(selected_weather_wind_gust_speed), id(selected_weather_pressure),
+              id(selected_weather_cloud_coverage), id(selected_weather_uv_index),
+              id(selected_weather_dew_point), id(selected_weather_apparent_temperature),
+              id(selected_weather_precipitation),
+              id(selected_weather_condition), id(selected_sensor_unit),
+              id(selected_setting_detail), id(selected_notification_index),
               id(updated_ui));
           RemoteUiResetState state = make_remote_ui_reset_state(bindings);
           reset_remote_ui_state(state);
@@ -84,14 +96,17 @@ script:
           request_mode_status_throttled(selection.mode, selection.index, millis(), 2500, true);
       - script.execute: persist_ui_state
       - script.execute: sync_current_mode_status
-      - script.execute: update_display
+      - script.execute:
+          id: cycle_setting_option
+          step: 0
 
   - id: sync_current_mode_status
     mode: restart
     then:
       - lambda: |-
           auto selection_refs = make_mode_selection_state_refs(
-              id(selected_light_index), id(selected_switch_index), id(selected_climate_index), id(selected_lock_index),
+              id(selected_light_index), id(selected_switch_index), id(selected_climate_index),
+              id(selected_water_heater_index), id(selected_lock_index),
               id(selected_cover_index), id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
               id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index), id(selected_alarm_index),
               id(selected_notification_index), id(selected_info_index));
@@ -101,12 +116,16 @@ script:
               id(selected_fan_speed_pct), id(selected_humidifier_target_humidity),
               id(selected_humidifier_current_humidity), id(selected_humidifier_action), id(selected_humidifier_mode),
               id(selected_cover_position_pct), id(last_switch_feedback), id(last_switch_interaction),
-              id(selected_climate_target_temp), id(selected_climate_hvac_action), id(selected_climate_preset),
+              id(selected_climate_target_temp), id(selected_water_heater_target_temp),
+              id(selected_climate_hvac_action), id(selected_climate_fan_mode), id(selected_climate_hvac_mode),
+              id(selected_climate_preset),
               id(selected_climate_target_temp_low), id(selected_climate_target_temp_high),
-              id(selected_climate_current_temp), id(last_climate_mode), id(climate_target_focus),
+              id(selected_climate_current_temp), id(selected_climate_target_humidity),
+              id(selected_water_heater_mode), id(selected_water_heater_away), id(last_climate_mode), id(climate_target_focus),
               id(climate_target_focus_value), id(last_climate_target_focus_interaction), id(selected_media_volume_pct),
               id(selected_media_title), id(selected_media_artist), id(selected_media_device_class),
-              id(selected_media_source), id(last_media_power_feedback), id(selected_automation_state),
+              id(selected_media_source), id(selected_media_shuffle), id(selected_media_repeat),
+              id(selected_media_sound_mode), id(last_media_power_feedback), id(selected_automation_state),
               id(last_alarm_feedback), id(last_alarm_interaction), id(last_lock_feedback), id(last_lock_interaction),
               id(last_cover_feedback), id(last_cover_interaction), id(last_cover_position_interaction),
               id(primary_button_press_started_at), id(play_pause_button_press_started_at),
@@ -114,11 +133,199 @@ script:
               id(settings_button_press_mode), id(primary_button_long_press_fired),
               id(play_pause_button_long_press_fired), id(settings_button_long_press_fired),
               id(selected_weather_temperature), id(selected_weather_humidity), id(selected_weather_high_temp),
-              id(selected_weather_low_temp), id(selected_weather_condition), id(selected_notification_index),
+              id(selected_weather_low_temp),
+              id(selected_weather_wind_speed), id(selected_weather_wind_bearing),
+              id(selected_weather_wind_gust_speed), id(selected_weather_pressure),
+              id(selected_weather_cloud_coverage), id(selected_weather_uv_index),
+              id(selected_weather_dew_point), id(selected_weather_apparent_temperature),
+              id(selected_weather_precipitation),
+              id(selected_weather_condition), id(selected_sensor_unit),
+              id(selected_setting_detail), id(selected_notification_index),
               id(updated_ui));
           RemoteUiSyncState ui = make_remote_ui_sync_state(bindings);
 
           sync_remote_ui_state(selection.mode, selection.index, ui);
           if (ui.refresh_requested) {
             request_mode_status_throttled(selection.mode, ui.refresh_idx, millis(), 2500);
+          }
+          if (static_cast<RemoteSettingOption>(id(selected_setting_option)) == REMOTE_SETTING_LIGHT_DIMMER
+              && id(selected_item_state) == "on" && id(selected_brightness_pct) > 0) {
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%d%%", id(selected_brightness_pct));
+            if (id(selected_setting_detail) != buf) {
+              id(selected_setting_detail) = buf;
+              id(updated_ui) = true;
+            }
+          }
+          if (static_cast<RemoteSettingOption>(id(selected_setting_option)) == REMOTE_SETTING_FAN_SPEED
+              && id(selected_fan_speed_pct) > 0) {
+            char buf[24];
+            snprintf(buf, sizeof(buf), "%d%%", id(selected_fan_speed_pct));
+            if (id(selected_setting_detail) != buf) {
+              id(selected_setting_detail) = buf;
+              id(updated_ui) = true;
+            }
+          }
+          if (static_cast<RemoteSettingOption>(id(selected_setting_option)) == REMOTE_SETTING_COVER_POSITION) {
+            std::string next_detail = id(selected_cover_position_pct) > 0
+                ? std::to_string(id(selected_cover_position_pct)) + "%"
+                : std::string("");
+            if (id(selected_setting_detail) != next_detail) {
+              id(selected_setting_detail) = next_detail;
+              id(updated_ui) = true;
+            }
+          }
+          if (selection.mode == REMOTE_MODE_WEATHER) {
+            auto opt = static_cast<RemoteSettingOption>(id(selected_setting_option));
+            char buf[32];
+            std::string next_detail;
+            switch (opt) {
+              case REMOTE_SETTING_WEATHER_HUMIDITY:
+                if (!isnan(id(selected_weather_humidity))) {
+                  snprintf(buf, sizeof(buf), "%.0f%%", id(selected_weather_humidity));
+                  next_detail = buf;
+                }
+                break;
+              case REMOTE_SETTING_WEATHER_WIND_SPEED:
+                if (!isnan(id(selected_weather_wind_speed))) {
+                  snprintf(buf, sizeof(buf), "%.0f ${SPEED_UNIT}", id(selected_weather_wind_speed));
+                  next_detail = buf;
+                }
+                break;
+              case REMOTE_SETTING_WEATHER_WIND_BEARING:
+                if (!isnan(id(selected_weather_wind_bearing))) {
+                  snprintf(buf, sizeof(buf), "%.0f°", id(selected_weather_wind_bearing));
+                  next_detail = buf;
+                }
+                break;
+              case REMOTE_SETTING_WEATHER_WIND_GUST:
+                if (!isnan(id(selected_weather_wind_gust_speed))) {
+                  snprintf(buf, sizeof(buf), "%.0f ${SPEED_UNIT}", id(selected_weather_wind_gust_speed));
+                  next_detail = buf;
+                }
+                break;
+              case REMOTE_SETTING_WEATHER_PRESSURE:
+                if (!isnan(id(selected_weather_pressure))) {
+                  snprintf(buf, sizeof(buf), "%.0f ${PRESSURE_UNIT}", id(selected_weather_pressure));
+                  next_detail = buf;
+                }
+                break;
+              case REMOTE_SETTING_WEATHER_PRECIPITATION:
+                if (!isnan(id(selected_weather_precipitation))) {
+                  snprintf(buf, sizeof(buf), "%.1f ${PRECIPITATION_UNIT}", id(selected_weather_precipitation));
+                  next_detail = buf;
+                }
+                break;
+              case REMOTE_SETTING_WEATHER_CLOUD_COVERAGE:
+                if (!isnan(id(selected_weather_cloud_coverage))) {
+                  snprintf(buf, sizeof(buf), "%.0f%%", id(selected_weather_cloud_coverage));
+                  next_detail = buf;
+                }
+                break;
+              case REMOTE_SETTING_WEATHER_UV_INDEX:
+                if (!isnan(id(selected_weather_uv_index))) {
+                  snprintf(buf, sizeof(buf), "%.1f", id(selected_weather_uv_index));
+                  next_detail = buf;
+                }
+                break;
+              case REMOTE_SETTING_WEATHER_DEW_POINT:
+                if (!isnan(id(selected_weather_dew_point))) {
+                  snprintf(buf, sizeof(buf), "%.0f°%s", id(selected_weather_dew_point), "${TEMPERATURE_UNIT}");
+                  next_detail = buf;
+                }
+                break;
+              case REMOTE_SETTING_WEATHER_APPARENT_TEMP:
+                if (!isnan(id(selected_weather_apparent_temperature))) {
+                  snprintf(buf, sizeof(buf), "%.0f°%s", id(selected_weather_apparent_temperature), "${TEMPERATURE_UNIT}");
+                  next_detail = buf;
+                }
+                break;
+              case REMOTE_SETTING_WEATHER_HIGH_TEMP:
+                if (!isnan(id(selected_weather_high_temp))) {
+                  snprintf(buf, sizeof(buf), "%.0f°%s", id(selected_weather_high_temp), "${TEMPERATURE_UNIT}");
+                  next_detail = buf;
+                }
+                break;
+              case REMOTE_SETTING_WEATHER_LOW_TEMP:
+                if (!isnan(id(selected_weather_low_temp))) {
+                  snprintf(buf, sizeof(buf), "%.0f°%s", id(selected_weather_low_temp), "${TEMPERATURE_UNIT}");
+                  next_detail = buf;
+                }
+                break;
+              default:
+                break;
+            }
+            if (!next_detail.empty() && id(selected_setting_detail) != next_detail) {
+              id(selected_setting_detail) = next_detail;
+              id(updated_ui) = true;
+            }
+          }
+          if (selection.mode == REMOTE_MODE_MEDIA) {
+            auto opt = static_cast<RemoteSettingOption>(id(selected_setting_option));
+            if (opt == REMOTE_SETTING_MEDIA_SELECT || opt == REMOTE_SETTING_MEDIA_CHANNEL) {
+              const std::string &next_detail = id(selected_media_artist);
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
+            if (opt == REMOTE_SETTING_MEDIA_VOLUME) {
+              char buf[24];
+              snprintf(buf, sizeof(buf), "%d%%", id(selected_media_volume_pct));
+              if (id(selected_setting_detail) != buf) {
+                id(selected_setting_detail) = buf;
+                id(updated_ui) = true;
+              }
+            }
+            if (opt == REMOTE_SETTING_MEDIA_STATE) {
+              std::string next_detail = esphome::str_upper_case(id(selected_item_state));
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
+          }
+          if (selection.mode == REMOTE_MODE_CLIMATE) {
+            auto opt = static_cast<RemoteSettingOption>(id(selected_setting_option));
+            if (opt == REMOTE_SETTING_CLIMATE_ACTION) {
+              std::string next_detail = esphome::str_upper_case(id(selected_climate_hvac_action));
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
+            if (opt == REMOTE_SETTING_CLIMATE_STATE) {
+              std::string next_detail = esphome::str_upper_case(id(selected_item_state));
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
+          }
+          if (selection.mode == REMOTE_MODE_HUMIDIFIERS) {
+            auto opt = static_cast<RemoteSettingOption>(id(selected_setting_option));
+            if (opt == REMOTE_SETTING_HUMIDIFIER_ACTION) {
+              const std::string &next_detail = id(selected_humidifier_action);
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
+            if (opt == REMOTE_SETTING_HUMIDIFIER_STATE) {
+              std::string next_detail = esphome::str_upper_case(id(selected_item_state));
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
+          }
+          if (selection.mode == REMOTE_MODE_ALARMS) {
+            auto opt = static_cast<RemoteSettingOption>(id(selected_setting_option));
+            if (opt == REMOTE_SETTING_ALARM_STATE) {
+              std::string next_detail = std::string(alarm_arm_mode_selection_label(clamp_alarm_arm_mode(id(selected_alarm_arm_mode))));
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
           }

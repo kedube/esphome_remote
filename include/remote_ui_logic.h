@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "entity_helpers_common.h"
+#include "entity_helpers_requests.h"
 #include "esphome/core/time.h"
 
 namespace esphome {

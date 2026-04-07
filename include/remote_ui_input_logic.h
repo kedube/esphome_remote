@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 
-#include "entity_helpers_common.h"
+#include "entity_helpers_requests.h"
 
 enum RemoteInputFeedbackTarget {
   REMOTE_INPUT_FEEDBACK_NONE = -1,

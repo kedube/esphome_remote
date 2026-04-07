@@ -7,6 +7,7 @@ inline SwitchStatusTracker switch_status_tracker_storage(SWITCH_LIST);
 inline FanStatusTracker fan_status_tracker_storage;
 inline HumidifierStatusTracker humidifier_status_tracker_storage;
 inline ClimateStatusTracker climate_status_tracker_storage;
+inline WaterHeaterStatusTracker water_heater_status_tracker_storage;
 inline LockStatusTracker lock_status_tracker_storage(LOCK_LIST);
 inline CoverStatusTracker cover_status_tracker_storage;
 inline MediaStatusTracker media_status_tracker_storage;
@@ -30,6 +31,7 @@ static inline void ensure_remote_status_trackers() {
   fan_status_tracker_storage.setup();
   humidifier_status_tracker_storage.setup();
   climate_status_tracker_storage.setup();
+  water_heater_status_tracker_storage.setup();
   lock_status_tracker_storage.setup();
   cover_status_tracker_storage.setup();
   media_status_tracker_storage.setup();
@@ -63,6 +65,29 @@ static inline float selected_light_brightness(int idx) {
   return light_status_tracker_storage.brightness(idx);
 }
 
+static inline bool selected_light_has_effect(int idx) {
+  ensure_remote_status_trackers();
+  return light_status_tracker_storage.has_effect(idx);
+}
+
+static inline const std::string &selected_light_effect(int idx) {
+  ensure_remote_status_trackers();
+  return light_status_tracker_storage.effect(idx);
+}
+
+static inline const std::string &selected_light_effect_list(int idx) {
+  ensure_remote_status_trackers();
+  return light_status_tracker_storage.effect_list(idx);
+}
+
+static inline std::string next_light_effect_for_index(int idx) {
+  return next_delimited_option(selected_light_effect_list(idx), selected_light_effect(idx));
+}
+
+static inline std::string previous_light_effect_for_index(int idx) {
+  return previous_delimited_option(selected_light_effect_list(idx), selected_light_effect(idx));
+}
+
 static inline void request_selected_switch_status(int idx) {
   ensure_remote_status_trackers();
   switch_status_tracker_storage.request_state(idx);
@@ -91,6 +116,34 @@ static inline bool selected_fan_has_percentage(int idx) {
 static inline float selected_fan_percentage(int idx) {
   ensure_remote_status_trackers();
   return fan_status_tracker_storage.percentage(idx);
+}
+
+static inline const std::string &fan_preset_mode_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return fan_status_tracker_storage.preset_mode(idx);
+}
+
+static inline const std::string &fan_preset_modes_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return fan_status_tracker_storage.preset_modes(idx);
+}
+
+static inline const std::string &fan_oscillating_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return fan_status_tracker_storage.oscillating(idx);
+}
+
+static inline const std::string &fan_direction_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return fan_status_tracker_storage.direction(idx);
+}
+
+static inline std::string next_fan_preset_for_index(int idx) {
+  return next_delimited_option(fan_preset_modes_for_index(idx), fan_preset_mode_for_index(idx));
+}
+
+static inline std::string previous_fan_preset_for_index(int idx) {
+  return previous_delimited_option(fan_preset_modes_for_index(idx), fan_preset_mode_for_index(idx));
 }
 
 static inline void request_selected_humidifier_status(int idx) {
@@ -133,6 +186,21 @@ static inline std::string next_humidifier_mode_for_index(int idx) {
   return delimited_option_at(available_modes, 0);
 }
 
+static inline std::string previous_humidifier_mode_for_index(int idx) {
+  std::string current_mode = trim_copy(humidifier_mode_for_index(idx));
+  std::string available_modes = humidifier_available_modes_for_index(idx);
+  int count = delimited_option_count(available_modes);
+  if (count <= 0) {
+    return "";
+  }
+  for (int i = 0; i < count; i++) {
+    if (delimited_option_at(available_modes, i) == current_mode) {
+      return delimited_option_at(available_modes, (i + count - 1) % count);
+    }
+  }
+  return delimited_option_at(available_modes, count - 1);
+}
+
 static inline float humidifier_target_humidity_for_index(int idx) {
   ensure_remote_status_trackers();
   return humidifier_status_tracker_storage.target_humidity(idx);
@@ -146,6 +214,11 @@ static inline float humidifier_current_humidity_for_index(int idx) {
 static inline void request_selected_climate_status(int idx) {
   ensure_remote_status_trackers();
   climate_status_tracker_storage.request_climate_state(idx);
+}
+
+static inline void request_selected_water_heater_status(int idx) {
+  ensure_remote_status_trackers();
+  water_heater_status_tracker_storage.request_water_heater_state(idx);
 }
 
 static inline const std::string &selected_climate_state(int idx) {
@@ -168,6 +241,60 @@ static inline bool climate_supports_preset(int idx) {
   return climate_status_tracker_storage.supports_preset(idx);
 }
 
+static inline const std::string &climate_hvac_mode_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return climate_status_tracker_storage.hvac_mode(idx);
+}
+
+static inline const std::string &selected_climate_hvac_modes(int idx) {
+  ensure_remote_status_trackers();
+  return climate_status_tracker_storage.hvac_modes(idx);
+}
+
+static inline const std::string &climate_fan_mode_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return climate_status_tracker_storage.fan_mode(idx);
+}
+
+static inline const std::string &selected_climate_fan_modes(int idx) {
+  ensure_remote_status_trackers();
+  return climate_status_tracker_storage.fan_modes(idx);
+}
+
+static inline float climate_target_humidity_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return climate_status_tracker_storage.target_humidity(idx);
+}
+
+static inline const std::string &selected_climate_preset_modes(int idx) {
+  ensure_remote_status_trackers();
+  return climate_status_tracker_storage.preset_modes(idx);
+}
+
+static inline std::string next_climate_hvac_mode_for_index(int idx) {
+  return next_delimited_option(selected_climate_hvac_modes(idx), climate_hvac_mode_for_index(idx));
+}
+
+static inline std::string previous_climate_hvac_mode_for_index(int idx) {
+  return previous_delimited_option(selected_climate_hvac_modes(idx), climate_hvac_mode_for_index(idx));
+}
+
+static inline std::string next_climate_fan_mode_for_index(int idx) {
+  return next_delimited_option(selected_climate_fan_modes(idx), climate_fan_mode_for_index(idx));
+}
+
+static inline std::string previous_climate_fan_mode_for_index(int idx) {
+  return previous_delimited_option(selected_climate_fan_modes(idx), climate_fan_mode_for_index(idx));
+}
+
+static inline std::string next_climate_preset_for_index(int idx) {
+  return next_delimited_option(selected_climate_preset_modes(idx), selected_climate_preset_mode(idx));
+}
+
+static inline std::string previous_climate_preset_for_index(int idx) {
+  return previous_delimited_option(selected_climate_preset_modes(idx), selected_climate_preset_mode(idx));
+}
+
 static inline float selected_climate_target_temperature(int idx) {
   ensure_remote_status_trackers();
   return climate_status_tracker_storage.target_temperature(idx);
@@ -186,6 +313,39 @@ static inline float selected_climate_target_temperature_high(int idx) {
 static inline float selected_climate_current_temperature(int idx) {
   ensure_remote_status_trackers();
   return climate_status_tracker_storage.current_temperature(idx);
+}
+
+static inline const std::string &selected_water_heater_state(int idx) {
+  ensure_remote_status_trackers();
+  return water_heater_status_tracker_storage.state(idx);
+}
+
+static inline float selected_water_heater_target_temperature(int idx) {
+  ensure_remote_status_trackers();
+  return water_heater_status_tracker_storage.target_temperature(idx);
+}
+
+static inline const std::string &selected_water_heater_operation_mode(int idx) {
+  ensure_remote_status_trackers();
+  return water_heater_status_tracker_storage.operation_mode(idx);
+}
+
+static inline const std::string &selected_water_heater_operation_list(int idx) {
+  ensure_remote_status_trackers();
+  return water_heater_status_tracker_storage.operation_list(idx);
+}
+
+static inline const std::string &selected_water_heater_away_mode(int idx) {
+  ensure_remote_status_trackers();
+  return water_heater_status_tracker_storage.away_mode(idx);
+}
+
+static inline std::string next_water_heater_operation_mode_for_index(int idx) {
+  return next_delimited_option(selected_water_heater_operation_list(idx), selected_water_heater_operation_mode(idx));
+}
+
+static inline std::string previous_water_heater_operation_mode_for_index(int idx) {
+  return previous_delimited_option(selected_water_heater_operation_list(idx), selected_water_heater_operation_mode(idx));
 }
 
 static inline void request_selected_lock_status(int idx) {
@@ -211,6 +371,21 @@ static inline const std::string &selected_cover_state(int idx) {
 static inline float selected_cover_position(int idx) {
   ensure_remote_status_trackers();
   return cover_status_tracker_storage.position(idx);
+}
+
+static inline bool selected_cover_has_position(int idx) {
+  ensure_remote_status_trackers();
+  return cover_status_tracker_storage.has_position(idx);
+}
+
+static inline bool selected_cover_has_tilt(int idx) {
+  ensure_remote_status_trackers();
+  return cover_status_tracker_storage.has_tilt(idx);
+}
+
+static inline float selected_cover_tilt(int idx) {
+  ensure_remote_status_trackers();
+  return cover_status_tracker_storage.tilt(idx);
 }
 
 static inline void request_selected_media_status(int idx) {
@@ -258,6 +433,34 @@ static inline float selected_media_volume(int idx) {
   return media_status_tracker_storage.volume(idx);
 }
 
+static inline const std::string &media_shuffle_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return media_status_tracker_storage.shuffle(idx);
+}
+
+static inline const std::string &media_repeat_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return media_status_tracker_storage.repeat(idx);
+}
+
+static inline const std::string &media_sound_mode_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return media_status_tracker_storage.sound_mode(idx);
+}
+
+static inline const std::string &selected_media_sound_mode_list(int idx) {
+  ensure_remote_status_trackers();
+  return media_status_tracker_storage.sound_mode_list(idx);
+}
+
+static inline std::string next_media_sound_mode_for_index(int idx) {
+  return next_delimited_option(selected_media_sound_mode_list(idx), media_sound_mode_for_index(idx));
+}
+
+static inline std::string previous_media_sound_mode_for_index(int idx) {
+  return previous_delimited_option(selected_media_sound_mode_list(idx), media_sound_mode_for_index(idx));
+}
+
 static inline void request_selected_sensor_status(int idx) {
   ensure_remote_status_trackers();
   sensor_status_tracker_storage.request_state(idx);
@@ -266,6 +469,11 @@ static inline void request_selected_sensor_status(int idx) {
 static inline const std::string &sensor_state_for_index(int idx) {
   ensure_remote_status_trackers();
   return sensor_status_tracker_storage.state(idx);
+}
+
+static inline const std::string &sensor_unit_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return sensor_status_tracker_storage.unit(idx);
 }
 
 static inline void request_selected_automation_status(int idx) {
@@ -373,6 +581,51 @@ static inline float weather_low_temperature_for_index(int idx) {
   return weather_status_tracker_storage.low_temperature(idx);
 }
 
+static inline float weather_wind_speed_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.wind_speed(idx);
+}
+
+static inline float weather_wind_bearing_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.wind_bearing(idx);
+}
+
+static inline float weather_wind_gust_speed_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.wind_gust_speed(idx);
+}
+
+static inline float weather_pressure_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.pressure(idx);
+}
+
+static inline float weather_cloud_coverage_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.cloud_coverage(idx);
+}
+
+static inline float weather_uv_index_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.uv_index(idx);
+}
+
+static inline float weather_dew_point_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.dew_point(idx);
+}
+
+static inline float weather_apparent_temperature_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.apparent_temperature(idx);
+}
+
+static inline float weather_precipitation_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.precipitation(idx);
+}
+
 static inline void request_mode_status(RemoteMode mode, int idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
@@ -389,6 +642,9 @@ static inline void request_mode_status(RemoteMode mode, int idx) {
       break;
     case REMOTE_MODE_CLIMATE:
       request_selected_climate_status(idx);
+      break;
+    case REMOTE_MODE_WATER_HEATERS:
+      request_selected_water_heater_status(idx);
       break;
     case REMOTE_MODE_LOCKS:
       request_selected_lock_status(idx);

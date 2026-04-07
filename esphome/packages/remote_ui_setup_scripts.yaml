@@ -9,6 +9,24 @@ script:
           it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "POWERING OFF");
           it->display();
 
+  - id: show_hold_to_reboot_screen
+    mode: single
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\uf053");
+          it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "HOLD TO REBOOT");
+          it->display();
+
+  - id: reboot_device
+    mode: single
+    then:
+      - script.execute: show_hold_to_reboot_screen
+      - delay: 100ms
+      - lambda: |-
+          App.safe_reboot();
+
   - id: clear_display_for_sleep
     mode: single
     then:
@@ -35,6 +53,7 @@ script:
           id(last_media_power_interaction) = 0;
           id(last_automation_interaction) = 0;
           id(last_alarm_interaction) = 0;
+          id(last_setting_interaction) = 0;
 
   - id: reset_selected_item_state
     then:
@@ -44,12 +63,16 @@ script:
               id(selected_fan_speed_pct), id(selected_humidifier_target_humidity),
               id(selected_humidifier_current_humidity), id(selected_humidifier_action), id(selected_humidifier_mode),
               id(selected_cover_position_pct), id(last_switch_feedback), id(last_switch_interaction),
-              id(selected_climate_target_temp), id(selected_climate_hvac_action), id(selected_climate_preset),
+              id(selected_climate_target_temp), id(selected_water_heater_target_temp),
+              id(selected_climate_hvac_action), id(selected_climate_fan_mode), id(selected_climate_hvac_mode),
+              id(selected_climate_preset),
               id(selected_climate_target_temp_low), id(selected_climate_target_temp_high),
-              id(selected_climate_current_temp), id(last_climate_mode), id(climate_target_focus),
+              id(selected_climate_current_temp), id(selected_climate_target_humidity),
+              id(selected_water_heater_mode), id(selected_water_heater_away), id(last_climate_mode), id(climate_target_focus),
               id(climate_target_focus_value), id(last_climate_target_focus_interaction), id(selected_media_volume_pct),
               id(selected_media_title), id(selected_media_artist), id(selected_media_device_class),
-              id(selected_media_source), id(last_media_power_feedback), id(selected_automation_state),
+              id(selected_media_source), id(selected_media_shuffle), id(selected_media_repeat),
+              id(selected_media_sound_mode), id(last_media_power_feedback), id(selected_automation_state),
               id(last_alarm_feedback), id(last_alarm_interaction), id(last_lock_feedback), id(last_lock_interaction),
               id(last_cover_feedback), id(last_cover_interaction), id(last_cover_position_interaction),
               id(primary_button_press_started_at), id(play_pause_button_press_started_at),
@@ -57,7 +80,14 @@ script:
               id(settings_button_press_mode), id(primary_button_long_press_fired),
               id(play_pause_button_long_press_fired), id(settings_button_long_press_fired),
               id(selected_weather_temperature), id(selected_weather_humidity), id(selected_weather_high_temp),
-              id(selected_weather_low_temp), id(selected_weather_condition), id(selected_notification_index),
+              id(selected_weather_low_temp),
+              id(selected_weather_wind_speed), id(selected_weather_wind_bearing),
+              id(selected_weather_wind_gust_speed), id(selected_weather_pressure),
+              id(selected_weather_cloud_coverage), id(selected_weather_uv_index),
+              id(selected_weather_dew_point), id(selected_weather_apparent_temperature),
+              id(selected_weather_precipitation),
+              id(selected_weather_condition), id(selected_sensor_unit),
+              id(selected_setting_detail), id(selected_notification_index),
               id(updated_ui));
           RemoteUiResetState state = make_remote_ui_reset_state(bindings);
           reset_remote_ui_state(state);
@@ -71,6 +101,7 @@ script:
           state.selected_light_index = id(selected_light_index);
           state.selected_switch_index = id(selected_switch_index);
           state.selected_climate_index = id(selected_climate_index);
+          state.selected_water_heater_index = id(selected_water_heater_index);
           state.selected_lock_index = id(selected_lock_index);
           state.selected_cover_index = id(selected_cover_index);
           state.selected_media_index = id(selected_media_index);

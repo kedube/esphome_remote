@@ -44,6 +44,10 @@ globals:
     type: float
     initial_value: 'NAN'
 
+  - id: selected_water_heater_target_temp
+    type: float
+    initial_value: 'NAN'
+
   - id: selected_climate_target_temp_low
     type: float
     initial_value: 'NAN'
@@ -64,9 +68,29 @@ globals:
     type: std::string
     initial_value: '""'
 
+  - id: selected_climate_fan_mode
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_climate_hvac_mode
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_climate_target_humidity
+    type: float
+    initial_value: 'NAN'
+
   - id: last_climate_mode
     type: std::string
     initial_value: '"heat"'
+
+  - id: selected_water_heater_mode
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_water_heater_away
+    type: std::string
+    initial_value: '""'
 
   - id: climate_target_focus
     type: int
@@ -93,6 +117,18 @@ globals:
     initial_value: '""'
 
   - id: selected_media_source
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_media_shuffle
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_media_repeat
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_media_sound_mode
     type: std::string
     initial_value: '""'
 
@@ -140,6 +176,50 @@ globals:
     type: float
     initial_value: 'NAN'
 
+  - id: selected_weather_wind_speed
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_wind_bearing
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_wind_gust_speed
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_pressure
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_cloud_coverage
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_uv_index
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_dew_point
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_apparent_temperature
+    type: float
+    initial_value: 'NAN'
+
+  - id: selected_weather_precipitation
+    type: float
+    initial_value: 'NAN'
+
   - id: selected_weather_condition
     type: std::string
     initial_value: '"unknown"'
+
+  - id: selected_sensor_unit
+    type: std::string
+    initial_value: '""'
+
+  - id: selected_setting_detail
+    type: std::string
+    initial_value: '""'

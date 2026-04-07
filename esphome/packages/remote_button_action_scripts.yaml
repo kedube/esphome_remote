@@ -1,33 +1,45 @@
 script:
   - id: primary_mode_action
     then:
-      - script.execute:
-          id: dispatch_mode_action
-          action: 0
+      - script.execute: execute_square_button_action
 
   - id: secondary_mode_action
     then:
       - script.execute:
-          id: dispatch_mode_action
-          action: 1
+          id: cycle_setting_option
+          step: 1
 
   - id: play_pause_mode_action
     then:
-      - script.execute:
-          id: dispatch_mode_action
-          action: 2
+      - script.execute: execute_circle_button_action
 
   - id: increase_mode_value
     then:
-      - script.execute:
-          id: dispatch_mode_action
-          action: 3
+      - if:
+          condition:
+            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER;'
+          then:
+            - script.execute:
+                id: cycle_setting_option
+                step: 1
+          else:
+            - script.execute:
+                id: adjust_selected_setting
+                step: 1
 
   - id: decrease_mode_value
     then:
-      - script.execute:
-          id: dispatch_mode_action
-          action: 4
+      - if:
+          condition:
+            lambda: 'return id(current_mode) == REMOTE_MODE_WEATHER;'
+          then:
+            - script.execute:
+                id: cycle_setting_option
+                step: -1
+          else:
+            - script.execute:
+                id: adjust_selected_setting
+                step: -1
 
   - id: reset_idle_timer
     mode: restart

@@ -16,6 +16,10 @@ static const ClimateEntity CLIMATE_LIST[] = {
     {"Bedroom Thermostat", "climate.bedroom_thermostat"},
 };
 
+static const WaterHeaterEntity WATER_HEATER_LIST[] = {
+    {"Main Water Heater", "water_heater.main_water_heater"},
+};
+
 static const HumidifierEntity HUMIDIFIER_LIST[] = {
     {"Bedroom Humidifier", "humidifier.bedroom_humidifier"},
     {"Nursery Humidifier", "humidifier.nursery_humidifier"},

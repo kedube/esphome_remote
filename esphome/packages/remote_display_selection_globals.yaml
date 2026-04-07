@@ -34,6 +34,10 @@ globals:
     type: int
     initial_value: '0'
 
+  - id: selected_water_heater_index
+    type: int
+    initial_value: '0'
+
   - id: selected_lock_index
     type: int
     initial_value: '0'
