@@ -70,19 +70,9 @@ esphome:
             id(last_active) = millis() / 1000;
             PersistedUIStateData restored = unpack_persisted_ui_state(id(persisted_ui_state), id(persisted_ui_state_aux));
 
-            id(selected_light_index) = restored.selected_light_index;
-            id(selected_switch_index) = restored.selected_switch_index;
-            id(selected_climate_index) = restored.selected_climate_index;
-            id(selected_water_heater_index) = restored.selected_water_heater_index;
-            id(selected_lock_index) = restored.selected_lock_index;
-            id(selected_cover_index) = restored.selected_cover_index;
-            id(selected_media_index) = restored.selected_media_index;
-            id(selected_automation_index) = restored.selected_automation_index;
-            id(selected_weather_index) = restored.selected_weather_index;
-            id(selected_fan_index) = restored.selected_fan_index;
-            id(selected_humidifier_index) = restored.selected_humidifier_index;
-            id(selected_sensor_index) = restored.selected_sensor_index;
-            id(selected_alarm_index) = restored.selected_alarm_index;
+            for (int i = 0; i < FAVORITE_LIST_COUNT_INT; i++) {
+              favorite_selected_index_ref(i) = restored.favorite_indices[i];
+            }
             id(selected_notification_index) = restored.selected_notification_index;
             id(selected_info_index) = restored.selected_info_index;
 
@@ -93,12 +83,8 @@ esphome:
             }
             id(oled_display).set_contrast(id(contrast) * 1.0f / 10.0f);
 
-            if (restored.current_mode < 0 || restored.current_mode >= REMOTE_MODE_COUNT) {
-              id(current_mode) = first_available_mode();
-            } else {
-              RemoteMode restored_mode = static_cast<RemoteMode>(restored.current_mode);
-              id(current_mode) = mode_is_available(restored_mode) ? restored_mode : first_available_mode();
-            }
+            id(current_menu_index) = clamp_menu_index(restored.current_menu_index);
+            id(current_mode) = REMOTE_MODE_INFO;
             id(updated_ui) = true;
         - script.execute: update_selected_item
     - priority: -100

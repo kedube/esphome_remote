@@ -2,7 +2,7 @@
 
 Replacement firmware for [Pawel Lugowski's ESPHome OLED Remote Control](https://tech.lugowski.dev/guides/smart-oled-remote-esphome/). The hardware is built around an ESP32 Lolin32 WROOM (WIFI + Bluetooth) board, a 1.3-inch SH1106 128x64 OLED display, and physical buttons that provide a compact, battery-friendly UI for controlling Home Assistant entities directly from the handheld remote. 
 
-The firmware has been entirely rewritten from scratch based on a newly designed codebase and architecture. It is designed to let you cycle through Home Assistant entities directly from the remote without needing a touchscreen or a phone. The project supports lights, switches, climate devices, humidifiers, fans, covers, locks, media players, sensors, automations, alarms, notifications, weather, and info screens.
+The firmware has been entirely rewritten from scratch based on a newly designed codebase and architecture. It is designed to let you cycle through Home Assistant entities directly from the remote without needing a touchscreen or a phone. The remote now uses mixed-entity favorite lists as the primary navigation model, while still supporting controls for lights, switches, climate devices, humidifiers, fans, covers, locks, media players, sensors, automations, alarms, weather, notifications, and info screens.
 
 ## Gallery
 
@@ -21,28 +21,19 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 - Button-driven UI optimized for a 128x64 monochrome OLED
 - Deep sleep support for battery-powered remotes
 - Multiple board package options for different PCB revisions
-- Mode-based navigation across Home Assistant entity types
-- Automatic hiding of modes with empty entity lists
-- Persistent restore of the current mode, selected entity, contrast, fan selection, and humidifier selection
+- Favorite-list navigation with mixed Home Assistant entity types in each list
+- Automatic hiding of empty favorite lists and optional Notifications mode
+- Persistent restore of the current favorite list, selected item per favorite list, and contrast
 - Notification, weather, version, time/date, and network info screens
 - Optional framebuffer download endpoint for capturing clean UI screenshots
 
-## Supported Modes
+## Navigation Model
 
-- Lights
-- Switches
-- Climate
-- Humidifiers
-- Fans
-- Covers
-- Locks
-- Media players
-- Sensors
-- Automations / scripts / scenes
-- Alarms
-- Notifications
-- Weather
-- Info
+- One or more user-defined favorite lists containing mixed entity types
+- Optional Notifications screen after the favorite lists
+- Info screen always available at the end of the menu
+
+Each favorite list shows the list name in the header, the selected entry name in the main title row, and the current entity domain icon in the corners. The control surface adapts automatically to the selected entity type.
 
 ## Hardware
 
@@ -145,9 +136,9 @@ esphome_remote/
 - `include/entity_helpers_common.h` and `include/entity_helpers_requests.h`
   Shared entity metadata/state helpers and the request/query layer built on top of the trackers.
 - `esphome/local_entities.h`
-  Your private Home Assistant entity definitions. This file is ignored by Git and lives next to `secrets.yaml` for a simpler compile workflow.
+  Your private Home Assistant entity definitions and favorite lists. This file is ignored by Git and lives next to `secrets.yaml` for a simpler compile workflow.
 - `esphome/examples/local_entities-example.h`
-  Example entity lists you can copy and customize.
+  Example entity definitions and favorite lists you can copy and customize.
 - `include/local_entities.h`
   Compatibility shim that forwards to `esphome/local_entities.h`.
 - `esphome/packages/`
@@ -160,7 +151,7 @@ esphome_remote/
 ## Architecture Notes
 
 - `include/entity_helpers_common.h`
-  Shared metadata, mode ordering, selection helpers, and configuration validation.
+  Shared metadata, favorite-list plumbing, internal domain indexing, selection helpers, and configuration validation.
 - `include/entity_trackers.h`
   Home Assistant tracker classes that subscribe to and cache entity state.
 - `include/entity_helpers_requests.h`
@@ -168,7 +159,7 @@ esphome_remote/
 - `include/remote_ui_bindings.h`
   Shared UI binding helpers used to build reset/sync state objects without duplicating YAML wiring blocks.
 - `include/ui_state_helpers.h`
-  Persistent UI save/restore packing helpers and legacy migration logic.
+  Persistent UI save/restore helpers for favorite-list menu state.
 - `esphome/remote_control.yaml`
   Top-level composition file that imports the modular ESPHome packages and C++ helpers.
 
@@ -187,7 +178,7 @@ The `esphome/packages/` folder is currently split by responsibility:
 - `remote_inputs.yaml` and `remote_runtime.yaml`
   Physical input bindings and the runtime loop.
 
-At startup the remote validates the configured entity lists and logs warnings for missing names, missing entity IDs, or obvious domain mismatches such as a `switch.*` entry placed in `LIGHT_LIST`.
+At startup the remote validates the configured favorite entries and logs warnings for missing names, missing entity IDs, or unsupported entity domains.
 
 ## 1. Install ESPHome
 
@@ -227,9 +218,9 @@ encryption_key: "YourESPHomeAPIKey"
 ota_password: "YourOTAPassword"
 ```
 
-## 4. Create Your Entity List
+## 4. Create Your Favorite Lists
 
-Copy the example entity file:
+Copy the example favorite-list file:
 
 ```bash
 cp esphome/examples/local_entities-example.h esphome/local_entities.h
@@ -237,41 +228,54 @@ cp esphome/examples/local_entities-example.h esphome/local_entities.h
 
 Edit `esphome/local_entities.h` so it matches your Home Assistant setup.
 
-The example file supports these lists:
+The file now only needs favorite lists. Each `FavoriteEntity` entry provides a display name and a Home Assistant `entity_id`, and the remote infers the entity type from the `entity_id` prefix such as `light.`, `switch.`, `climate.`, `weather.`, and so on.
 
-- `LIGHT_LIST`
-- `SWITCH_LIST`
-- `CLIMATE_LIST`
-- `HUMIDIFIER_LIST`
-- `FAN_LIST`
-- `COVER_LIST`
-- `LOCK_LIST`
-- `MEDIA_PLAYER_LIST`
-- `SENSOR_LIST`
-- `AUTOMATION_LIST`
-- `ALARM_LIST`
-- `WEATHER_LIST`
-
-You can leave any list empty. Empty lists compile cleanly, and their corresponding modes are automatically hidden from the remote UI.
+You can define as many favorite lists as you want. Empty favorite lists compile cleanly and are skipped automatically in the menu.
 
 _Example:_
 
 ```cpp
-static const LightEntity LIGHT_LIST[] = {
-    {"Living Room Lamp", "light.living_room_lamp"},
+struct FavoriteEntity {
+  const char *name;
+  const char *entity_id;
 };
 
-static const MediaEntity MEDIA_PLAYER_LIST[] = {
-    {"Bedroom TV", "media_player.bedroom_tv"},
-    {"Receiver", "media_player.receiver", "Apple TV|PlayStation|Switch"},
+struct FavoriteList {
+  const char *title;
+  const FavoriteEntity *entries;
+  size_t count;
 };
+
+static const FavoriteEntity MAIN_FAVORITES[] = {
+  {"Living Room Lamp", "light.living_room_lamp"},
+  {"Bedroom TV", "media_player.bedroom_tv"},
+  {"Main Thermostat", "climate.main_thermostat"},
+  {"Front Door", "lock.front_door"},
+};
+
+static const FavoriteList FAVORITE_LISTS[] = {
+  {"MAIN", MAIN_FAVORITES, sizeof(MAIN_FAVORITES) / sizeof(MAIN_FAVORITES[0])},
+};
+
+static constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);
 ```
 
-Minimal empty-list example:
+Minimal multi-list example:
 
 ```cpp
-static const AlarmEntity ALARM_LIST[] = {};
-static const WeatherEntity WEATHER_LIST[] = {};
+static const FavoriteEntity UPSTAIRS_FAVORITES[] = {
+  {"Hallway Thermostat", "climate.hallway_thermostat"},
+  {"Bedroom Fan", "fan.bedroom_fan"},
+};
+
+static const FavoriteEntity OUTDOOR_FAVORITES[] = {};
+
+static const FavoriteList FAVORITE_LISTS[] = {
+  {"UPSTAIRS", UPSTAIRS_FAVORITES, sizeof(UPSTAIRS_FAVORITES) / sizeof(UPSTAIRS_FAVORITES[0])},
+  {"OUTDOOR", OUTDOOR_FAVORITES, sizeof(OUTDOOR_FAVORITES) / sizeof(OUTDOOR_FAVORITES[0])},
+};
+
+static constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);
 ```
 
 Notifications are configured in the same file with optional feed defines:
@@ -285,7 +289,7 @@ Notifications are configured in the same file with optional feed defines:
 
 Notes:
 
-- Set `NOTIFICATION_FEED_ENTITY` to an empty string to hide Notifications mode completely.
+- Set `NOTIFICATION_FEED_ENTITY` to an empty string to hide Notifications completely.
 - `NOTIFICATION_FEED_ENTITY` is the Home Assistant entity the remote reads from.
 - `NOTIFICATION_FEED_ATTRIBUTE` is the attribute on that entity containing the notification payload.
 - `NOTIFICATION_FEED_IDS_ATTRIBUTE` is the attribute on that entity containing notification IDs for dismiss actions.
@@ -418,21 +422,20 @@ Notes:
 
 ## UI Notes
 
-- The remote restores the previously selected mode and item after wake or reboot.
-- Fan and humidifier selections are also persisted.
-- Modes with no configured entities are skipped automatically.
+- The remote restores the previously selected favorite list and selected item after wake or reboot.
+- Empty favorite lists are skipped automatically.
 - Lock, cover, and automation actions use long-press protection.
 - Circle is the primary action button. Play/pause is the alternate action button.
-- In Locks mode, circle locks and play/pause unlocks. The remote shows temporary detail-line feedback such as `LOCKING...`, `UNLOCKING...`, `LOCKED`, `UNLOCKED`, `JAMMED`, `ALREADY LOCKED`, and `ALREADY UNLOCKED`.
-- In Covers mode, circle opens and play/pause closes. The remote shows temporary detail-line feedback such as `OPENING...`, `CLOSING...`, `OPENED`, `CLOSED`, and `OPEN xx%`.
-- In Automations mode, automations, scripts, and scenes show temporary feedback such as `TRIGGERING...`, `ACTIVATING...`, `RUNNING...`, `TRIGGERED`, `ACTIVATED`, `STARTED`, and `COMPLETED`.
-- In Alarms mode, circle long-press arms using the currently selected arm mode when the panel is disarmed.
-- In Alarms mode, play/pause long-press disarms the panel.
-- In Alarms mode, dimmer up and dimmer down cycle `away`, `home`, `night`, and `vacation` arm modes in the details line for 5 seconds.
-- In Alarms mode, the Settings button must be held for `ALARM_TRIGGER_HOLD_DURATION_MS` to call `alarm_trigger`. The details line shows `HOLD TO TRIGGER` while held.
+- When a favorite entry resolves to a lock, circle locks and play/pause unlocks. The remote shows temporary detail-line feedback such as `LOCKING...`, `UNLOCKING...`, `LOCKED`, `UNLOCKED`, `JAMMED`, `ALREADY LOCKED`, and `ALREADY UNLOCKED`.
+- When a favorite entry resolves to a cover, circle opens and play/pause closes. The remote shows temporary detail-line feedback such as `OPENING...`, `CLOSING...`, `OPENED`, `CLOSED`, and `OPEN xx%`.
+- When a favorite entry resolves to an automation, script, or scene, the remote shows temporary feedback such as `TRIGGERING...`, `ACTIVATING...`, `RUNNING...`, `TRIGGERED`, `ACTIVATED`, `STARTED`, and `COMPLETED`.
+- When a favorite entry resolves to an alarm, circle long-press arms using the currently selected arm mode when the panel is disarmed.
+- When a favorite entry resolves to an alarm, play/pause long-press disarms the panel.
+- When a favorite entry resolves to an alarm, dimmer up and dimmer down cycle `away`, `home`, `night`, and `vacation` arm modes in the details line for 5 seconds.
+- When a favorite entry resolves to an alarm, the Settings button must be held for `ALARM_TRIGGER_HOLD_DURATION_MS` to call `alarm_trigger`. The details line shows `HOLD TO TRIGGER` while held.
 - Alarm actions use temporary details-line feedback such as `ARMING...`, `DISARMING...`, `TRIGGERING...`, `ARMED HOME`, `DISARMED`, `TRIGGERED`, and `FAILED`-style responses when Home Assistant reports an error.
 - Info mode includes Time & Date, Network, and Version screens.
-- Notification mode reads from `NOTIFICATION_FEED_ENTITY` in `esphome/local_entities.h`.
+- Notifications reads from `NOTIFICATION_FEED_ENTITY` in `esphome/local_entities.h`.
 
 ## Supported Home Assistant Entity Domains
 
@@ -450,6 +453,7 @@ Notes:
 - `script.*`
 - `scene.*`
 - `alarm_control_panel.*`
+- `water_heater.*`
 - `weather.*`
 
 ## Important Settings
@@ -491,9 +495,9 @@ Create it from the example file:
 cp esphome/examples/secrets-example.yaml esphome/secrets.yaml
 ```
 
-### A mode does not appear in the menu
+### A favorite list does not appear in the menu
 
-That usually means the corresponding entity list is empty. Empty modes are intentionally hidden.
+That usually means the corresponding favorite list is empty. Empty favorite lists are intentionally hidden.
 
 ### A Home Assistant entity does not respond
 

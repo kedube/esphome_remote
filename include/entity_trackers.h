@@ -205,7 +205,7 @@ class LightStatusTracker : public esphome::api::CustomAPIDevice {
   std::array<bool, LIGHT_LIST_COUNT> has_brightness_{};
 };
 
-using SwitchStatusTracker = SingleStateTracker<SwitchEntity, SWITCH_LIST_COUNT>;
+using SwitchStatusTracker = SingleStateTracker<EntityEntry, SWITCH_LIST_COUNT>;
 
 class FanStatusTracker : public esphome::api::CustomAPIDevice {
  public:
@@ -914,11 +914,11 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
   std::array<bool, CLIMATE_LIST_COUNT> supports_preset_{};
 };
 
-using LockStatusTracker = SingleStateTracker<LockEntity, LOCK_LIST_COUNT>;
+using LockStatusTracker = SingleStateTracker<EntityEntry, LOCK_LIST_COUNT>;
 
-class SensorStatusTracker : public SingleStateTracker<SensorEntity, SENSOR_LIST_COUNT> {
+class SensorStatusTracker : public SingleStateTracker<EntityEntry, SENSOR_LIST_COUNT> {
  public:
-  using SingleStateTracker<SensorEntity, SENSOR_LIST_COUNT>::SingleStateTracker;
+  using SingleStateTracker<EntityEntry, SENSOR_LIST_COUNT>::SingleStateTracker;
 
   void setup() {
     for (int i = 0; i < SENSOR_LIST_COUNT; i++) {
@@ -932,7 +932,7 @@ class SensorStatusTracker : public SingleStateTracker<SensorEntity, SENSOR_LIST_
   }
 
   void request_state(int idx) {
-    SingleStateTracker<SensorEntity, SENSOR_LIST_COUNT>::request_state(idx);
+    SingleStateTracker<EntityEntry, SENSOR_LIST_COUNT>::request_state(idx);
     if (idx < 0 || idx >= SENSOR_LIST_COUNT) return;
     const char *entity_id = this->entities_[idx].entity_id;
     esphome::api::global_api_server->get_home_assistant_state(
@@ -1433,8 +1433,8 @@ class WaterHeaterStatusTracker : public esphome::api::CustomAPIDevice {
   std::array<std::string, WATER_HEATER_LIST_COUNT> away_mode_{};
 };
 
-using AutomationStatusTracker = SingleStateTracker<AutomationEntity, AUTOMATION_LIST_COUNT>;
-using AlarmStatusTracker = SingleStateTracker<AlarmEntity, ALARM_LIST_COUNT>;
+using AutomationStatusTracker = SingleStateTracker<EntityEntry, AUTOMATION_LIST_COUNT>;
+using AlarmStatusTracker = SingleStateTracker<EntityEntry, ALARM_LIST_COUNT>;
 
 class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
  public:

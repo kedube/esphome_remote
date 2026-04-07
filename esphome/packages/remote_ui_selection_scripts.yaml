@@ -9,7 +9,7 @@ script:
               id(selected_cover_index), id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
               id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index), id(selected_alarm_index),
               id(selected_notification_index), id(selected_info_index));
-          auto selection = resolve_current_mode_selection_context(id(current_mode), selection_refs);
+            auto selection = resolve_current_ui_selection_context(id(current_mode), id(current_menu_index), selection_refs);
 
           if (selection.count <= 0) {
             id(selected_item_name) = "NO ITEMS";
@@ -19,17 +19,17 @@ script:
             return;
           }
 
-          const char *item_name = mode_item_name_cstr(selection.mode, selection.index);
-          const char *item_entity = mode_item_entity_cstr(selection.mode, selection.index);
+          const char *item_name = ui_selection_item_name_cstr(selection);
+          const char *item_entity = ui_selection_item_entity_cstr(selection);
           if (item_name != nullptr) {
             id(selected_item_name) = item_name;
           } else {
-            id(selected_item_name) = mode_item_name(selection.mode, selection.index);
+            id(selected_item_name) = ui_selection_item_name(selection);
           }
           if (item_entity != nullptr) {
             id(selected_item_entity) = item_entity;
           } else {
-            id(selected_item_entity) = mode_item_entity(selection.mode, selection.index);
+            id(selected_item_entity) = ui_selection_item_entity(selection);
           }
           auto bindings = make_remote_ui_bindings(
               id(selected_item_name), id(selected_item_entity), id(selected_item_state), id(selected_brightness_pct),
@@ -66,12 +66,12 @@ script:
           reset_remote_ui_state(state);
 
           if (selection.mode == REMOTE_MODE_MEDIA) {
-            const std::string &state = selected_media_state(selection.index);
-            const std::string &device_class = media_device_class_for_index(selection.index);
-            const std::string &title = media_title_for_index(selection.index);
-            const std::string &artist = media_artist_for_index(selection.index);
-            const std::string &source = media_source_for_index(selection.index);
-            float volume = selected_media_volume(selection.index);
+            const std::string &state = selected_media_state(selection.resolved_index);
+            const std::string &device_class = media_device_class_for_index(selection.resolved_index);
+            const std::string &title = media_title_for_index(selection.resolved_index);
+            const std::string &artist = media_artist_for_index(selection.resolved_index);
+            const std::string &source = media_source_for_index(selection.resolved_index);
+            float volume = selected_media_volume(selection.resolved_index);
 
             if (state != "unknown") {
               id(selected_item_state) = state;
@@ -93,7 +93,7 @@ script:
               id(selected_media_volume_pct) = pct;
             }
           }
-          request_mode_status_throttled(selection.mode, selection.index, millis(), 2500, true);
+          request_mode_status_throttled(selection.mode, selection.resolved_index, millis(), 2500, true);
       - script.execute: persist_ui_state
       - script.execute: sync_current_mode_status
       - script.execute:
@@ -110,7 +110,7 @@ script:
               id(selected_cover_index), id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
               id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index), id(selected_alarm_index),
               id(selected_notification_index), id(selected_info_index));
-          auto selection = resolve_current_mode_selection_context(id(current_mode), selection_refs);
+            auto selection = resolve_current_ui_selection_context(id(current_mode), id(current_menu_index), selection_refs);
           auto bindings = make_remote_ui_bindings(
               id(selected_item_name), id(selected_item_entity), id(selected_item_state), id(selected_brightness_pct),
               id(selected_fan_speed_pct), id(selected_humidifier_target_humidity),
@@ -144,7 +144,7 @@ script:
               id(updated_ui));
           RemoteUiSyncState ui = make_remote_ui_sync_state(bindings);
 
-          sync_remote_ui_state(selection.mode, selection.index, ui);
+          sync_remote_ui_state(selection.mode, selection.resolved_index, ui);
           if (ui.refresh_requested) {
             request_mode_status_throttled(selection.mode, ui.refresh_idx, millis(), 2500);
           }

@@ -1,68 +1,39 @@
 #pragma once
 
-static const LightEntity LIGHT_LIST[] = {
+struct FavoriteEntity {
+    const char *name;
+    const char *entity_id;
+};
+
+struct FavoriteList {
+    const char *title;
+    const FavoriteEntity *entries;
+    size_t count;
+};
+
+static const FavoriteEntity MAIN_FAVORITES[] = {
     {"Living Room Lamp", "light.living_room_lamp"},
-    {"Kitchen Ceiling", "light.kitchen_ceiling"},
-    {"Bedroom Lamp", "light.bedroom_lamp"},
-};
-
-static const SwitchEntity SWITCH_LIST[] = {
-    {"Coffee Maker", "switch.coffee_maker"},
-    {"Desk Fan", "switch.desk_fan"},
-};
-
-static const ClimateEntity CLIMATE_LIST[] = {
     {"Main Thermostat", "climate.main_thermostat"},
-    {"Bedroom Thermostat", "climate.bedroom_thermostat"},
-};
-
-static const WaterHeaterEntity WATER_HEATER_LIST[] = {
-    {"Main Water Heater", "water_heater.main_water_heater"},
-};
-
-static const HumidifierEntity HUMIDIFIER_LIST[] = {
-    {"Bedroom Humidifier", "humidifier.bedroom_humidifier"},
-    {"Nursery Humidifier", "humidifier.nursery_humidifier"},
-};
-
-static const FanEntity FAN_LIST[] = {
-    {"Living Room Fan", "fan.living_room_fan"},
-    {"Bedroom Fan", "fan.bedroom_fan"},
-};
-
-static const CoverEntity COVER_LIST[] = {
-    {"Garage Door", "cover.garage_door"},
-    {"Living Room Shade", "cover.living_room_shade"},
-};
-
-static const LockEntity LOCK_LIST[] = {
     {"Front Door", "lock.front_door"},
-};
-
-static const MediaEntity MEDIA_PLAYER_LIST[] = {
     {"Living Room Speaker", "media_player.living_room_speaker"},
-    {"Bedroom TV", "media_player.bedroom_tv"},
-};
-
-static const SensorEntity SENSOR_LIST[] = {
-    {"Indoor Temperature", "sensor.indoor_temperature"},
-    {"Front Door", "binary_sensor.front_door"},
-};
-
-static const AutomationEntity AUTOMATION_LIST[] = {
-    {"Evening Scene", "scene.evening"},
-    {"Goodnight Script", "script.goodnight"},
-    {"Away Automation", "automation.away_mode"},
-};
-
-static const AlarmEntity ALARM_LIST[] = {
     {"Home Alarm", "alarm_control_panel.home"},
 };
 
-static const WeatherEntity WEATHER_LIST[] = {
+static const FavoriteEntity SECONDARY_FAVORITES[] = {
+    {"Kitchen Ceiling", "light.kitchen_ceiling"},
+    {"Coffee Maker", "switch.coffee_maker"},
+    {"Garage Door", "cover.garage_door"},
+    {"Indoor Temperature", "sensor.indoor_temperature"},
     {"Local Weather", "weather.forecast_home"},
-    {"Backup Weather", "weather.backup_provider"},
+    {"Evening Scene", "scene.evening"},
 };
+
+static const FavoriteList FAVORITE_LISTS[] = {
+    {"MAIN", MAIN_FAVORITES, sizeof(MAIN_FAVORITES) / sizeof(MAIN_FAVORITES[0])},
+    {"SECONDARY", SECONDARY_FAVORITES, sizeof(SECONDARY_FAVORITES) / sizeof(SECONDARY_FAVORITES[0])},
+};
+
+static constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);
 
 // Optional notifications mode. Leave NOTIFICATION_FEED_ENTITY undefined or set it
 // to an empty string to hide Notifications from the UI entirely.

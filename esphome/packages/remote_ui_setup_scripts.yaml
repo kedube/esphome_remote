@@ -97,20 +97,10 @@ script:
       - lambda: |-
           PersistedUIStateData state;
           state.contrast = id(contrast);
-          state.current_mode = id(current_mode);
-          state.selected_light_index = id(selected_light_index);
-          state.selected_switch_index = id(selected_switch_index);
-          state.selected_climate_index = id(selected_climate_index);
-          state.selected_water_heater_index = id(selected_water_heater_index);
-          state.selected_lock_index = id(selected_lock_index);
-          state.selected_cover_index = id(selected_cover_index);
-          state.selected_media_index = id(selected_media_index);
-          state.selected_automation_index = id(selected_automation_index);
-          state.selected_weather_index = id(selected_weather_index);
-          state.selected_fan_index = id(selected_fan_index);
-          state.selected_humidifier_index = id(selected_humidifier_index);
-          state.selected_sensor_index = id(selected_sensor_index);
-          state.selected_alarm_index = id(selected_alarm_index);
+          state.current_menu_index = id(current_menu_index);
+          for (int i = 0; i < FAVORITE_LIST_COUNT_INT; i++) {
+            state.favorite_indices[i] = favorite_selected_index_ref(i);
+          }
           state.selected_notification_index = id(selected_notification_index);
           state.selected_info_index = id(selected_info_index);
           id(persisted_ui_state) = pack_persisted_ui_state(state);

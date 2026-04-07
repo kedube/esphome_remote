@@ -9,8 +9,11 @@ script:
             - lambda: |-
                 auto it = id(oled_display);
                 RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+                UiMenuHeader header = ui_menu_header(id(current_menu_index), mode);
                 RemoteRenderContext ctx;
                 ctx.mode = mode;
+                ctx.mode_title_override = header.title;
+                ctx.mode_icon_override = header.icon;
                 ctx.now = millis();
                 ctx.contrast = id(contrast);
                 ctx.automation_index = id(selected_automation_index);

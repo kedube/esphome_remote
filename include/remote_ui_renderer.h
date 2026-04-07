@@ -16,6 +16,8 @@ class Font;
 
 struct RemoteRenderContext {
   RemoteMode mode = REMOTE_MODE_INFO;
+  const char *mode_title_override = nullptr;
+  const char *mode_icon_override = nullptr;
   uint32_t now = 0;
   int contrast = 5;
   int automation_index = 0;

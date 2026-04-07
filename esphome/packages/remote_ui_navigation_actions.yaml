@@ -4,8 +4,7 @@ script:
     then:
       - lambda: |-
           id(last_navigation_requested_at) = millis();
-          RemoteMode current = static_cast<RemoteMode>(id(current_mode));
-          id(current_mode) = next_available_mode(current, 1);
+          id(current_menu_index) = next_available_menu_index(id(current_menu_index), 1);
           id(selected_setting_option) = REMOTE_SETTING_NONE;
           id(selected_setting_detail).clear();
           id(last_setting_interaction) = 0;
@@ -1073,7 +1072,7 @@ script:
               id(selected_cover_index), id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
               id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index), id(selected_alarm_index),
               id(selected_notification_index), id(selected_info_index));
-          auto selection = resolve_current_mode_selection_context(id(current_mode), selection_refs);
+          auto selection = resolve_current_ui_selection_context(id(current_mode), id(current_menu_index), selection_refs);
           if (selection.count <= 0 || selection.selected_index == nullptr) {
             return;
           }
