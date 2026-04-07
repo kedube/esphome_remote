@@ -1,16 +1,5 @@
 #pragma once
 
-struct FavoriteEntity {
-    const char *name;
-    const char *entity_id;
-};
-
-struct FavoriteList {
-    const char *title;
-    const FavoriteEntity *entries;
-    size_t count;
-};
-
 static const FavoriteEntity MAIN_FAVORITES[] = {
     {"Living Room Lamp", "light.living_room_lamp"},
     {"Main Thermostat", "climate.main_thermostat"},
@@ -32,8 +21,6 @@ static const FavoriteList FAVORITE_LISTS[] = {
     {"MAIN", MAIN_FAVORITES, sizeof(MAIN_FAVORITES) / sizeof(MAIN_FAVORITES[0])},
     {"SECONDARY", SECONDARY_FAVORITES, sizeof(SECONDARY_FAVORITES) / sizeof(SECONDARY_FAVORITES[0])},
 };
-
-static constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);
 
 // Optional notifications mode. Leave NOTIFICATION_FEED_ENTITY undefined or set it
 // to an empty string to hide Notifications from the UI entirely.

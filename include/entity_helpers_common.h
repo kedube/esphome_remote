@@ -58,7 +58,20 @@ struct EntityEntry {
   const char *sources = nullptr;
 };
 
+struct FavoriteEntity {
+    const char *name;
+    const char *entity_id;
+};
+
+struct FavoriteList {
+    const char *title;
+    const FavoriteEntity *entries;
+    size_t count;
+};
+
 #include "local_entities.h"
+
+static constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);
 
 static constexpr int FAVORITE_LIST_COUNT_INT = static_cast<int>(FAVORITE_LIST_COUNT);
 static constexpr int MAX_PERSISTED_FAVORITE_LISTS = 8;
