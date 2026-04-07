@@ -163,7 +163,7 @@ script:
               }
               break;
             case REMOTE_SETTING_CLIMATE_FAN:
-              detail = id(selected_climate_fan_mode);
+              detail = esphome::str_upper_case(id(selected_climate_fan_mode));
               break;
             case REMOTE_SETTING_CLIMATE_HUMIDITY:
               if (!isnan(id(selected_climate_target_humidity))) {
