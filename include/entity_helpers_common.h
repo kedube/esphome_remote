@@ -74,7 +74,7 @@ struct FavoriteList {
 static constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);
 
 static constexpr int FAVORITE_LIST_COUNT_INT = static_cast<int>(FAVORITE_LIST_COUNT);
-static constexpr int MAX_PERSISTED_FAVORITE_LISTS = 8;
+static constexpr int MAX_PERSISTED_FAVORITE_LISTS = 16;
 static_assert(FAVORITE_LIST_COUNT_INT <= MAX_PERSISTED_FAVORITE_LISTS, "Too many favorite lists for persisted state");
 
 static constexpr bool cstr_eq_constexpr(const char *lhs, const char *rhs) {
