@@ -241,7 +241,7 @@ script:
               detail = id(selected_media_source);
               break;
             case REMOTE_SETTING_MEDIA_REPEAT:
-              detail = id(selected_media_repeat);
+              detail = esphome::str_upper_case(id(selected_media_repeat));
               break;
             case REMOTE_SETTING_MEDIA_SOUND:
               detail = id(selected_media_sound_mode);

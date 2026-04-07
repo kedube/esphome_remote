@@ -29,10 +29,14 @@ interval:
                 state.last_alarm_interaction = id(last_alarm_interaction);
                 state.climate_target_focus = id(climate_target_focus);
                 state.climate_target_focus_value = id(climate_target_focus_value);
+                state.selected_setting_detail = &id(selected_setting_detail);
+                state.preserve_selected_setting_detail =
+                  id(selected_setting_option) == static_cast<int>(REMOTE_SETTING_ALARM_STATE);
                 state.updated_ui = id(updated_ui);
                 apply_remote_ui_timeout_updates(millis(), state);
                 id(climate_target_focus) = state.climate_target_focus;
                 id(climate_target_focus_value) = state.climate_target_focus_value;
+                id(last_setting_interaction) = state.last_setting_interaction;
                 id(last_climate_target_focus_interaction) = state.last_climate_target_focus_interaction;
                 id(updated_ui) = state.updated_ui;
             - if:
@@ -84,6 +88,14 @@ interval:
                                   then:
                                     - script.execute: api_disconnected_screen
                                   else:
+                                    - if:
+                                        condition:
+                                          lambda: |-
+                                            return id(selected_setting_option) != static_cast<int>(REMOTE_SETTING_NONE) &&
+                                                   id(last_setting_interaction) == 0 &&
+                                                   id(selected_setting_detail).empty();
+                                        then:
+                                          - script.execute: sync_current_mode_status
                                     - if:
                                         condition:
                                           lambda: 'return id(updated_ui);'

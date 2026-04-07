@@ -127,6 +127,10 @@ void apply_remote_ui_timeout_updates(uint32_t now, RemoteUiTimeoutState &state) 
     state.updated_ui = true;
   }
   if (timeout_window_hit(now, state.last_setting_interaction, 5000, 5500)) {
+    if (!state.preserve_selected_setting_detail && state.selected_setting_detail != nullptr) {
+      state.selected_setting_detail->clear();
+      state.updated_ui = true;
+    }
     state.last_setting_interaction = 0;
   }
 

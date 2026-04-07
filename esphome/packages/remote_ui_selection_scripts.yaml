@@ -277,6 +277,13 @@ script:
                 id(updated_ui) = true;
               }
             }
+            if (opt == REMOTE_SETTING_MEDIA_REPEAT) {
+              std::string next_detail = esphome::str_upper_case(id(selected_media_repeat));
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
             if (opt == REMOTE_SETTING_MEDIA_STATE) {
               std::string next_detail = esphome::str_upper_case(id(selected_item_state));
               if (id(selected_setting_detail) != next_detail) {
@@ -287,6 +294,68 @@ script:
           }
           if (selection.mode == REMOTE_MODE_CLIMATE) {
             auto opt = static_cast<RemoteSettingOption>(id(selected_setting_option));
+            if (opt == REMOTE_SETTING_CLIMATE_LOW) {
+              std::string next_detail;
+              if (!isnan(id(selected_climate_target_temp_low))) {
+                char buf[32];
+                snprintf(buf, sizeof(buf), "TARGET: %.0f°%s", id(selected_climate_target_temp_low), "${TEMPERATURE_UNIT}");
+                next_detail = buf;
+              }
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
+            if (opt == REMOTE_SETTING_CLIMATE_HIGH) {
+              std::string next_detail;
+              if (!isnan(id(selected_climate_target_temp_high))) {
+                char buf[32];
+                snprintf(buf, sizeof(buf), "TARGET: %.0f°%s", id(selected_climate_target_temp_high), "${TEMPERATURE_UNIT}");
+                next_detail = buf;
+              }
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
+            if (opt == REMOTE_SETTING_CLIMATE_TARGET) {
+              std::string next_detail;
+              if (!isnan(id(selected_climate_target_temp))) {
+                char buf[32];
+                snprintf(buf, sizeof(buf), "TARGET: %.0f°%s", id(selected_climate_target_temp), "${TEMPERATURE_UNIT}");
+                next_detail = buf;
+              }
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
+            if (opt == REMOTE_SETTING_CLIMATE_FAN) {
+              const std::string &next_detail = id(selected_climate_fan_mode);
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
+            if (opt == REMOTE_SETTING_CLIMATE_HUMIDITY) {
+              std::string next_detail;
+              if (!isnan(id(selected_climate_target_humidity))) {
+                char buf[24];
+                snprintf(buf, sizeof(buf), "TARGET: %.0f%%", id(selected_climate_target_humidity));
+                next_detail = buf;
+              }
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
+            if (opt == REMOTE_SETTING_CLIMATE_PRESETS) {
+              const std::string &next_detail = id(selected_climate_preset);
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
             if (opt == REMOTE_SETTING_CLIMATE_ACTION) {
               std::string next_detail = esphome::str_upper_case(id(selected_climate_hvac_action));
               if (id(selected_setting_detail) != next_detail) {
@@ -304,6 +373,25 @@ script:
           }
           if (selection.mode == REMOTE_MODE_HUMIDIFIERS) {
             auto opt = static_cast<RemoteSettingOption>(id(selected_setting_option));
+            if (opt == REMOTE_SETTING_HUMIDIFIER_HUMIDITY) {
+              std::string next_detail;
+              if (!isnan(id(selected_humidifier_target_humidity))) {
+                char buf[24];
+                snprintf(buf, sizeof(buf), "TARGET: %.0f%%", id(selected_humidifier_target_humidity));
+                next_detail = buf;
+              }
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
+            if (opt == REMOTE_SETTING_HUMIDIFIER_MODE) {
+              std::string next_detail = esphome::str_upper_case(id(selected_humidifier_mode));
+              if (id(selected_setting_detail) != next_detail) {
+                id(selected_setting_detail) = next_detail;
+                id(updated_ui) = true;
+              }
+            }
             if (opt == REMOTE_SETTING_HUMIDIFIER_ACTION) {
               const std::string &next_detail = id(selected_humidifier_action);
               if (id(selected_setting_detail) != next_detail) {

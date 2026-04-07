@@ -97,6 +97,7 @@ struct RemoteUiTimeoutState {
   int climate_target_focus = 0;
   float climate_target_focus_value = NAN;
   std::string *selected_setting_detail = nullptr;
+  bool preserve_selected_setting_detail = false;
   bool updated_ui = false;
 };
 
