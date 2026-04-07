@@ -38,16 +38,11 @@ RemoteButtonPrompt describe_remote_button_prompt(
         if (action == 1) {
           prompt.feedback = "HOLD TO TRIGGER";
         } else if (action == 2) {
-          prompt.feedback = "HOLD TO ARM";
+          prompt.feedback = alarm_arm_mode_hold_label(clamp_alarm_arm_mode(selected_alarm_arm_mode));
         } else if (selected_item_state == "unknown") {
           prompt.feedback = "SYNCING";
         } else {
-          AlarmArmMode arm_mode = clamp_alarm_arm_mode(selected_alarm_arm_mode);
-          if (alarm_action_is_arm(selected_item_state, arm_mode)) {
-            prompt.feedback = alarm_arm_mode_hold_label(arm_mode);
-          } else {
-            prompt.feedback = "HOLD TO DISARM";
-          }
+          prompt.feedback = "HOLD TO DISARM";
         }
       }
       break;

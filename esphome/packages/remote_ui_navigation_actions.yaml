@@ -718,15 +718,7 @@ script:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_ALARMS;'
           then:
-            - if:
-                condition:
-                  lambda: |-
-                    return alarm_action_is_arm(id(selected_item_state),
-                        clamp_alarm_arm_mode(id(selected_alarm_arm_mode)));
-                then:
-                  - script.execute: arm_selected_alarm_with_selected_mode
-                else:
-                  - script.execute: disarm_selected_alarm
+            - script.execute: disarm_selected_alarm
 
   - id: execute_circle_button_action
     then:
