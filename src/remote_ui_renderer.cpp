@@ -318,9 +318,9 @@ void render_remote_ui(
   it->clear();
   const char *header_icon = ctx.mode_icon_override != nullptr ? ctx.mode_icon_override : mode_icon(ctx.mode);
   const char *header_title = ctx.mode_title_override != nullptr ? ctx.mode_title_override : mode_title(ctx.mode);
-  it->print(1, -3, symbols, display::COLOR_ON, display::TextAlign::LEFT, header_icon);
+  it->print(0, -3, symbols, display::COLOR_ON, display::TextAlign::LEFT, header_icon);
   it->printf(64, 4, small_font, display::COLOR_ON, display::TextAlign::CENTER, header_title);
-  it->print(127, -3, symbols, display::COLOR_ON, display::TextAlign::RIGHT, header_icon);
+  it->print(128, -3, symbols, display::COLOR_ON, display::TextAlign::RIGHT, header_icon);
 
   it->filled_rectangle(0, 12, 128, 1, display::COLOR_ON);
   if (ctx.mode != REMOTE_MODE_NOTIFICATIONS) {

@@ -66,7 +66,7 @@ script:
               if (selected_cover_has_tilt(id(selected_cover_index))) add_option(REMOTE_SETTING_COVER_TILT);
               break;
             case REMOTE_MODE_MEDIA:
-              add_option(REMOTE_SETTING_MEDIA_SELECT);
+              if (id(selected_media_device_class) != "tv") add_option(REMOTE_SETTING_MEDIA_SELECT);
               add_option(REMOTE_SETTING_MEDIA_VOLUME);
               if (!id(selected_media_shuffle).empty()) add_option(REMOTE_SETTING_MEDIA_SHUFFLE);
               if (id(selected_media_device_class) == "tv") add_option(REMOTE_SETTING_MEDIA_CHANNEL);
