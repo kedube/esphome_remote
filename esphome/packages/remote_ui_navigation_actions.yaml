@@ -133,7 +133,7 @@ script:
           }
           id(selected_setting_option) = options[next_idx];
           RemoteSettingOption chosen = static_cast<RemoteSettingOption>(id(selected_setting_option));
-          char buf[32];
+          char buf[48];
           std::string detail;
           switch (chosen) {
             case REMOTE_SETTING_LIGHT_DIMMER:
@@ -144,13 +144,23 @@ script:
               detail = selected_light_effect(id(selected_light_index));
               break;
             case REMOTE_SETTING_CLIMATE_LOW:
-              if (!isnan(id(selected_climate_target_temp_low))) {
+              if (!isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high))) {
+                snprintf(buf, sizeof(buf), "LOW: %.0f°%s   HIGH: %.0f°%s",
+                         id(selected_climate_target_temp_low), "${TEMPERATURE_UNIT}",
+                         id(selected_climate_target_temp_high), "${TEMPERATURE_UNIT}");
+                detail = buf;
+              } else if (!isnan(id(selected_climate_target_temp_low))) {
                 snprintf(buf, sizeof(buf), "TARGET: %.0f°%s", id(selected_climate_target_temp_low), "${TEMPERATURE_UNIT}");
                 detail = buf;
               }
               break;
             case REMOTE_SETTING_CLIMATE_HIGH:
-              if (!isnan(id(selected_climate_target_temp_high))) {
+              if (!isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high))) {
+                snprintf(buf, sizeof(buf), "LOW: %.0f°%s   HIGH: %.0f°%s",
+                         id(selected_climate_target_temp_low), "${TEMPERATURE_UNIT}",
+                         id(selected_climate_target_temp_high), "${TEMPERATURE_UNIT}");
+                detail = buf;
+              } else if (!isnan(id(selected_climate_target_temp_high))) {
                 snprintf(buf, sizeof(buf), "TARGET: %.0f°%s", id(selected_climate_target_temp_high), "${TEMPERATURE_UNIT}");
                 detail = buf;
               }

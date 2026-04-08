@@ -119,7 +119,7 @@ void render_remote_ui(
   const std::string &selected_setting_detail = render_string(ctx.selected_setting_detail);
   char status_line[27];
   char footer_line[27];
-  char detail_line[27];
+  char detail_line[48];
   char label_primary[32];
   char label_secondary[32];
   char label_tertiary[32];
@@ -190,6 +190,10 @@ void render_remote_ui(
            !std::isnan(ctx.selected_climate_target_temp_high) &&
            (selected_item_state == "heat_cool" ||
             ctx.selected_climate_target_temp_low != ctx.selected_climate_target_temp_high);
+  };
+  auto has_dual_climate_target_values = [&]() {
+    return !std::isnan(ctx.selected_climate_target_temp_low) &&
+           !std::isnan(ctx.selected_climate_target_temp_high);
   };
   auto draw_footer_nodividers = [&]() {
     it->filled_rectangle(0, 52, 128, 1, display::COLOR_ON);
@@ -307,7 +311,14 @@ void render_remote_ui(
 
   auto draw_setting_detail_if_needed = [&]() {
     if (show_setting_detail_feedback) {
-      if (!selected_setting_detail.empty()) {
+      RemoteSettingOption option = static_cast<RemoteSettingOption>(ctx.selected_setting_option);
+      if (ctx.mode == REMOTE_MODE_CLIMATE && has_dual_climate_target_values() &&
+          (option == REMOTE_SETTING_CLIMATE_LOW || option == REMOTE_SETTING_CLIMATE_HIGH)) {
+        snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°%s   HIGH: %.0f°%s",
+                 ctx.selected_climate_target_temp_low, ctx.temperature_unit,
+                 ctx.selected_climate_target_temp_high, ctx.temperature_unit);
+        draw_detail_text(detail_line);
+      } else if (!selected_setting_detail.empty()) {
         draw_detail_text(selected_setting_detail.c_str());
       }
       return true;

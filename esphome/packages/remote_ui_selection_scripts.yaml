@@ -296,7 +296,13 @@ script:
             auto opt = static_cast<RemoteSettingOption>(id(selected_setting_option));
             if (opt == REMOTE_SETTING_CLIMATE_LOW) {
               std::string next_detail;
-              if (!isnan(id(selected_climate_target_temp_low))) {
+              if (!isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high))) {
+                char buf[48];
+                snprintf(buf, sizeof(buf), "LOW: %.0f°%s   HIGH: %.0f°%s",
+                         id(selected_climate_target_temp_low), "${TEMPERATURE_UNIT}",
+                         id(selected_climate_target_temp_high), "${TEMPERATURE_UNIT}");
+                next_detail = buf;
+              } else if (!isnan(id(selected_climate_target_temp_low))) {
                 char buf[32];
                 snprintf(buf, sizeof(buf), "TARGET: %.0f°%s", id(selected_climate_target_temp_low), "${TEMPERATURE_UNIT}");
                 next_detail = buf;
@@ -308,7 +314,13 @@ script:
             }
             if (opt == REMOTE_SETTING_CLIMATE_HIGH) {
               std::string next_detail;
-              if (!isnan(id(selected_climate_target_temp_high))) {
+              if (!isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high))) {
+                char buf[48];
+                snprintf(buf, sizeof(buf), "LOW: %.0f°%s   HIGH: %.0f°%s",
+                         id(selected_climate_target_temp_low), "${TEMPERATURE_UNIT}",
+                         id(selected_climate_target_temp_high), "${TEMPERATURE_UNIT}");
+                next_detail = buf;
+              } else if (!isnan(id(selected_climate_target_temp_high))) {
                 char buf[32];
                 snprintf(buf, sizeof(buf), "TARGET: %.0f°%s", id(selected_climate_target_temp_high), "${TEMPERATURE_UNIT}");
                 next_detail = buf;
