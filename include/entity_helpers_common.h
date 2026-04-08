@@ -794,7 +794,6 @@ static inline const char *remote_setting_left_icon(RemoteSettingOption option) {
     case REMOTE_SETTING_COVER_POSITION:
     case REMOTE_SETTING_COVER_TILT:
     case REMOTE_SETTING_WATER_HEATER_AWAY:
-      return "\ue15b";
     case REMOTE_SETTING_CLIMATE_LOW:
     case REMOTE_SETTING_CLIMATE_HIGH:
     case REMOTE_SETTING_CLIMATE_TARGET:
@@ -854,7 +853,6 @@ static inline const char *remote_setting_right_icon(RemoteSettingOption option) 
     case REMOTE_SETTING_COVER_POSITION:
     case REMOTE_SETTING_COVER_TILT:
     case REMOTE_SETTING_WATER_HEATER_AWAY:
-      return "\ue145";
     case REMOTE_SETTING_CLIMATE_LOW:
     case REMOTE_SETTING_CLIMATE_HIGH:
     case REMOTE_SETTING_CLIMATE_TARGET:
