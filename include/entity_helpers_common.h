@@ -950,7 +950,7 @@ static inline const char *mode_icon(RemoteMode mode) {
     case REMOTE_MODE_CLIMATE:
       return "\uf076";
     case REMOTE_MODE_WATER_HEATERS:
-      return "\ueb7e";
+      return "\uf16a";
     case REMOTE_MODE_HUMIDIFIERS:
       return "\uf165";
     case REMOTE_MODE_FANS:

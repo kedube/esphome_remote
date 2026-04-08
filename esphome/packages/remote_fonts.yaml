@@ -34,6 +34,7 @@ font:
       "\ue7f7", # notifications_active
       "\ue158", # mail
       "\ue81a", # sunny
+      "\uf16a", # mode_heat
       "\ue88e", # info
     ]
   - file:

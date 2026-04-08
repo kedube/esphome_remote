@@ -3,7 +3,7 @@ substitutions:
   DEVICE_NAME: "esphome-remote"
   FRIENDLY_NAME: "ESPHome Remote"
   VERSION: "2.5"
-  FRAMEBUFFER_WEB_DEBUG: "1"
+  FRAMEBUFFER_WEB_DEBUG: "0"
   TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
   SPEED_UNIT: "MPH" # Set to "KPH" when Home Assistant wind speed values are in kilometers per hour
   PRESSURE_UNIT: "hPa" # Set to "kPa" when Home Assistant pressure values are in kilopascals
@@ -22,5 +22,5 @@ packages:
     #file: packages/pcb_rev31.yaml
 
 # Uncomment to enable framebuffer web debugging on port 80. Make sure to also set REMOTE_FRAMEBUFFER_WEB_DEBUG to 1 in the substitutions section above.
-web_server:
-  port: 80
+#web_server:
+#  port: 80
