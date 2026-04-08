@@ -69,6 +69,11 @@ struct FavoriteList {
     size_t count;
 };
 
+template <size_t Count>
+static constexpr FavoriteList make_favorite_list(const char *title, const FavoriteEntity (&entries)[Count]) {
+  return {title, entries, Count};
+}
+
 #include "local_entities.h"
 
 static constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);

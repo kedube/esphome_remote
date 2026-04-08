@@ -254,7 +254,7 @@ static const FavoriteEntity MAIN_FAVORITES[] = {
 };
 
 static const FavoriteList FAVORITE_LISTS[] = {
-  {"MAIN", MAIN_FAVORITES, sizeof(MAIN_FAVORITES) / sizeof(MAIN_FAVORITES[0])},
+  make_favorite_list("MAIN", MAIN_FAVORITES),
 };
 
 static constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);
@@ -271,8 +271,8 @@ static const FavoriteEntity UPSTAIRS_FAVORITES[] = {
 static const FavoriteEntity OUTDOOR_FAVORITES[] = {};
 
 static const FavoriteList FAVORITE_LISTS[] = {
-  {"UPSTAIRS", UPSTAIRS_FAVORITES, sizeof(UPSTAIRS_FAVORITES) / sizeof(UPSTAIRS_FAVORITES[0])},
-  {"OUTDOOR", OUTDOOR_FAVORITES, sizeof(OUTDOOR_FAVORITES) / sizeof(OUTDOOR_FAVORITES[0])},
+  make_favorite_list("UPSTAIRS", UPSTAIRS_FAVORITES),
+  make_favorite_list("OUTDOOR", OUTDOOR_FAVORITES),
 };
 
 static constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);

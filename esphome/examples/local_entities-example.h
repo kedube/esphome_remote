@@ -18,8 +18,8 @@ static const FavoriteEntity SECONDARY_FAVORITES[] = {
 };
 
 static const FavoriteList FAVORITE_LISTS[] = {
-    {"MAIN", MAIN_FAVORITES, sizeof(MAIN_FAVORITES) / sizeof(MAIN_FAVORITES[0])},
-    {"SECONDARY", SECONDARY_FAVORITES, sizeof(SECONDARY_FAVORITES) / sizeof(SECONDARY_FAVORITES[0])},
+    make_favorite_list("MAIN", MAIN_FAVORITES),
+    make_favorite_list("SECONDARY", SECONDARY_FAVORITES),
 };
 
 // Optional notifications mode. Leave NOTIFICATION_FEED_ENTITY undefined or set it
