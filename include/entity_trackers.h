@@ -625,6 +625,51 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
         entity_id, "preset_modes", [this, idx](esphome::StringRef state) { this->store_preset_modes_(idx, state); });
   }
 
+  void request_missing_climate_state(int idx) {
+    if (idx < 0 || idx >= CLIMATE_LIST_COUNT) {
+      return;
+    }
+
+    const char *entity_id = CLIMATE_LIST[idx].entity_id;
+    if (this->state_[idx] == "unknown") {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
+    }
+    if (std::isnan(this->target_temperature_[idx])) {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "temperature",
+          [this, idx](esphome::StringRef state) { this->store_target_temperature_(idx, state); });
+    }
+    if (std::isnan(this->target_temperature_low_[idx])) {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "target_temp_low",
+          [this, idx](esphome::StringRef state) { this->store_target_temperature_low_(idx, state); });
+    }
+    if (std::isnan(this->target_temperature_high_[idx])) {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "target_temp_high",
+          [this, idx](esphome::StringRef state) { this->store_target_temperature_high_(idx, state); });
+    }
+    if (std::isnan(this->current_temperature_[idx])) {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "current_temperature",
+          [this, idx](esphome::StringRef state) { this->store_current_temperature_(idx, state); });
+    }
+    if (this->hvac_action_[idx] == "unknown") {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "hvac_action",
+          [this, idx](esphome::StringRef state) { this->store_hvac_action_(idx, state); });
+    }
+    if (this->hvac_mode_[idx].empty()) {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "hvac_mode", [this, idx](esphome::StringRef state) { this->store_hvac_mode_(idx, state); });
+    }
+    if (std::isnan(this->target_humidity_[idx])) {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "humidity", [this, idx](esphome::StringRef state) { this->store_target_humidity_(idx, state); });
+    }
+  }
+
   void request_all_states() {
     request_all_states_by_count(CLIMATE_LIST_COUNT, [this](int i) { this->request_climate_state(i); });
   }
@@ -1118,6 +1163,26 @@ class MediaStatusTracker : public esphome::api::CustomAPIDevice {
         entity_id, "sound_mode_list", [this, idx](esphome::StringRef state) { this->store_sound_mode_list_(idx, state); });
   }
 
+  void request_missing_media_state(int idx) {
+    if (idx < 0 || idx >= MEDIA_PLAYER_LIST_COUNT) {
+      return;
+    }
+
+    const char *entity_id = MEDIA_PLAYER_LIST[idx].entity_id;
+    if (this->state_[idx] == "unknown") {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
+    }
+    if (this->device_class_[idx].empty()) {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "device_class", [this, idx](esphome::StringRef state) { this->store_device_class_(idx, state); });
+    }
+    if (std::isnan(this->volume_[idx])) {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "volume_level", [this, idx](esphome::StringRef state) { this->store_volume_(idx, state); });
+    }
+  }
+
   void request_all_states() {
     request_all_states_by_count(MEDIA_PLAYER_LIST_COUNT, [this](int i) { this->request_media_state(i); });
   }
@@ -1480,6 +1545,61 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
         entity_id, "dew_point", [this, idx](esphome::StringRef state) { this->store_dew_point_(idx, state); });
     esphome::api::global_api_server->get_home_assistant_state(
         entity_id, "apparent_temperature", [this, idx](esphome::StringRef state) { this->store_apparent_temperature_(idx, state); });
+  }
+
+  void request_missing_weather_state(int idx) {
+    if (idx < 0 || idx >= WEATHER_LIST_COUNT) {
+      return;
+    }
+
+    const char *entity_id = WEATHER_LIST[idx].entity_id;
+    if (this->state_[idx] == "unknown") {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
+    }
+    if (std::isnan(this->temperature_[idx])) {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "temperature",
+          [this, idx](esphome::StringRef state) { this->store_temperature_(idx, state); });
+    }
+    if (std::isnan(this->humidity_[idx])) {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "humidity", [this, idx](esphome::StringRef state) { this->store_humidity_(idx, state); });
+    }
+    if (std::isnan(this->high_temperature_[idx]) || std::isnan(this->low_temperature_[idx]) ||
+        std::isnan(this->precipitation_[idx])) {
+      esphome::api::global_api_server->get_home_assistant_state(
+          entity_id, "forecast", [this, idx](esphome::StringRef state) { this->store_forecast_(idx, state); });
+    }
+    this->request_weather_supplemental_state(idx);
+  }
+
+  void request_weather_supplemental_state(int idx) {
+    if (idx < 0 || idx >= WEATHER_LIST_COUNT) {
+      return;
+    }
+
+    const char *entity_id = WEATHER_LIST[idx].entity_id;
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "wind_speed", [this, idx](esphome::StringRef state) { this->store_wind_speed_(idx, state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "wind_bearing", [this, idx](esphome::StringRef state) { this->store_wind_bearing_(idx, state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "wind_gust_speed", [this, idx](esphome::StringRef state) { this->store_wind_gust_speed_(idx, state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "pressure", [this, idx](esphome::StringRef state) { this->store_pressure_(idx, state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "cloud_coverage", [this, idx](esphome::StringRef state) { this->store_cloud_coverage_(idx, state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "uv_index", [this, idx](esphome::StringRef state) { this->store_uv_index_(idx, state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "dew_point", [this, idx](esphome::StringRef state) { this->store_dew_point_(idx, state); });
+    esphome::api::global_api_server->get_home_assistant_state(
+        entity_id, "apparent_temperature", [this, idx](esphome::StringRef state) { this->store_apparent_temperature_(idx, state); });
+  }
+
+  void request_all_supplemental_states() {
+    request_all_states_by_count(WEATHER_LIST_COUNT, [this](int i) { this->request_weather_supplemental_state(i); });
   }
 
   void request_all_states() {

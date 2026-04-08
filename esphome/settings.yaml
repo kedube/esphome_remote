@@ -14,6 +14,7 @@ substitutions:
   ALARM_TRIGGER_HOLD_DURATION_MS: "10000" # hold time for triggering the alarm from the settings button
   ALARM_STATUS_UPDATE_DELAY_MS: "20000" # wait before replacing arming/disarming status feedback
   LOW_BATTERY_VOLTAGE: "3.45" # boot warning threshold when battery monitoring is available
+  
 
 packages:
   select_pcb: !include

@@ -213,7 +213,7 @@ static inline float humidifier_current_humidity_for_index(int idx) {
 
 static inline void request_selected_climate_status(int idx) {
   ensure_remote_status_trackers();
-  climate_status_tracker_storage.request_climate_state(idx);
+  climate_status_tracker_storage.request_missing_climate_state(idx);
 }
 
 static inline void request_selected_water_heater_status(int idx) {
@@ -390,7 +390,7 @@ static inline float selected_cover_tilt(int idx) {
 
 static inline void request_selected_media_status(int idx) {
   ensure_remote_status_trackers();
-  media_status_tracker_storage.request_media_state(idx);
+  media_status_tracker_storage.request_missing_media_state(idx);
 }
 
 static inline const std::string &selected_media_state(int idx) {
@@ -548,12 +548,12 @@ static inline const std::string &notification_id_for_index(int idx) {
 
 static inline void request_selected_weather_status(int idx) {
   ensure_remote_status_trackers();
-  weather_status_tracker_storage.request_weather_state(idx);
+  weather_status_tracker_storage.request_missing_weather_state(idx);
 }
 
 static inline void request_all_weather_status() {
   ensure_remote_status_trackers();
-  weather_status_tracker_storage.request_all_states();
+  weather_status_tracker_storage.request_all_supplemental_states();
 }
 
 static inline const std::string &weather_state_for_index(int idx) {
@@ -686,4 +686,19 @@ static inline void request_mode_status_throttled(
   last_requested_mode = mode;
   last_requested_mode_index = idx;
   last_requested_mode_at = now;
+}
+
+static inline uint32_t refresh_retry_interval_ms(RemoteMode mode) {
+  switch (mode) {
+    case REMOTE_MODE_CLIMATE:
+    case REMOTE_MODE_MEDIA:
+    case REMOTE_MODE_WEATHER:
+      return 10000;
+    case REMOTE_MODE_HUMIDIFIERS:
+    case REMOTE_MODE_LIGHTS:
+    case REMOTE_MODE_FANS:
+      return 5000;
+    default:
+      return 2500;
+  }
 }

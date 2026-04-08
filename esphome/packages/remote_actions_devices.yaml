@@ -1,4 +1,19 @@
 script:
+  - id: refresh_selected_light_status
+    then:
+      - lambda: |-
+          request_selected_light_status(id(selected_light_index));
+
+  - id: refresh_selected_fan_status
+    then:
+      - lambda: |-
+          request_selected_fan_status(id(selected_fan_index));
+
+  - id: refresh_selected_humidifier_status
+    then:
+      - lambda: |-
+          request_selected_humidifier_status(id(selected_humidifier_index));
+
   - id: refresh_selected_switch_status
     then:
       - lambda: |-
@@ -20,17 +35,21 @@ script:
           condition:
             lambda: 'return id(selected_item_state) == "on";'
           then:
-            - homeassistant.service:
-                service: light.turn_off
+            - homeassistant.action:
+                action: light.turn_off
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - script.execute: refresh_selected_light_status
+                on_error:
+                  - script.execute: refresh_selected_light_status
             - lambda: |-
                 id(selected_item_state) = "off";
                 id(updated_ui) = true;
             - script.execute: update_display
           else:
-            - homeassistant.service:
-                service: light.turn_on
+            - homeassistant.action:
+                action: light.turn_on
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
                   brightness_pct: !lambda |-
@@ -38,6 +57,10 @@ script:
                       return 100;
                     }
                     return id(selected_brightness_pct);
+                on_success:
+                  - script.execute: refresh_selected_light_status
+                on_error:
+                  - script.execute: refresh_selected_light_status
             - lambda: |-
                 id(selected_item_state) = "on";
                 if (id(selected_brightness_pct) <= 0) {
@@ -53,10 +76,14 @@ script:
           condition:
             lambda: 'return id(selected_item_state) == "on";'
           then:
-            - homeassistant.service:
-                service: fan.turn_off
+            - homeassistant.action:
+                action: fan.turn_off
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - script.execute: refresh_selected_fan_status
+                on_error:
+                  - script.execute: refresh_selected_fan_status
             - lambda: |-
                 id(selected_item_state) = "off";
                 id(selected_fan_speed_pct) = 0;
@@ -67,8 +94,8 @@ script:
                 condition:
                   lambda: 'return selected_fan_has_percentage(id(selected_fan_index));'
                 then:
-                  - homeassistant.service:
-                      service: fan.turn_on
+                  - homeassistant.action:
+                      action: fan.turn_on
                       data:
                         entity_id: !lambda 'return id(selected_item_entity);'
                         percentage: !lambda |-
@@ -76,11 +103,19 @@ script:
                             return 100;
                           }
                           return id(selected_fan_speed_pct);
+                      on_success:
+                        - script.execute: refresh_selected_fan_status
+                      on_error:
+                        - script.execute: refresh_selected_fan_status
                 else:
-                  - homeassistant.service:
-                      service: fan.turn_on
+                  - homeassistant.action:
+                      action: fan.turn_on
                       data:
                         entity_id: !lambda 'return id(selected_item_entity);'
+                      on_success:
+                        - script.execute: refresh_selected_fan_status
+                      on_error:
+                        - script.execute: refresh_selected_fan_status
             - lambda: |-
                 id(selected_item_state) = "on";
                 if (selected_fan_has_percentage(id(selected_fan_index)) && id(selected_fan_speed_pct) <= 0) {
@@ -278,18 +313,26 @@ script:
           condition:
             lambda: 'return id(selected_item_state) == "off";'
           then:
-            - homeassistant.service:
-                service: humidifier.turn_on
+            - homeassistant.action:
+                action: humidifier.turn_on
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - script.execute: refresh_selected_humidifier_status
+                on_error:
+                  - script.execute: refresh_selected_humidifier_status
             - lambda: |-
                 id(selected_item_state) = "on";
                 id(updated_ui) = true;
           else:
-            - homeassistant.service:
-                service: humidifier.turn_off
+            - homeassistant.action:
+                action: humidifier.turn_off
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
+                on_success:
+                  - script.execute: refresh_selected_humidifier_status
+                on_error:
+                  - script.execute: refresh_selected_humidifier_status
             - lambda: |-
                 id(selected_item_state) = "off";
                 id(selected_humidifier_action) = "off";
@@ -312,11 +355,15 @@ script:
           id(selected_humidifier_target_humidity) = next;
           id(last_humidifier_interaction) = millis();
           id(updated_ui) = true;
-      - homeassistant.service:
-          service: humidifier.set_humidity
+      - homeassistant.action:
+          action: humidifier.set_humidity
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
             humidity: !lambda 'return id(selected_humidifier_target_humidity);'
+          on_success:
+            - script.execute: refresh_selected_humidifier_status
+          on_error:
+            - script.execute: refresh_selected_humidifier_status
       - script.execute: update_display
 
   - id: humidifier_target_up
@@ -349,11 +396,15 @@ script:
           condition:
             lambda: 'return !id(selected_humidifier_mode).empty();'
           then:
-            - homeassistant.service:
-                service: humidifier.set_mode
+            - homeassistant.action:
+                action: humidifier.set_mode
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
                   mode: !lambda 'return id(selected_humidifier_mode);'
+                on_success:
+                  - script.execute: refresh_selected_humidifier_status
+                on_error:
+                  - script.execute: refresh_selected_humidifier_status
             - script.execute: update_display
 
   - id: cycle_selected_humidifier_mode_step
@@ -376,11 +427,15 @@ script:
           condition:
             lambda: 'return !id(selected_humidifier_mode).empty();'
           then:
-            - homeassistant.service:
-                service: humidifier.set_mode
+            - homeassistant.action:
+                action: humidifier.set_mode
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
                   mode: !lambda 'return id(selected_humidifier_mode);'
+                on_success:
+                  - script.execute: refresh_selected_humidifier_status
+                on_error:
+                  - script.execute: refresh_selected_humidifier_status
             - script.execute:
                 id: set_setting_preview
                 text: !lambda 'return esphome::str_upper_case(id(selected_humidifier_mode));'

@@ -144,7 +144,8 @@ script:
 
           sync_remote_ui_state(selection.mode, selection.resolved_index, ui);
           if (ui.refresh_requested) {
-            request_mode_status_throttled(selection.mode, ui.refresh_idx, millis(), 2500);
+            request_mode_status_throttled(
+                selection.mode, ui.refresh_idx, millis(), refresh_retry_interval_ms(selection.mode));
           }
           if (static_cast<RemoteSettingOption>(id(selected_setting_option)) == REMOTE_SETTING_LIGHT_DIMMER
               && id(selected_item_state) == "on" && id(selected_brightness_pct) > 0) {

@@ -4,7 +4,11 @@ interval:
     then:
       - if:
           condition:
-            lambda: 'return (millis() / 1000) - id(last_active) >= ${SLEEP_DURATION};'
+            lambda: |-
+              if (id(wake_button_press_started_at) != 0) {
+                return false;
+              }
+              return (millis() / 1000) - id(last_active) >= ${SLEEP_DURATION};
           then:
             - script.execute: turn_off
           else:
@@ -39,6 +43,21 @@ interval:
                 id(last_setting_interaction) = state.last_setting_interaction;
                 id(last_climate_target_focus_interaction) = state.last_climate_target_focus_interaction;
                 id(updated_ui) = state.updated_ui;
+            - if:
+                condition:
+                  lambda: |-
+                    if (id(wake_button_press_started_at) == 0 || id(wake_button_long_press_fired)) {
+                      return false;
+                    }
+                    if (!id(wake_button).state) {
+                      return false;
+                    }
+                    return (millis() - id(wake_button_press_started_at)) >= 8000;
+                then:
+                  - lambda: |-
+                      id(wake_button_long_press_fired) = true;
+                      id(wake_button_press_started_at) = 0;
+                  - script.execute: reboot_device
             - if:
                 condition:
                   wifi.connected:
@@ -91,6 +110,14 @@ interval:
                                     - if:
                                         condition:
                                           lambda: |-
+                                            uint32_t now = millis();
+                                            return id(last_navigation_requested_at) == 0 ||
+                                                   (now - id(last_navigation_requested_at)) >= 250;
+                                        then:
+                                          - script.execute: sync_current_mode_status
+                                    - if:
+                                        condition:
+                                          lambda: |-
                                             return id(selected_setting_option) != static_cast<int>(REMOTE_SETTING_NONE) &&
                                                    id(last_setting_interaction) == 0 &&
                                                    id(selected_setting_detail).empty();
@@ -101,32 +128,6 @@ interval:
                                           lambda: 'return id(updated_ui);'
                                         then:
                                           - script.execute: update_display
-  - interval: 2s
-    then:
-      - if:
-          condition:
-            lambda: |-
-              if (id(low_battery_popup_active) || id(show_boot_screen)) {
-                return false;
-              }
-              if (!wifi::global_wifi_component->is_connected()) {
-                return false;
-              }
-              if (!api::global_api_server->is_connected()) {
-                return false;
-              }
-              uint32_t now = millis();
-              if (id(last_navigation_requested_at) != 0 && (now - id(last_navigation_requested_at)) < 750) {
-                return false;
-              }
-              return true;
-          then:
-            - script.execute: sync_current_mode_status
-            - if:
-                condition:
-                  lambda: 'return id(updated_ui);'
-                then:
-                  - script.execute: update_display
   - interval: 30min
     then:
       - lambda: |-

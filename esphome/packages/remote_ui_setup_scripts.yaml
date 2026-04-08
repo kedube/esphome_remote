@@ -19,11 +19,21 @@ script:
           it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "HOLD TO REBOOT");
           it->display();
 
+  - id: show_rebooting_screen
+    mode: single
+    then:
+      - lambda: |-
+          auto it = id(oled_display);
+          it->clear();
+          it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\uf053");
+          it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "REBOOTING...");
+          it->display();
+
   - id: reboot_device
     mode: single
     then:
-      - script.execute: show_hold_to_reboot_screen
-      - delay: 100ms
+      - script.execute: show_rebooting_screen
+      - delay: 2000ms
       - lambda: |-
           App.safe_reboot();
 
