@@ -2,9 +2,10 @@ substitutions:
   BOARD: "esp32dev"
   DEVICE_NAME: "esphome-remote"
   FRIENDLY_NAME: "ESPHome Remote"
-  VERSION: "2.6beta"
+  VERSION: "2.6"
   FRAMEBUFFER_WEB_DEBUG: "0"
-  NOTIFICATION_FEED_MAX_ITEMS: "16"
+  NOTIFICATION_FEED_MAX_ITEMS: "16" # Max number of notifications to keep in the feed and show on the remote
+  MAX_PERSISTED_FAVORITE_LISTS: "16" # Max number of favorite lists that can be persisted (must be >= the number of lists defined in your configuration)
   TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
   SPEED_UNIT: "MPH" # Set to "KPH" when Home Assistant wind speed values are in kilometers per hour
   PRESSURE_UNIT: "hPa" # Set to "kPa" when Home Assistant pressure values are in kilopascals

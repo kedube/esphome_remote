@@ -329,6 +329,10 @@ This file also contains the most common substitutions you may want to change:
   Network name used by ESPHome and OTA.
 - `FRIENDLY_NAME`
   Human-readable device name shown in Home Assistant.
+- `NOTIFICATION_FEED_MAX_ITEMS`
+  Maximum number of notification messages cached and exposed in Notifications mode.
+- `MAX_PERSISTED_FAVORITE_LISTS`
+  Maximum number of favorite lists stored in persisted UI state. This must be at least as large as your configured favorite list count.
 - `TEMPERATURE_UNIT`
   Set to `"F"` or `"C"` to match your Home Assistant climate values.
 - `SLEEP_DURATION`
@@ -424,7 +428,7 @@ Notes:
 
 - The remote restores the previously selected favorite list and selected item after wake or reboot.
 - Empty favorite lists are skipped automatically.
-- Holding the wake/power button for 5 seconds (default) reboots the remote. The screen shows `HOLD TO REBOOT` while held, then `REBOOTING...` for about 2 seconds before restart.
+- Holding the wake/power button for `EXTENDED_HOLD_DURATION_MS` reboots the remote. The screen shows `HOLD TO REBOOT` while held, then `REBOOTING...` briefly before restart.
 - Lock, cover, and automation actions use long-press protection.
 - Circle is the primary action button. Play/pause is the alternate action button.
 - When a favorite entry resolves to a lock, circle locks and play/pause unlocks. The remote shows temporary detail-line feedback such as `LOCKING...`, `UNLOCKING...`, `LOCKED`, `UNLOCKED`, `JAMMED`, `ALREADY LOCKED`, and `ALREADY UNLOCKED`.
@@ -463,6 +467,10 @@ These substitutions in `esphome/settings.yaml` are the main things you may want 
 
 - `TEMPERATURE_UNIT`
   Set to `"F"` or `"C"` to match your Home Assistant climate values.
+- `NOTIFICATION_FEED_MAX_ITEMS`
+  Maximum number of notification items retained in the remote's notification feed cache.
+- `MAX_PERSISTED_FAVORITE_LISTS`
+  Maximum number of favorite lists that can be stored in persisted UI state.
 - `SLEEP_DURATION`
   Idle time before the remote sleeps.
 - `DEEP_SLEEP_DURATION`

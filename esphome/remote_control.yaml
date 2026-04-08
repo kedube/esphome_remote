@@ -41,6 +41,7 @@ esphome:
     build_flags:
       - -DREMOTE_FRAMEBUFFER_WEB_DEBUG=${FRAMEBUFFER_WEB_DEBUG}
       - -DREMOTE_NOTIFICATION_FEED_MAX_ITEMS=${NOTIFICATION_FEED_MAX_ITEMS}
+      - -DREMOTE_MAX_PERSISTED_FAVORITE_LISTS=${MAX_PERSISTED_FAVORITE_LISTS}
   includes:
     - ../include/entity_helpers.h
     - ../include/entity_trackers.h
