@@ -4,6 +4,7 @@ substitutions:
   FRIENDLY_NAME: "ESPHome Remote"
   VERSION: "2.6beta"
   FRAMEBUFFER_WEB_DEBUG: "0"
+  NOTIFICATION_FEED_MAX_ITEMS: "16"
   TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
   SPEED_UNIT: "MPH" # Set to "KPH" when Home Assistant wind speed values are in kilometers per hour
   PRESSURE_UNIT: "hPa" # Set to "kPa" when Home Assistant pressure values are in kilopascals
@@ -11,7 +12,7 @@ substitutions:
   SLEEP_DURATION: "120" # seconds until auto-sleep
   DEEP_SLEEP_DURATION: "360min"
   LONG_PRESS_DURATION_MS: "2000" # hold time for lock/cover/automation actions
-  ALARM_TRIGGER_HOLD_DURATION_MS: "10000" # hold time for triggering the alarm from the settings button
+  EXTENDED_HOLD_DURATION_MS: "5000" # shared hold time for alarm trigger and wake-button reboot
   ALARM_STATUS_UPDATE_DELAY_MS: "20000" # wait before replacing arming/disarming status feedback
   LOW_BATTERY_VOLTAGE: "3.45" # boot warning threshold when battery monitoring is available
   

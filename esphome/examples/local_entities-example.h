@@ -1,15 +1,15 @@
 #pragma once
 
-static const FavoriteEntity MAIN_FAVORITES[] = {
-    {"Living Room Lamp", "light.living_room_lamp"},
-    {"Main Thermostat", "climate.main_thermostat"},
+static const FavoriteEntity LIVING_ROOM_FAVORITES[] = {
+    {"Lamp", "light.living_room_lamp"},
+    {"Thermostat", "climate.main_thermostat"},
     {"Front Door", "lock.front_door"},
-    {"Living Room Speaker", "media_player.living_room_speaker"},
+    {"Speaker", "media_player.living_room_speaker"},
     {"Home Alarm", "alarm_control_panel.home"},
 };
 
-static const FavoriteEntity SECONDARY_FAVORITES[] = {
-    {"Kitchen Ceiling", "light.kitchen_ceiling"},
+static const FavoriteEntity KITCHEN_FAVORITES[] = {
+    {"Ceiling Light", "light.kitchen_ceiling"},
     {"Coffee Maker", "switch.coffee_maker"},
     {"Garage Door", "cover.garage_door"},
     {"Indoor Temperature", "sensor.indoor_temperature"},
@@ -18,8 +18,8 @@ static const FavoriteEntity SECONDARY_FAVORITES[] = {
 };
 
 static const FavoriteList FAVORITE_LISTS[] = {
-    make_favorite_list("MAIN", MAIN_FAVORITES),
-    make_favorite_list("SECONDARY", SECONDARY_FAVORITES),
+    make_favorite_list("LIVING ROOM", LIVING_ROOM_FAVORITES),
+    make_favorite_list("KITCHEN", KITCHEN_FAVORITES),
 };
 
 // Optional notifications mode. Leave NOTIFICATION_FEED_ENTITY undefined or set it

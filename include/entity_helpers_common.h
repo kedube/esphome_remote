@@ -227,7 +227,12 @@ static constexpr const EntityEntry *WEATHER_LIST = WEATHER_LIST_STORAGE.data();
 static const char *const INFO_ITEM_NAMES[] = {"Time & Date", "Network", "Version"};
 static const char *const INFO_ITEM_ENTITIES[] = {"info.date", "info.network", "info.version"};
 static const int INFO_ITEM_COUNT = sizeof(INFO_ITEM_NAMES) / sizeof(INFO_ITEM_NAMES[0]);
-static constexpr int NOTIFICATION_FEED_MAX_ITEMS = 16;
+
+#ifndef REMOTE_NOTIFICATION_FEED_MAX_ITEMS
+#define REMOTE_NOTIFICATION_FEED_MAX_ITEMS 16
+#endif
+
+static constexpr int NOTIFICATION_FEED_MAX_ITEMS = REMOTE_NOTIFICATION_FEED_MAX_ITEMS;
 
 #ifndef NOTIFICATION_FEED_ENTITY
 #define NOTIFICATION_FEED_ENTITY ""

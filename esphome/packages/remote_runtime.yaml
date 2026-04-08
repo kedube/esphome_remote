@@ -52,7 +52,7 @@ interval:
                     if (!id(wake_button).state) {
                       return false;
                     }
-                    return (millis() - id(wake_button_press_started_at)) >= 8000;
+                    return (millis() - id(wake_button_press_started_at)) >= ${EXTENDED_HOLD_DURATION_MS};
                 then:
                   - lambda: |-
                       id(wake_button_long_press_fired) = true;

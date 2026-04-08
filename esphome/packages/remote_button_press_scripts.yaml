@@ -33,7 +33,7 @@ script:
       - lambda: |-
           auto prompt = describe_remote_button_prompt(
               static_cast<RemoteMode>(id(current_mode)), action, id(selected_item_state), id(selected_alarm_arm_mode),
-              ${LONG_PRESS_DURATION_MS}, ${ALARM_TRIGGER_HOLD_DURATION_MS});
+              ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS});
           switch (prompt.feedback_target) {
             case REMOTE_INPUT_FEEDBACK_LOCK:
               id(set_lock_feedback).execute(prompt.feedback);
@@ -87,7 +87,7 @@ script:
   - id: await_settings_long_press
     mode: restart
     then:
-      - delay: ${ALARM_TRIGGER_HOLD_DURATION_MS}ms
+      - delay: ${EXTENDED_HOLD_DURATION_MS}ms
       - lambda: |-
           bool same_mode = id(settings_button_press_mode) == id(current_mode);
           bool still_pressed = id(settings_mode_button).state;
@@ -105,7 +105,7 @@ script:
       - lambda: |-
           auto prompt = describe_remote_button_prompt(
               static_cast<RemoteMode>(id(current_mode)), 0, id(selected_item_state), id(selected_alarm_arm_mode),
-              ${LONG_PRESS_DURATION_MS}, ${ALARM_TRIGGER_HOLD_DURATION_MS});
+              ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS});
           if (!prompt.requires_long_press) {
             id(primary_button_press_started_at) = 0;
             id(primary_button_press_mode) = -1;
@@ -144,7 +144,7 @@ script:
       - lambda: |-
           auto prompt = describe_remote_button_prompt(
               static_cast<RemoteMode>(id(current_mode)), 2, id(selected_item_state), id(selected_alarm_arm_mode),
-              ${LONG_PRESS_DURATION_MS}, ${ALARM_TRIGGER_HOLD_DURATION_MS});
+              ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS});
           if (!prompt.requires_long_press) {
             id(play_pause_button_press_started_at) = 0;
             id(play_pause_button_press_mode) = -1;
@@ -183,7 +183,7 @@ script:
       - lambda: |-
           auto prompt = describe_remote_button_prompt(
               static_cast<RemoteMode>(id(current_mode)), 1, id(selected_item_state), id(selected_alarm_arm_mode),
-              ${LONG_PRESS_DURATION_MS}, ${ALARM_TRIGGER_HOLD_DURATION_MS});
+              ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS});
           if (!prompt.requires_long_press) {
             id(settings_button_press_started_at) = 0;
             id(settings_button_press_mode) = -1;

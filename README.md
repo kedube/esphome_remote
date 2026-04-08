@@ -337,8 +337,8 @@ This file also contains the most common substitutions you may want to change:
   Duration of deep sleep.
 - `LONG_PRESS_DURATION_MS`
   Hold time for protected actions.
-- `ALARM_TRIGGER_HOLD_DURATION_MS`
-  Hold time for the Settings button alarm-trigger action. Default is 10 seconds.
+- `EXTENDED_HOLD_DURATION_MS`
+  Shared hold time for long protected actions that use the extended timer, including the Settings button alarm trigger and wake-button reboot. Default is 10 seconds.
 - `ALARM_CODE`
   Optional alarm code. Leave it empty or replace it with `!secret alarm_code`.
 - `LOW_BATTERY_VOLTAGE`
@@ -424,6 +424,7 @@ Notes:
 
 - The remote restores the previously selected favorite list and selected item after wake or reboot.
 - Empty favorite lists are skipped automatically.
+- Holding the wake/power button for 5 seconds (default) reboots the remote. The screen shows `HOLD TO REBOOT` while held, then `REBOOTING...` for about 2 seconds before restart.
 - Lock, cover, and automation actions use long-press protection.
 - Circle is the primary action button. Play/pause is the alternate action button.
 - When a favorite entry resolves to a lock, circle locks and play/pause unlocks. The remote shows temporary detail-line feedback such as `LOCKING...`, `UNLOCKING...`, `LOCKED`, `UNLOCKED`, `JAMMED`, `ALREADY LOCKED`, and `ALREADY UNLOCKED`.
@@ -432,7 +433,7 @@ Notes:
 - When a favorite entry resolves to an alarm, circle long-press arms using the currently selected arm mode when the panel is disarmed.
 - When a favorite entry resolves to an alarm, play/pause long-press disarms the panel.
 - When a favorite entry resolves to an alarm, dimmer up and dimmer down cycle `away`, `home`, `night`, and `vacation` arm modes in the details line for 5 seconds.
-- When a favorite entry resolves to an alarm, the Settings button must be held for `ALARM_TRIGGER_HOLD_DURATION_MS` to call `alarm_trigger`. The details line shows `HOLD TO TRIGGER` while held.
+- When a favorite entry resolves to an alarm, the Settings button must be held for `EXTENDED_HOLD_DURATION_MS` to call `alarm_trigger`. The details line shows `HOLD TO TRIGGER` while held.
 - Alarm actions use temporary details-line feedback such as `ARMING...`, `DISARMING...`, `TRIGGERING...`, `ARMED HOME`, `DISARMED`, `TRIGGERED`, and `FAILED`-style responses when Home Assistant reports an error.
 - Info mode includes Time & Date, Network, and Version screens.
 - Notifications reads from `NOTIFICATION_FEED_ENTITY` in `esphome/local_entities.h`.
@@ -468,8 +469,8 @@ These substitutions in `esphome/settings.yaml` are the main things you may want 
   Duration of deep sleep.
 - `LONG_PRESS_DURATION_MS`
   Hold time for protected actions.
-- `ALARM_TRIGGER_HOLD_DURATION_MS`
-  Hold time for the alarm trigger action on the Settings button.
+- `EXTENDED_HOLD_DURATION_MS`
+  Shared hold time for the alarm trigger action on the Settings button and wake-button reboot.
 - `ALARM_CODE`
   Optional alarm code. This can stay empty or be set from `!secret alarm_code`.
 - `LOW_BATTERY_VOLTAGE`

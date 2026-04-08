@@ -22,4 +22,4 @@ struct RemoteButtonPrompt {
 
 RemoteButtonPrompt describe_remote_button_prompt(
     RemoteMode mode, int action, const std::string &selected_item_state, int selected_alarm_arm_mode,
-    uint32_t default_hold_ms, uint32_t alarm_trigger_hold_ms);
+    uint32_t default_hold_ms, uint32_t extended_hold_ms);
