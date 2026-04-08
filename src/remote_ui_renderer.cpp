@@ -383,33 +383,42 @@ void render_remote_ui(
       if (show_climate_target_focus) {
         if (!std::isnan(ctx.climate_target_focus_value)) {
           if (!dual_target) {
-            snprintf(status_line, sizeof(status_line), "TARGET: %.0f°%s", ctx.climate_target_focus_value, ctx.temperature_unit);
+            snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°%s", ctx.climate_target_focus_value, ctx.temperature_unit);
           } else if (ctx.climate_target_focus == 2) {
-            snprintf(status_line, sizeof(status_line), "HIGH: %.0f°%s", ctx.climate_target_focus_value, ctx.temperature_unit);
+            snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°%s   HIGH: %.0f°%s", ctx.selected_climate_target_temp_low, ctx.temperature_unit, ctx.climate_target_focus_value, ctx.temperature_unit);
           } else {
-            snprintf(status_line, sizeof(status_line), "LOW: %.0f°%s", ctx.climate_target_focus_value, ctx.temperature_unit);
+            snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°%s   HIGH: %.0f°%s", ctx.climate_target_focus_value, ctx.temperature_unit, ctx.selected_climate_target_temp_high, ctx.temperature_unit);
           }
         }
-      } else if (!std::isnan(ctx.selected_climate_current_temp)) {
+      }
+
+      if (!std::isnan(ctx.selected_climate_current_temp)) {
         snprintf(status_line, sizeof(status_line), "%.0f°%s", ctx.selected_climate_current_temp, ctx.temperature_unit);
       } else {
         snprintf(status_line, sizeof(status_line), "SYNCING");
       }
       draw_centered_state(status_line, 35);
 
-      if (!show_setting_detail_feedback) {
-        if (!show_climate_target_focus && dual_target && strcmp(label_secondary, "UNKNOWN") != 0) {
+      if (show_climate_target_focus) {
+        draw_detail_text(detail_line);
+      } else if (!show_setting_detail_feedback) {
+        if (dual_target && strcmp(label_secondary, "UNKNOWN") != 0) {
           snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°%s   HIGH: %.0f°%s",
                    ctx.selected_climate_target_temp_low, ctx.temperature_unit,
                    ctx.selected_climate_target_temp_high, ctx.temperature_unit);
           draw_detail_text(detail_line);
-        } else if (!show_climate_target_focus && !std::isnan(ctx.selected_climate_target_temp) && strcmp(label_secondary, "UNKNOWN") != 0) {
+        } else if (!std::isnan(ctx.selected_climate_target_temp) && strcmp(label_secondary, "UNKNOWN") != 0) {
           snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°%s", ctx.selected_climate_target_temp, ctx.temperature_unit);
           draw_detail_text(detail_line);
         }
       }
 
-      if (!draw_setting_detail_if_needed()) {
+      bool drew_setting_detail = false;
+      if (!show_climate_target_focus) {
+        drew_setting_detail = draw_setting_detail_if_needed();
+      }
+
+      if (!drew_setting_detail && !(show_climate_target_focus && show_setting_detail_feedback)) {
         draw_blank_or_contrast_footer();
       } else {
         draw_setting_footer();
