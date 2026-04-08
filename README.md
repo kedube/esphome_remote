@@ -6,7 +6,7 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 
 ## Gallery
 
-![Remote photo 1](images/remote_4.jpeg)
+![Remote photo 1](images/remote_1.jpeg)
 
 ## Remote UI Screenshots
 
