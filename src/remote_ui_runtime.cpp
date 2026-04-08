@@ -18,7 +18,6 @@ void reset_remote_ui_state(RemoteUiResetState &state) {
   *state.selected_climate_hvac_action = "unknown";
   state.selected_climate_fan_mode->clear();
   state.selected_climate_hvac_mode->clear();
-  state.selected_climate_preset->clear();
   *state.selected_climate_target_temp_low = NAN;
   *state.selected_climate_target_temp_high = NAN;
   *state.selected_climate_current_temp = NAN;
@@ -36,7 +35,6 @@ void reset_remote_ui_state(RemoteUiResetState &state) {
   state.selected_media_repeat->clear();
   state.selected_media_sound_mode->clear();
   state.last_media_power_feedback->clear();
-  *state.selected_automation_state = "unknown";
   state.last_alarm_feedback->clear();
   *state.last_alarm_interaction = 0;
   state.last_lock_feedback->clear();
@@ -81,50 +79,32 @@ static inline bool timeout_window_hit(uint32_t now, uint32_t last_interaction, u
 }
 
 void apply_remote_ui_timeout_updates(uint32_t now, RemoteUiTimeoutState &state) {
-  if (timeout_window_hit(now, state.last_brightness_interaction, 3000, 3500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_switch_interaction, 5000, 5500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_fan_speed_interaction, 3000, 3500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_humidifier_interaction, 5000, 5500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_humidifier_mode_interaction, 5000, 5500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_climate_interaction, 3000, 3500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_lock_interaction, 5000, 5500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_cover_interaction, 5000, 5500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_cover_position_interaction, 3000, 3500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_media_volume_interaction, 3000, 3500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_media_source_interaction, 5000, 5500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_media_power_interaction, 5000, 5500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_automation_interaction, 5000, 5500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_alarm_interaction, 5000, 5500)) {
-    state.updated_ui = true;
-  }
-  if (timeout_window_hit(now, state.last_contrast_interaction, 5000, 5500)) {
-    state.updated_ui = true;
+  struct TimeoutRefreshWindow {
+    uint32_t last_interaction;
+    uint32_t start_ms;
+    uint32_t end_ms;
+  };
+  const TimeoutRefreshWindow refresh_windows[] = {
+      {state.last_brightness_interaction, 3000, 3500},
+      {state.last_switch_interaction, 5000, 5500},
+      {state.last_fan_speed_interaction, 3000, 3500},
+      {state.last_humidifier_interaction, 5000, 5500},
+      {state.last_humidifier_mode_interaction, 5000, 5500},
+      {state.last_climate_interaction, 3000, 3500},
+      {state.last_lock_interaction, 5000, 5500},
+      {state.last_cover_interaction, 5000, 5500},
+      {state.last_cover_position_interaction, 3000, 3500},
+      {state.last_media_volume_interaction, 3000, 3500},
+      {state.last_media_source_interaction, 5000, 5500},
+      {state.last_media_power_interaction, 5000, 5500},
+      {state.last_automation_interaction, 5000, 5500},
+      {state.last_alarm_interaction, 5000, 5500},
+      {state.last_contrast_interaction, 5000, 5500},
+  };
+  for (const auto &window : refresh_windows) {
+    if (timeout_window_hit(now, window.last_interaction, window.start_ms, window.end_ms)) {
+      state.updated_ui = true;
+    }
   }
   if (timeout_window_hit(now, state.last_setting_interaction, 5000, 5500)) {
     if (!state.preserve_selected_setting_detail && state.selected_setting_detail != nullptr) {

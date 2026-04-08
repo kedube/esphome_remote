@@ -19,7 +19,6 @@ script:
                 ctx.automation_index = id(selected_automation_index);
                 ctx.info_index = id(selected_info_index);
                 ctx.selected_setting_option = id(selected_setting_option);
-                ctx.selected_weather_detail_index = id(selected_weather_detail_index);
                 ctx.climate_target_focus = id(climate_target_focus);
                 ctx.selected_brightness_pct = id(selected_brightness_pct);
                 ctx.selected_fan_speed_pct = id(selected_fan_speed_pct);
@@ -54,7 +53,6 @@ script:
                 ctx.selected_climate_target_temp_low = id(selected_climate_target_temp_low);
                 ctx.selected_climate_target_temp_high = id(selected_climate_target_temp_high);
                 ctx.selected_climate_current_temp = id(selected_climate_current_temp);
-                ctx.selected_climate_target_humidity = id(selected_climate_target_humidity);
                 ctx.climate_target_focus_value = id(climate_target_focus_value);
                 ctx.selected_weather_temperature = id(selected_weather_temperature);
                 ctx.selected_weather_humidity = id(selected_weather_humidity);

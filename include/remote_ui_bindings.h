@@ -23,7 +23,6 @@ struct RemoteUiBindings {
   std::string *selected_climate_hvac_action = nullptr;
   std::string *selected_climate_fan_mode = nullptr;
   std::string *selected_climate_hvac_mode = nullptr;
-  std::string *selected_climate_preset = nullptr;
   float *selected_climate_target_temp_low = nullptr;
   float *selected_climate_target_temp_high = nullptr;
   float *selected_climate_current_temp = nullptr;
@@ -43,7 +42,6 @@ struct RemoteUiBindings {
   std::string *selected_media_repeat = nullptr;
   std::string *selected_media_sound_mode = nullptr;
   std::string *last_media_power_feedback = nullptr;
-  std::string *selected_automation_state = nullptr;
   std::string *last_alarm_feedback = nullptr;
   uint32_t *last_alarm_interaction = nullptr;
   std::string *last_lock_feedback = nullptr;
@@ -87,7 +85,7 @@ static inline RemoteUiBindings make_remote_ui_bindings(
     std::string &selected_humidifier_mode, int &selected_cover_position_pct, std::string &last_switch_feedback,
     uint32_t &last_switch_interaction, float &selected_climate_target_temp, float &selected_water_heater_target_temp,
     std::string &selected_climate_hvac_action, std::string &selected_climate_fan_mode,
-    std::string &selected_climate_hvac_mode, std::string &selected_climate_preset,
+    std::string &selected_climate_hvac_mode,
     float &selected_climate_target_temp_low, float &selected_climate_target_temp_high,
     float &selected_climate_current_temp, float &selected_climate_target_humidity,
     std::string &selected_water_heater_mode, std::string &selected_water_heater_away,
@@ -96,7 +94,7 @@ static inline RemoteUiBindings make_remote_ui_bindings(
     int &selected_media_volume_pct, std::string &selected_media_title, std::string &selected_media_artist,
     std::string &selected_media_device_class, std::string &selected_media_source,
     std::string &selected_media_shuffle, std::string &selected_media_repeat, std::string &selected_media_sound_mode,
-    std::string &last_media_power_feedback, std::string &selected_automation_state,
+    std::string &last_media_power_feedback,
     std::string &last_alarm_feedback, uint32_t &last_alarm_interaction, std::string &last_lock_feedback,
     uint32_t &last_lock_interaction, std::string &last_cover_feedback, uint32_t &last_cover_interaction,
     uint32_t &last_cover_position_interaction, uint32_t &primary_button_press_started_at,
@@ -130,7 +128,6 @@ static inline RemoteUiBindings make_remote_ui_bindings(
   bindings.selected_climate_hvac_action = &selected_climate_hvac_action;
   bindings.selected_climate_fan_mode = &selected_climate_fan_mode;
   bindings.selected_climate_hvac_mode = &selected_climate_hvac_mode;
-  bindings.selected_climate_preset = &selected_climate_preset;
   bindings.selected_climate_target_temp_low = &selected_climate_target_temp_low;
   bindings.selected_climate_target_temp_high = &selected_climate_target_temp_high;
   bindings.selected_climate_current_temp = &selected_climate_current_temp;
@@ -150,7 +147,6 @@ static inline RemoteUiBindings make_remote_ui_bindings(
   bindings.selected_media_repeat = &selected_media_repeat;
   bindings.selected_media_sound_mode = &selected_media_sound_mode;
   bindings.last_media_power_feedback = &last_media_power_feedback;
-  bindings.selected_automation_state = &selected_automation_state;
   bindings.last_alarm_feedback = &last_alarm_feedback;
   bindings.last_alarm_interaction = &last_alarm_interaction;
   bindings.last_lock_feedback = &last_lock_feedback;
@@ -205,7 +201,6 @@ static inline RemoteUiResetState make_remote_ui_reset_state(const RemoteUiBindin
   state.selected_climate_hvac_action = bindings.selected_climate_hvac_action;
   state.selected_climate_fan_mode = bindings.selected_climate_fan_mode;
   state.selected_climate_hvac_mode = bindings.selected_climate_hvac_mode;
-  state.selected_climate_preset = bindings.selected_climate_preset;
   state.selected_climate_target_temp_low = bindings.selected_climate_target_temp_low;
   state.selected_climate_target_temp_high = bindings.selected_climate_target_temp_high;
   state.selected_climate_current_temp = bindings.selected_climate_current_temp;
@@ -223,7 +218,6 @@ static inline RemoteUiResetState make_remote_ui_reset_state(const RemoteUiBindin
   state.selected_media_repeat = bindings.selected_media_repeat;
   state.selected_media_sound_mode = bindings.selected_media_sound_mode;
   state.last_media_power_feedback = bindings.last_media_power_feedback;
-  state.selected_automation_state = bindings.selected_automation_state;
   state.last_alarm_feedback = bindings.last_alarm_feedback;
   state.last_alarm_interaction = bindings.last_alarm_interaction;
   state.last_lock_feedback = bindings.last_lock_feedback;
@@ -281,7 +275,6 @@ static inline RemoteUiSyncState make_remote_ui_sync_state(const RemoteUiBindings
   state.selected_climate_hvac_action = bindings.selected_climate_hvac_action;
   state.selected_climate_fan_mode = bindings.selected_climate_fan_mode;
   state.selected_climate_hvac_mode = bindings.selected_climate_hvac_mode;
-  state.selected_climate_preset = bindings.selected_climate_preset;
   state.last_climate_mode = bindings.last_climate_mode;
   state.selected_water_heater_mode = bindings.selected_water_heater_mode;
   state.selected_water_heater_away = bindings.selected_water_heater_away;
@@ -293,7 +286,6 @@ static inline RemoteUiSyncState make_remote_ui_sync_state(const RemoteUiBindings
   state.selected_media_shuffle = bindings.selected_media_shuffle;
   state.selected_media_repeat = bindings.selected_media_repeat;
   state.selected_media_sound_mode = bindings.selected_media_sound_mode;
-  state.selected_automation_state = bindings.selected_automation_state;
   state.selected_sensor_unit = bindings.selected_sensor_unit;
   state.selected_weather_temperature = bindings.selected_weather_temperature;
   state.selected_weather_humidity = bindings.selected_weather_humidity;

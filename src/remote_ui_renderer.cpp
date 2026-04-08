@@ -19,7 +19,7 @@ static inline bool ui_recent_interaction(uint32_t now, uint32_t last_interaction
   return last_interaction > 0 && (now - last_interaction) <= duration_ms;
 }
 
-static inline std::string ui_power_state_label(const std::string &raw) {
+static inline const char *ui_power_state_label(const std::string &raw) {
   if (raw == "on") return "ON";
   if (raw == "off") return "OFF";
   return "SYNCING";
@@ -94,28 +94,6 @@ void render_remote_ui(
     font::Font *symbols, font::Font *medium_symbols, font::Font *weather_symbols, const RemoteRenderContext &ctx) {
   const std::string &selected_item_name = render_string(ctx.selected_item_name);
   const std::string &selected_item_state = render_string(ctx.selected_item_state);
-  const std::string &selected_humidifier_action = render_string(ctx.selected_humidifier_action);
-  const std::string &selected_humidifier_mode = render_string(ctx.selected_humidifier_mode);
-  const std::string &selected_climate_hvac_action = render_string(ctx.selected_climate_hvac_action);
-  const std::string &selected_climate_fan_mode = render_string(ctx.selected_climate_fan_mode);
-  const std::string &selected_climate_hvac_mode = render_string(ctx.selected_climate_hvac_mode);
-  const std::string &selected_media_title = render_string(ctx.selected_media_title);
-  const std::string &selected_media_artist = render_string(ctx.selected_media_artist);
-  const std::string &selected_media_device_class = render_string(ctx.selected_media_device_class);
-  const std::string &selected_media_source = render_string(ctx.selected_media_source);
-  const std::string &selected_media_shuffle = render_string(ctx.selected_media_shuffle);
-  const std::string &selected_media_repeat = render_string(ctx.selected_media_repeat);
-  const std::string &selected_media_sound_mode = render_string(ctx.selected_media_sound_mode);
-  const std::string &selected_water_heater_mode = render_string(ctx.selected_water_heater_mode);
-  const std::string &selected_water_heater_away = render_string(ctx.selected_water_heater_away);
-  const std::string &last_media_power_feedback = render_string(ctx.last_media_power_feedback);
-  const std::string &last_automation_feedback = render_string(ctx.last_automation_feedback);
-  const std::string &last_alarm_feedback = render_string(ctx.last_alarm_feedback);
-  const std::string &last_switch_feedback = render_string(ctx.last_switch_feedback);
-  const std::string &last_lock_feedback = render_string(ctx.last_lock_feedback);
-  const std::string &last_cover_feedback = render_string(ctx.last_cover_feedback);
-  const std::string &selected_weather_condition = render_string(ctx.selected_weather_condition);
-  const std::string &selected_sensor_unit = render_string(ctx.selected_sensor_unit);
   const std::string &selected_setting_detail = render_string(ctx.selected_setting_detail);
   char status_line[27];
   char footer_line[27];
@@ -134,56 +112,8 @@ void render_remote_ui(
   label_secondary[0] = '\0';
   label_tertiary[0] = '\0';
 
-  bool show_brightness_bar =
-      ui_recent_interaction(ctx.now, ctx.last_brightness_interaction, 3000) &&
-      selected_item_state == "on" && ctx.mode == REMOTE_MODE_LIGHTS;
-  bool show_fan_speed_bar =
-      ui_recent_interaction(ctx.now, ctx.last_fan_speed_interaction, 3000) &&
-      selected_item_state == "on" && ctx.mode == REMOTE_MODE_FANS;
-  bool show_humidifier_target =
-      ui_recent_interaction(ctx.now, ctx.last_humidifier_interaction, 5000) &&
-      ctx.mode == REMOTE_MODE_HUMIDIFIERS;
-  bool show_humidifier_mode =
-      ui_recent_interaction(ctx.now, ctx.last_humidifier_mode_interaction, 5000) &&
-      ctx.mode == REMOTE_MODE_HUMIDIFIERS;
-  bool show_cover_position_bar =
-      ui_recent_interaction(ctx.now, ctx.last_cover_position_interaction, 3000) &&
-      ctx.mode == REMOTE_MODE_COVERS;
-  bool show_switch_feedback =
-      ui_recent_interaction(ctx.now, ctx.last_switch_interaction, 5000) &&
-      ctx.mode == REMOTE_MODE_SWITCHES;
   bool show_contrast_feedback = ui_recent_interaction(ctx.now, ctx.last_contrast_interaction, 5000);
   bool show_setting_detail_feedback = ctx.selected_setting_option != static_cast<int>(REMOTE_SETTING_NONE);
-  bool show_climate_target_focus =
-      ui_recent_interaction(ctx.now, ctx.last_climate_target_focus_interaction, 5000) &&
-      ctx.climate_target_focus != 0 && ctx.mode == REMOTE_MODE_CLIMATE;
-  bool show_lock_feedback =
-      ui_recent_interaction(ctx.now, ctx.last_lock_interaction, 5000) &&
-      ctx.mode == REMOTE_MODE_LOCKS;
-  bool show_cover_feedback =
-      ui_recent_interaction(ctx.now, ctx.last_cover_interaction, 5000) &&
-      ctx.mode == REMOTE_MODE_COVERS;
-  bool show_media_feedback =
-      ui_recent_interaction(ctx.now, ctx.last_media_volume_interaction, 3000) &&
-      ctx.mode == REMOTE_MODE_MEDIA;
-  bool show_media_source_feedback =
-      ui_recent_interaction(ctx.now, ctx.last_media_source_interaction, 5000) &&
-      ctx.mode == REMOTE_MODE_MEDIA;
-  bool show_media_power_feedback =
-      ui_recent_interaction(ctx.now, ctx.last_media_power_interaction, 5000) &&
-      ctx.mode == REMOTE_MODE_MEDIA;
-  bool show_automation_feedback =
-      ui_recent_interaction(ctx.now, ctx.last_automation_interaction, 5000) &&
-      ctx.mode == REMOTE_MODE_AUTOMATION;
-  bool show_alarm_hold_prompt =
-      ctx.mode == REMOTE_MODE_ALARMS &&
-      ctx.settings_button_press_started_at > 0 &&
-      ctx.settings_button_press_mode == static_cast<int>(ctx.mode) &&
-      !ctx.settings_button_long_press_fired &&
-      last_alarm_feedback == "HOLD TO TRIGGER";
-  bool show_alarm_feedback =
-      ctx.mode == REMOTE_MODE_ALARMS &&
-      (ui_recent_interaction(ctx.now, ctx.last_alarm_interaction, 5000) || show_alarm_hold_prompt);
 
   auto has_dual_climate_target = [&]() {
     return !std::isnan(ctx.selected_climate_target_temp_low) &&
@@ -254,13 +184,6 @@ void render_remote_ui(
       it->print(64, 45, tiny_font, display::COLOR_ON, display::TextAlign::CENTER, text);
     }
   };
-  auto draw_standard_footer = [&]() {
-    if (show_contrast_feedback) {
-      draw_contrast_footer();
-    } else {
-      draw_blank_footer();
-    }
-  };
   auto draw_setting_footer = [&]() {
     if (show_contrast_feedback) {
       draw_contrast_footer();
@@ -277,18 +200,8 @@ void render_remote_ui(
     draw_footer_chrome(left_icon, right_icon);
     draw_footer_text(label);
   };
-  auto draw_mode_footer = [&](const char *left_icon, const char *right_icon, const char *text = nullptr) {
-    if (show_contrast_feedback) {
-      draw_contrast_footer();
-    } else {
-      draw_footer_chrome(left_icon, right_icon);
-      if (text != nullptr && text[0] != '\0') {
-        draw_footer_text(text);
-      }
-    }
-  };
-  auto draw_power_mode = [&](int percent_value, bool show_progress, const char *progress_label, bool draw_center_divider) {
-    draw_centered_state(ui_power_state_label(selected_item_state).c_str(), 35);
+  auto draw_power_mode = [&](int percent_value, bool show_progress, const char *progress_label) {
+    draw_centered_state(ui_power_state_label(selected_item_state), 35);
     if (selected_item_state == "on" && !show_progress && !show_setting_detail_feedback) {
       snprintf(detail_line, sizeof(detail_line), "%d%%", percent_value);
       draw_detail_text(detail_line);
@@ -325,6 +238,15 @@ void render_remote_ui(
     }
     return false;
   };
+  auto write_climate_target_detail = [&](char *buffer, size_t buffer_size, bool dual_target,
+                                         float low, float high, float single_target) {
+    if (dual_target) {
+      snprintf(buffer, buffer_size, "LOW: %.0f°%s   HIGH: %.0f°%s",
+               low, ctx.temperature_unit, high, ctx.temperature_unit);
+    } else {
+      snprintf(buffer, buffer_size, "TARGET: %.0f°%s", single_target, ctx.temperature_unit);
+    }
+  };
 
   it->clear();
   const char *header_icon = ctx.mode_icon_override != nullptr ? ctx.mode_icon_override : mode_icon(ctx.mode);
@@ -339,8 +261,11 @@ void render_remote_ui(
   }
 
   switch (ctx.mode) {
-    case REMOTE_MODE_LIGHTS:
-      draw_power_mode(ctx.selected_brightness_pct, show_brightness_bar, "BRIGHTNESS", true);
+    case REMOTE_MODE_LIGHTS: {
+      bool show_brightness_bar =
+          ui_recent_interaction(ctx.now, ctx.last_brightness_interaction, 3000) &&
+          selected_item_state == "on";
+      draw_power_mode(ctx.selected_brightness_pct, show_brightness_bar, "BRIGHTNESS");
       if (!show_brightness_bar) {
         if (selected_item_state == "on") {
           draw_setting_detail_if_needed();
@@ -350,9 +275,13 @@ void render_remote_ui(
         }
       }
       break;
+    }
 
-    case REMOTE_MODE_FANS:
-      draw_power_mode(ctx.selected_fan_speed_pct, show_fan_speed_bar, "SPEED", true);
+    case REMOTE_MODE_FANS: {
+      bool show_fan_speed_bar =
+          ui_recent_interaction(ctx.now, ctx.last_fan_speed_interaction, 3000) &&
+          selected_item_state == "on";
+      draw_power_mode(ctx.selected_fan_speed_pct, show_fan_speed_bar, "SPEED");
       if (!show_fan_speed_bar) {
         if (selected_item_state == "on") {
           draw_setting_detail_if_needed();
@@ -362,8 +291,11 @@ void render_remote_ui(
         }
       }
       break;
+    }
 
     case REMOTE_MODE_SWITCHES: {
+      const std::string &last_switch_feedback = render_string(ctx.last_switch_feedback);
+      bool show_switch_feedback = ui_recent_interaction(ctx.now, ctx.last_switch_interaction, 5000);
       write_state_label(selected_item_state, label_primary, sizeof(label_primary));
       if (show_switch_feedback) {
         write_state_label(last_switch_feedback, label_secondary, sizeof(label_secondary), "");
@@ -377,17 +309,25 @@ void render_remote_ui(
     }
 
     case REMOTE_MODE_CLIMATE: {
-      write_state_label(selected_item_state, label_primary, sizeof(label_primary));
+      const std::string &selected_climate_hvac_action = render_string(ctx.selected_climate_hvac_action);
+      bool show_climate_target_focus =
+          ui_recent_interaction(ctx.now, ctx.last_climate_target_focus_interaction, 5000) &&
+          ctx.climate_target_focus != 0;
       write_state_label(selected_climate_hvac_action, label_secondary, sizeof(label_secondary), "");
       bool dual_target = has_dual_climate_target();
       if (show_climate_target_focus) {
         if (!std::isnan(ctx.climate_target_focus_value)) {
           if (!dual_target) {
-            snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°%s", ctx.climate_target_focus_value, ctx.temperature_unit);
+            write_climate_target_detail(detail_line, sizeof(detail_line), false,
+                                        NAN, NAN, ctx.climate_target_focus_value);
           } else if (ctx.climate_target_focus == 2) {
-            snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°%s   HIGH: %.0f°%s", ctx.selected_climate_target_temp_low, ctx.temperature_unit, ctx.climate_target_focus_value, ctx.temperature_unit);
+            write_climate_target_detail(detail_line, sizeof(detail_line), true,
+                                        ctx.selected_climate_target_temp_low,
+                                        ctx.climate_target_focus_value, NAN);
           } else {
-            snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°%s   HIGH: %.0f°%s", ctx.climate_target_focus_value, ctx.temperature_unit, ctx.selected_climate_target_temp_high, ctx.temperature_unit);
+            write_climate_target_detail(detail_line, sizeof(detail_line), true,
+                                        ctx.climate_target_focus_value,
+                                        ctx.selected_climate_target_temp_high, NAN);
           }
         }
       }
@@ -402,23 +342,20 @@ void render_remote_ui(
       if (show_climate_target_focus) {
         draw_detail_text(detail_line);
       } else if (!show_setting_detail_feedback) {
-        if (dual_target && strcmp(label_secondary, "UNKNOWN") != 0) {
-          snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°%s   HIGH: %.0f°%s",
-                   ctx.selected_climate_target_temp_low, ctx.temperature_unit,
-                   ctx.selected_climate_target_temp_high, ctx.temperature_unit);
+        if (dual_target) {
+          write_climate_target_detail(detail_line, sizeof(detail_line), true,
+                                      ctx.selected_climate_target_temp_low,
+                                      ctx.selected_climate_target_temp_high, NAN);
           draw_detail_text(detail_line);
-        } else if (!std::isnan(ctx.selected_climate_target_temp) && strcmp(label_secondary, "UNKNOWN") != 0) {
-          snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f°%s", ctx.selected_climate_target_temp, ctx.temperature_unit);
+        } else if (!std::isnan(ctx.selected_climate_target_temp)) {
+          write_climate_target_detail(detail_line, sizeof(detail_line), false,
+                                      NAN, NAN, ctx.selected_climate_target_temp);
           draw_detail_text(detail_line);
         }
       }
 
-      bool drew_setting_detail = false;
-      if (!show_climate_target_focus) {
-        drew_setting_detail = draw_setting_detail_if_needed();
-      }
-
-      if (!drew_setting_detail && !(show_climate_target_focus && show_setting_detail_feedback)) {
+      bool drew_setting_detail = !show_climate_target_focus && draw_setting_detail_if_needed();
+      if (!drew_setting_detail && !show_setting_detail_feedback) {
         draw_blank_or_contrast_footer();
       } else {
         draw_setting_footer();
@@ -427,10 +364,12 @@ void render_remote_ui(
     }
 
     case REMOTE_MODE_WATER_HEATERS: {
+      const std::string &selected_water_heater_mode = render_string(ctx.selected_water_heater_mode);
+      const std::string &selected_water_heater_away = render_string(ctx.selected_water_heater_away);
       if (!std::isnan(ctx.selected_water_heater_target_temp)) {
         snprintf(status_line, sizeof(status_line), "TARGET: %.0f°%s", ctx.selected_water_heater_target_temp, ctx.temperature_unit);
       } else {
-        snprintf(status_line, sizeof(status_line), "%s", ui_power_state_label(selected_item_state).c_str());
+        snprintf(status_line, sizeof(status_line), "%s", ui_power_state_label(selected_item_state));
       }
       draw_centered_state(status_line, 35, true);
       if (!draw_setting_detail_if_needed()) {
@@ -445,6 +384,10 @@ void render_remote_ui(
     }
 
     case REMOTE_MODE_HUMIDIFIERS: {
+      const std::string &selected_humidifier_action = render_string(ctx.selected_humidifier_action);
+      const std::string &selected_humidifier_mode = render_string(ctx.selected_humidifier_mode);
+      bool show_humidifier_target = ui_recent_interaction(ctx.now, ctx.last_humidifier_interaction, 5000);
+      bool show_humidifier_mode = ui_recent_interaction(ctx.now, ctx.last_humidifier_mode_interaction, 5000);
       write_state_label(selected_item_state, label_primary, sizeof(label_primary));
       write_state_label(selected_humidifier_action, label_secondary, sizeof(label_secondary), "");
       write_state_label(selected_humidifier_mode, label_tertiary, sizeof(label_tertiary), "");
@@ -476,6 +419,8 @@ void render_remote_ui(
     }
 
     case REMOTE_MODE_LOCKS: {
+      const std::string &last_lock_feedback = render_string(ctx.last_lock_feedback);
+      bool show_lock_feedback = ui_recent_interaction(ctx.now, ctx.last_lock_interaction, 5000);
       write_state_label(selected_item_state, label_primary, sizeof(label_primary));
       if (show_lock_feedback) {
         write_state_label(last_lock_feedback, label_secondary, sizeof(label_secondary), "");
@@ -485,6 +430,9 @@ void render_remote_ui(
     }
 
     case REMOTE_MODE_COVERS: {
+      const std::string &last_cover_feedback = render_string(ctx.last_cover_feedback);
+      bool show_cover_feedback = ui_recent_interaction(ctx.now, ctx.last_cover_interaction, 5000);
+      bool show_cover_position_bar = ui_recent_interaction(ctx.now, ctx.last_cover_position_interaction, 3000);
       write_state_label(selected_item_state, label_primary, sizeof(label_primary));
       write_state_label(last_cover_feedback, label_secondary, sizeof(label_secondary), "");
       draw_centered_state(label_primary, 33, true);
@@ -507,9 +455,16 @@ void render_remote_ui(
     }
 
     case REMOTE_MODE_MEDIA: {
+      const std::string &selected_media_title = render_string(ctx.selected_media_title);
+      const std::string &selected_media_artist = render_string(ctx.selected_media_artist);
+      const std::string &selected_media_device_class = render_string(ctx.selected_media_device_class);
+      const std::string &selected_media_source = render_string(ctx.selected_media_source);
+      const std::string &last_media_power_feedback = render_string(ctx.last_media_power_feedback);
+      bool show_media_feedback = ui_recent_interaction(ctx.now, ctx.last_media_volume_interaction, 3000);
+      bool show_media_source_feedback = ui_recent_interaction(ctx.now, ctx.last_media_source_interaction, 5000);
+      bool show_media_power_feedback = ui_recent_interaction(ctx.now, ctx.last_media_power_interaction, 5000);
       write_state_label(selected_item_state, label_primary, sizeof(label_primary));
       bool is_tv = selected_media_device_class == "tv" || selected_media_device_class == "receiver";
-      bool is_speaker = selected_media_device_class == "speaker";
       bool media_is_on = selected_item_state != "off" && selected_item_state != "unknown";
       if (is_tv) {
         snprintf(status_line, sizeof(status_line), "%s", media_is_on ? "ON" : "OFF");
@@ -544,6 +499,7 @@ void render_remote_ui(
     }
 
     case REMOTE_MODE_SENSORS: {
+      const std::string &selected_sensor_unit = render_string(ctx.selected_sensor_unit);
       std::string sensor_value = selected_item_state;
       if (sensor_value == "unknown" || sensor_value.empty()) {
         sensor_value = "SYNCING";
@@ -563,6 +519,8 @@ void render_remote_ui(
     }
 
     case REMOTE_MODE_AUTOMATION: {
+      const std::string &last_automation_feedback = render_string(ctx.last_automation_feedback);
+      bool show_automation_feedback = ui_recent_interaction(ctx.now, ctx.last_automation_interaction, 5000);
       write_state_label(selected_item_state, label_primary, sizeof(label_primary), "READY");
       write_state_label(last_automation_feedback, label_secondary, sizeof(label_secondary), "");
       const char *automation_type = automation_kind_label(ctx.automation_index);
@@ -577,6 +535,14 @@ void render_remote_ui(
     }
 
     case REMOTE_MODE_ALARMS: {
+      const std::string &last_alarm_feedback = render_string(ctx.last_alarm_feedback);
+      bool show_alarm_hold_prompt =
+          ctx.settings_button_press_started_at > 0 &&
+          ctx.settings_button_press_mode == static_cast<int>(ctx.mode) &&
+          !ctx.settings_button_long_press_fired &&
+          last_alarm_feedback == "HOLD TO TRIGGER";
+      bool show_alarm_feedback =
+          ui_recent_interaction(ctx.now, ctx.last_alarm_interaction, 5000) || show_alarm_hold_prompt;
       write_state_label(selected_item_state, label_primary, sizeof(label_primary));
       if (show_alarm_feedback) {
         write_state_label(last_alarm_feedback, label_secondary, sizeof(label_secondary), "");
@@ -611,6 +577,7 @@ void render_remote_ui(
     }
 
     case REMOTE_MODE_WEATHER: {
+      const std::string &selected_weather_condition = render_string(ctx.selected_weather_condition);
       weather_condition_label(selected_weather_condition, label_primary, sizeof(label_primary));
       if (!std::isnan(ctx.selected_weather_temperature)) {
         snprintf(status_line, sizeof(status_line), "%.0f°%s", ctx.selected_weather_temperature, ctx.temperature_unit);
@@ -646,6 +613,11 @@ void render_remote_ui(
           footer_status = footer_line;
         } else if (weather_ready && label_primary[0] != '\0') {
           footer_status = label_primary;
+        }
+        if (footer_status != nullptr && footer_status[0] != '\0') {
+          draw_footer_text(footer_status);
+        } else {
+          draw_blank_or_contrast_footer();
         }
       } else {
         draw_setting_footer();

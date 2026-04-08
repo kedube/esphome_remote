@@ -22,7 +22,6 @@ struct RemoteUiResetState {
   std::string *selected_climate_hvac_action = nullptr;
   std::string *selected_climate_fan_mode = nullptr;
   std::string *selected_climate_hvac_mode = nullptr;
-  std::string *selected_climate_preset = nullptr;
   float *selected_climate_target_temp_low = nullptr;
   float *selected_climate_target_temp_high = nullptr;
   float *selected_climate_current_temp = nullptr;
@@ -40,7 +39,6 @@ struct RemoteUiResetState {
   std::string *selected_media_repeat = nullptr;
   std::string *selected_media_sound_mode = nullptr;
   std::string *last_media_power_feedback = nullptr;
-  std::string *selected_automation_state = nullptr;
   std::string *last_alarm_feedback = nullptr;
   uint32_t *last_alarm_interaction = nullptr;
   std::string *last_lock_feedback = nullptr;

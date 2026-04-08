@@ -23,7 +23,6 @@ struct RemoteRenderContext {
   int automation_index = 0;
   int info_index = 0;
   int selected_setting_option = 0;
-  int selected_weather_detail_index = 0;
   int climate_target_focus = 0;
   int selected_brightness_pct = 0;
   int selected_fan_speed_pct = 0;
@@ -59,7 +58,6 @@ struct RemoteRenderContext {
   float selected_climate_target_temp_low = NAN;
   float selected_climate_target_temp_high = NAN;
   float selected_climate_current_temp = NAN;
-  float selected_climate_target_humidity = NAN;
   float climate_target_focus_value = NAN;
   float selected_weather_temperature = NAN;
   float selected_weather_humidity = NAN;

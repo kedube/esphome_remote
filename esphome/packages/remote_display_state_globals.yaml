@@ -136,10 +136,6 @@ globals:
     type: std::string
     initial_value: '""'
 
-  - id: selected_automation_state
-    type: std::string
-    initial_value: '"unknown"'
-
   - id: last_automation_feedback
     type: std::string
     initial_value: '""'

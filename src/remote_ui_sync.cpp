@@ -19,11 +19,13 @@ static inline bool assign_int_if_changed(int *target, int value) {
 }
 
 static inline bool assign_float_if_changed(float *target, float value) {
-  if (!std::isnan(value) && *target != value) {
-    *target = value;
-    return true;
+  bool target_nan = std::isnan(*target);
+  bool value_nan = std::isnan(value);
+  if ((target_nan && value_nan) || (!target_nan && !value_nan && *target == value)) {
+    return false;
   }
-  return false;
+  *target = value;
+  return true;
 }
 
 static inline void request_refresh(RemoteUiSyncState &ui, int idx) {
@@ -128,7 +130,6 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
   if (mode == REMOTE_MODE_CLIMATE) {
     const std::string &state = selected_climate_state(idx);
     const std::string &hvac_action = climate_hvac_action_for_index(idx);
-    const std::string &preset = selected_climate_preset_mode(idx);
     const std::string &fan_mode = climate_fan_mode_for_index(idx);
     const std::string &hvac_mode = climate_hvac_mode_for_index(idx);
     float target = selected_climate_target_temperature(idx);
@@ -155,7 +156,6 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
       changed = assign_float_if_changed(ui.selected_climate_target_temp_high, target_high) || changed;
       changed = assign_float_if_changed(ui.selected_climate_current_temp, current) || changed;
       changed = assign_float_if_changed(ui.selected_climate_target_humidity, humidity) || changed;
-      changed = assign_string_if_changed(ui.selected_climate_preset, preset) || changed;
       if (changed) *ui.updated_ui = true;
     }
     return;
@@ -258,11 +258,6 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     const std::string &state = automation_state_for_index(idx);
     std::string next_state = automation_supports_enabled_state(idx) ? state : "ready";
     bool changed = false;
-    if (automation_supports_enabled_state(idx)) {
-      changed = assign_string_if_changed(ui.selected_automation_state, next_state) || changed;
-    } else {
-      changed = assign_string_if_changed(ui.selected_automation_state, "ready") || changed;
-    }
     changed = assign_string_if_changed(ui.selected_item_state, next_state) || changed;
     if (state == "unknown") {
       request_refresh(ui, idx);

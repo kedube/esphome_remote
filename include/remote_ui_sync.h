@@ -27,7 +27,6 @@ struct RemoteUiSyncState {
   std::string *selected_climate_hvac_action = nullptr;
   std::string *selected_climate_fan_mode = nullptr;
   std::string *selected_climate_hvac_mode = nullptr;
-  std::string *selected_climate_preset = nullptr;
   std::string *last_climate_mode = nullptr;
   std::string *selected_water_heater_mode = nullptr;
   std::string *selected_water_heater_away = nullptr;
@@ -39,7 +38,6 @@ struct RemoteUiSyncState {
   std::string *selected_media_shuffle = nullptr;
   std::string *selected_media_repeat = nullptr;
   std::string *selected_media_sound_mode = nullptr;
-  std::string *selected_automation_state = nullptr;
   std::string *selected_sensor_unit = nullptr;
   float *selected_weather_temperature = nullptr;
   float *selected_weather_humidity = nullptr;

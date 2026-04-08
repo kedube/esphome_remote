@@ -15,6 +15,119 @@ bool remote_ui_has_dual_climate_target(
          (selected_item_state == "heat_cool" || target_temp_low != target_temp_high);
 }
 
+static inline RemoteUiActionCommand resolve_primary_action(RemoteMode mode, bool dual_climate_target) {
+  switch (mode) {
+    case REMOTE_MODE_LIGHTS:
+      return REMOTE_UI_ACTION_TOGGLE_LIGHT;
+    case REMOTE_MODE_FANS:
+      return REMOTE_UI_ACTION_TOGGLE_FAN;
+    case REMOTE_MODE_HUMIDIFIERS:
+      return REMOTE_UI_ACTION_CYCLE_HUMIDIFIER_MODE;
+    case REMOTE_MODE_SWITCHES:
+      return REMOTE_UI_ACTION_TURN_ON_SWITCH;
+    case REMOTE_MODE_CLIMATE:
+      return dual_climate_target ? REMOTE_UI_ACTION_CLIMATE_TEMP_HIGH_UP : REMOTE_UI_ACTION_MARK_UI;
+    case REMOTE_MODE_LOCKS:
+      return REMOTE_UI_ACTION_LOCK;
+    case REMOTE_MODE_COVERS:
+      return REMOTE_UI_ACTION_OPEN_COVER;
+    case REMOTE_MODE_MEDIA:
+      return REMOTE_UI_ACTION_SELECT_NEXT_ITEM;
+    case REMOTE_MODE_AUTOMATION:
+      return REMOTE_UI_ACTION_TRIGGER_AUTOMATION;
+    case REMOTE_MODE_ALARMS:
+      return REMOTE_UI_ACTION_ARM_ALARM;
+    case REMOTE_MODE_NOTIFICATIONS:
+      return REMOTE_UI_ACTION_DISMISS_NOTIFICATION;
+    default:
+      return REMOTE_UI_ACTION_MARK_UI;
+  }
+}
+
+static inline RemoteUiActionCommand resolve_secondary_action(RemoteMode mode) {
+  switch (mode) {
+    case REMOTE_MODE_CLIMATE:
+      return REMOTE_UI_ACTION_TOGGLE_CLIMATE_POWER;
+    case REMOTE_MODE_HUMIDIFIERS:
+      return REMOTE_UI_ACTION_TOGGLE_HUMIDIFIER_POWER;
+    case REMOTE_MODE_MEDIA:
+      return REMOTE_UI_ACTION_SELECT_NEXT_MEDIA_SOURCE;
+    case REMOTE_MODE_ALARMS:
+      return REMOTE_UI_ACTION_TRIGGER_ALARM;
+    default:
+      return REMOTE_UI_ACTION_MARK_UI;
+  }
+}
+
+static inline RemoteUiActionCommand resolve_play_pause_action(RemoteMode mode, bool dual_climate_target) {
+  switch (mode) {
+    case REMOTE_MODE_LIGHTS:
+      return REMOTE_UI_ACTION_TOGGLE_LIGHT;
+    case REMOTE_MODE_FANS:
+      return REMOTE_UI_ACTION_TOGGLE_FAN;
+    case REMOTE_MODE_SWITCHES:
+      return REMOTE_UI_ACTION_TURN_OFF_SWITCH;
+    case REMOTE_MODE_CLIMATE:
+      return dual_climate_target ? REMOTE_UI_ACTION_CLIMATE_TEMP_HIGH_DOWN : REMOTE_UI_ACTION_MARK_UI;
+    case REMOTE_MODE_LOCKS:
+      return REMOTE_UI_ACTION_UNLOCK;
+    case REMOTE_MODE_COVERS:
+      return REMOTE_UI_ACTION_CLOSE_COVER;
+    case REMOTE_MODE_MEDIA:
+      return REMOTE_UI_ACTION_MEDIA_PLAY_PAUSE;
+    case REMOTE_MODE_AUTOMATION:
+      return REMOTE_UI_ACTION_TRIGGER_AUTOMATION;
+    case REMOTE_MODE_ALARMS:
+      return REMOTE_UI_ACTION_DISARM_ALARM;
+    case REMOTE_MODE_NOTIFICATIONS:
+      return REMOTE_UI_ACTION_DISMISS_NOTIFICATION;
+    default:
+      return REMOTE_UI_ACTION_MARK_UI;
+  }
+}
+
+static inline RemoteUiActionCommand resolve_increase_action(RemoteMode mode) {
+  switch (mode) {
+    case REMOTE_MODE_LIGHTS:
+      return REMOTE_UI_ACTION_INCREASE_BRIGHTNESS;
+    case REMOTE_MODE_FANS:
+      return REMOTE_UI_ACTION_INCREASE_FAN_SPEED;
+    case REMOTE_MODE_HUMIDIFIERS:
+      return REMOTE_UI_ACTION_HUMIDIFIER_TARGET_UP;
+    case REMOTE_MODE_COVERS:
+      return REMOTE_UI_ACTION_INCREASE_COVER_POSITION;
+    case REMOTE_MODE_CLIMATE:
+      return REMOTE_UI_ACTION_CLIMATE_TEMP_UP;
+    case REMOTE_MODE_MEDIA:
+      return REMOTE_UI_ACTION_MEDIA_VOLUME_UP;
+    case REMOTE_MODE_ALARMS:
+      return REMOTE_UI_ACTION_SHIFT_ALARM_MODE_FORWARD;
+    default:
+      return REMOTE_UI_ACTION_MARK_UI;
+  }
+}
+
+static inline RemoteUiActionCommand resolve_decrease_action(RemoteMode mode) {
+  switch (mode) {
+    case REMOTE_MODE_LIGHTS:
+      return REMOTE_UI_ACTION_DECREASE_BRIGHTNESS;
+    case REMOTE_MODE_FANS:
+      return REMOTE_UI_ACTION_DECREASE_FAN_SPEED;
+    case REMOTE_MODE_HUMIDIFIERS:
+      return REMOTE_UI_ACTION_HUMIDIFIER_TARGET_DOWN;
+    case REMOTE_MODE_COVERS:
+      return REMOTE_UI_ACTION_DECREASE_COVER_POSITION;
+    case REMOTE_MODE_CLIMATE:
+      return REMOTE_UI_ACTION_CLIMATE_TEMP_DOWN;
+    case REMOTE_MODE_MEDIA:
+      return REMOTE_UI_ACTION_MEDIA_VOLUME_DOWN;
+    case REMOTE_MODE_ALARMS:
+      return REMOTE_UI_ACTION_SHIFT_ALARM_MODE_BACKWARD;
+    default:
+      return REMOTE_UI_ACTION_MARK_UI;
+  }
+}
+
 RemoteUiActionCommand resolve_remote_mode_action_command(RemoteMode mode, int action, bool dual_climate_target) {
   const int MODE_ACTION_PRIMARY = 0;
   const int MODE_ACTION_SECONDARY = 1;
@@ -23,116 +136,16 @@ RemoteUiActionCommand resolve_remote_mode_action_command(RemoteMode mode, int ac
   const int MODE_ACTION_DECREASE = 4;
 
   switch (action) {
-    case MODE_ACTION_SECONDARY:
-      switch (mode) {
-        case REMOTE_MODE_CLIMATE:
-          return REMOTE_UI_ACTION_TOGGLE_CLIMATE_POWER;
-        case REMOTE_MODE_HUMIDIFIERS:
-          return REMOTE_UI_ACTION_TOGGLE_HUMIDIFIER_POWER;
-        case REMOTE_MODE_MEDIA:
-          return REMOTE_UI_ACTION_SELECT_NEXT_MEDIA_SOURCE;
-        case REMOTE_MODE_ALARMS:
-          return REMOTE_UI_ACTION_TRIGGER_ALARM;
-        default:
-          return REMOTE_UI_ACTION_MARK_UI;
-      }
-
     case MODE_ACTION_PRIMARY:
-      switch (mode) {
-        case REMOTE_MODE_LIGHTS:
-          return REMOTE_UI_ACTION_TOGGLE_LIGHT;
-        case REMOTE_MODE_FANS:
-          return REMOTE_UI_ACTION_TOGGLE_FAN;
-        case REMOTE_MODE_HUMIDIFIERS:
-          return REMOTE_UI_ACTION_CYCLE_HUMIDIFIER_MODE;
-        case REMOTE_MODE_SWITCHES:
-          return REMOTE_UI_ACTION_TURN_ON_SWITCH;
-        case REMOTE_MODE_CLIMATE:
-          return dual_climate_target ? REMOTE_UI_ACTION_CLIMATE_TEMP_HIGH_UP : REMOTE_UI_ACTION_MARK_UI;
-        case REMOTE_MODE_LOCKS:
-          return REMOTE_UI_ACTION_LOCK;
-        case REMOTE_MODE_COVERS:
-          return REMOTE_UI_ACTION_OPEN_COVER;
-        case REMOTE_MODE_MEDIA:
-          return REMOTE_UI_ACTION_SELECT_NEXT_ITEM;
-        case REMOTE_MODE_AUTOMATION:
-          return REMOTE_UI_ACTION_TRIGGER_AUTOMATION;
-        case REMOTE_MODE_ALARMS:
-          return REMOTE_UI_ACTION_ARM_ALARM;
-        case REMOTE_MODE_NOTIFICATIONS:
-          return REMOTE_UI_ACTION_DISMISS_NOTIFICATION;
-        default:
-          return REMOTE_UI_ACTION_MARK_UI;
-      }
-
+      return resolve_primary_action(mode, dual_climate_target);
+    case MODE_ACTION_SECONDARY:
+      return resolve_secondary_action(mode);
     case MODE_ACTION_PLAY_PAUSE:
-      switch (mode) {
-        case REMOTE_MODE_LIGHTS:
-          return REMOTE_UI_ACTION_TOGGLE_LIGHT;
-        case REMOTE_MODE_FANS:
-          return REMOTE_UI_ACTION_TOGGLE_FAN;
-        case REMOTE_MODE_HUMIDIFIERS:
-          return REMOTE_UI_ACTION_MARK_UI;
-        case REMOTE_MODE_SWITCHES:
-          return REMOTE_UI_ACTION_TURN_OFF_SWITCH;
-        case REMOTE_MODE_CLIMATE:
-          return dual_climate_target ? REMOTE_UI_ACTION_CLIMATE_TEMP_HIGH_DOWN : REMOTE_UI_ACTION_MARK_UI;
-        case REMOTE_MODE_LOCKS:
-          return REMOTE_UI_ACTION_UNLOCK;
-        case REMOTE_MODE_COVERS:
-          return REMOTE_UI_ACTION_CLOSE_COVER;
-        case REMOTE_MODE_MEDIA:
-          return REMOTE_UI_ACTION_MEDIA_PLAY_PAUSE;
-        case REMOTE_MODE_AUTOMATION:
-          return REMOTE_UI_ACTION_TRIGGER_AUTOMATION;
-        case REMOTE_MODE_ALARMS:
-          return REMOTE_UI_ACTION_DISARM_ALARM;
-        case REMOTE_MODE_NOTIFICATIONS:
-          return REMOTE_UI_ACTION_DISMISS_NOTIFICATION;
-        default:
-          return REMOTE_UI_ACTION_MARK_UI;
-      }
-
+      return resolve_play_pause_action(mode, dual_climate_target);
     case MODE_ACTION_INCREASE:
-      switch (mode) {
-        case REMOTE_MODE_LIGHTS:
-          return REMOTE_UI_ACTION_INCREASE_BRIGHTNESS;
-        case REMOTE_MODE_FANS:
-          return REMOTE_UI_ACTION_INCREASE_FAN_SPEED;
-        case REMOTE_MODE_HUMIDIFIERS:
-          return REMOTE_UI_ACTION_HUMIDIFIER_TARGET_UP;
-        case REMOTE_MODE_COVERS:
-          return REMOTE_UI_ACTION_INCREASE_COVER_POSITION;
-        case REMOTE_MODE_CLIMATE:
-          return REMOTE_UI_ACTION_CLIMATE_TEMP_UP;
-        case REMOTE_MODE_MEDIA:
-          return REMOTE_UI_ACTION_MEDIA_VOLUME_UP;
-        case REMOTE_MODE_ALARMS:
-          return REMOTE_UI_ACTION_SHIFT_ALARM_MODE_FORWARD;
-        default:
-          return REMOTE_UI_ACTION_MARK_UI;
-      }
-
+      return resolve_increase_action(mode);
     case MODE_ACTION_DECREASE:
-      switch (mode) {
-        case REMOTE_MODE_LIGHTS:
-          return REMOTE_UI_ACTION_DECREASE_BRIGHTNESS;
-        case REMOTE_MODE_FANS:
-          return REMOTE_UI_ACTION_DECREASE_FAN_SPEED;
-        case REMOTE_MODE_HUMIDIFIERS:
-          return REMOTE_UI_ACTION_HUMIDIFIER_TARGET_DOWN;
-        case REMOTE_MODE_COVERS:
-          return REMOTE_UI_ACTION_DECREASE_COVER_POSITION;
-        case REMOTE_MODE_CLIMATE:
-          return REMOTE_UI_ACTION_CLIMATE_TEMP_DOWN;
-        case REMOTE_MODE_MEDIA:
-          return REMOTE_UI_ACTION_MEDIA_VOLUME_DOWN;
-        case REMOTE_MODE_ALARMS:
-          return REMOTE_UI_ACTION_SHIFT_ALARM_MODE_BACKWARD;
-        default:
-          return REMOTE_UI_ACTION_MARK_UI;
-      }
-
+      return resolve_decrease_action(mode);
     default:
       return REMOTE_UI_ACTION_MARK_UI;
   }
