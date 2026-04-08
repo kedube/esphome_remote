@@ -411,7 +411,7 @@ esphome -s FRAMEBUFFER_WEB_DEBUG 1 run esphome/remote_control.yaml
 
 After flashing, browse to:
 
-- `http://<device-ip>/debug/framebuffer.pbm`
+- `http://esphome-remote.local/debug/framebuffer.pbm`
 
 Notes:
 
