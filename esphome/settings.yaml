@@ -2,7 +2,7 @@ substitutions:
   BOARD: "esp32dev"
   DEVICE_NAME: "esphome-remote"
   FRIENDLY_NAME: "ESPHome Remote"
-  VERSION: "2.6beta"
+  VERSION: "2.5"
   FRAMEBUFFER_WEB_DEBUG: "0"
   TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
   SPEED_UNIT: "MPH" # Set to "KPH" when Home Assistant wind speed values are in kilometers per hour
