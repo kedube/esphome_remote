@@ -13,8 +13,8 @@ binary_sensor:
     internal: True
     filters:
       - invert:
-      - delayed_on: 30ms
-      - delayed_off: 30ms
+      - delayed_on: ${WAKE_BUTTON_DEBOUNCE_MS}ms
+      - delayed_off: ${WAKE_BUTTON_DEBOUNCE_MS}ms
     on_press:
       then:
         - script.execute: reset_idle_timer

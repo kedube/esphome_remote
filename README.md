@@ -27,6 +27,16 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 - Notification, weather, version, time/date, and network info screens
 - Optional framebuffer download endpoint for capturing clean UI screenshots
 
+## Quick Start
+
+If you just want to get the remote running:
+
+1. Install ESPHome.
+2. Copy [`esphome/examples/secrets-example.yaml`](esphome/examples/secrets-example.yaml) to [`esphome/secrets.yaml`](esphome/secrets.yaml) and fill in your Wi-Fi, OTA, and API credentials.
+3. Copy [`esphome/examples/local_entities-example.h`](esphome/examples/local_entities-example.h) to [`esphome/local_entities.h`](esphome/local_entities.h) and define your favorite lists.
+4. Open [`esphome/settings.yaml`](esphome/settings.yaml) and choose the correct PCB package.
+5. Run `esphome run esphome/remote_control.yaml`.
+
 ## Navigation Model
 
 - One or more user-defined favorite lists containing mixed entity types
@@ -323,32 +333,31 @@ packages:
 
 This file also contains the most common substitutions you may want to change:
 
-- `BOARD`
-  ESPHome board definition, currently `esp32dev`.
-- `DEVICE_NAME`
-  Network name used by ESPHome and OTA.
-- `FRIENDLY_NAME`
-  Human-readable device name shown in Home Assistant.
-- `NOTIFICATION_FEED_MAX_ITEMS`
-  Maximum number of notification messages cached and exposed in Notifications mode.
-- `MAX_PERSISTED_FAVORITE_LISTS`
-  Maximum number of favorite lists stored in persisted UI state. This must be at least as large as your configured favorite list count.
-- `TEMPERATURE_UNIT`
-  Set to `"F"` or `"C"` to match your Home Assistant climate values.
-- `SLEEP_DURATION`
-  Idle time before the remote sleeps.
-- `DEEP_SLEEP_DURATION`
-  Duration of deep sleep.
-- `LONG_PRESS_DURATION_MS`
-  Hold time for protected actions.
-- `EXTENDED_HOLD_DURATION_MS`
-  Shared hold time for long protected actions that use the extended timer, including the Settings button alarm trigger and wake-button reboot. Default is 10 seconds.
-- `ALARM_CODE`
-  Optional alarm code. Leave it empty or replace it with `!secret alarm_code`.
-- `LOW_BATTERY_VOLTAGE`
-  Battery warning threshold for battery-monitoring boards.
-- `FRAMEBUFFER_WEB_DEBUG`
-  Set to `"1"` only when using the optional framebuffer download endpoint.
+| Setting | Purpose |
+| --- | --- |
+| `BOARD` | ESPHome board definition, currently `esp32dev`. |
+| `DEVICE_NAME` | Network name used by ESPHome and OTA. |
+| `FRIENDLY_NAME` | Human-readable device name shown in Home Assistant. |
+| `NOTIFICATION_FEED_MAX_ITEMS` | Maximum number of notification messages cached and exposed in Notifications mode. |
+| `MAX_PERSISTED_FAVORITE_LISTS` | Maximum number of favorite lists stored in persisted UI state. This must be at least as large as your configured favorite list count. |
+| `TEMPERATURE_UNIT` | Set to `"F"` or `"C"` to match your Home Assistant climate values. |
+| `SLEEP_DURATION` | Idle time before the remote sleeps. |
+| `DEEP_SLEEP_DURATION` | Duration of deep sleep. |
+| `LONG_PRESS_DURATION_MS` | Hold time for protected actions. |
+| `EXTENDED_HOLD_DURATION_MS` | Shared hold time for long protected actions that use the extended timer, including the Settings button alarm trigger and wake-button reboot. |
+| `WAKE_BUTTON_DEBOUNCE_MS` | Debounce time for the wake/power button press and release handling. |
+| `NAVIGATION_SYNC_DELAY_MS` | Short quiet period after navigation before subscription-backed state sync resumes. |
+| `REBOOT_MESSAGE_DURATION_MS` | How long the `REBOOTING...` message stays on screen before the remote restarts. |
+| `ALARM_CODE` | Optional alarm code. Leave it empty or replace it with `!secret alarm_code`. |
+| `LOW_BATTERY_VOLTAGE` | Battery warning threshold for battery-monitoring boards. |
+| `FRAMEBUFFER_WEB_DEBUG` | Set to `"1"` only when using the optional framebuffer download endpoint. |
+
+Notes:
+
+- `NOTIFICATION_FEED_MAX_ITEMS` and `MAX_PERSISTED_FAVORITE_LISTS` are compile-time capacity limits. Changing them requires recompiling the firmware and may increase memory usage.
+- The timing substitutions such as `SLEEP_DURATION`, `LONG_PRESS_DURATION_MS`, `EXTENDED_HOLD_DURATION_MS`, `WAKE_BUTTON_DEBOUNCE_MS`, `NAVIGATION_SYNC_DELAY_MS`, and `REBOOT_MESSAGE_DURATION_MS` control runtime behavior and are the safest settings to tune first.
+- Safe starting points:
+  `NOTIFICATION_FEED_MAX_ITEMS: "16"`, `MAX_PERSISTED_FAVORITE_LISTS: "16"`, `WAKE_BUTTON_DEBOUNCE_MS: "30"`, `NAVIGATION_SYNC_DELAY_MS: "250"`, `REBOOT_MESSAGE_DURATION_MS: "2000"`.
 
 `esphome/remote_control.yaml` still contains the board-specific `PIN_*` substitutions that are provided by the selected PCB package.
 
@@ -424,18 +433,80 @@ Notes:
 - The PBM image is generated from the live OLED framebuffer.
 - This is mainly intended for debugging and README screenshots.
 
+## Button Guide
+
+The remote is designed around nine physical inputs:
+
+| Button | Default behavior |
+| --- | --- |
+| Wake / Power | Short press and release puts the remote to sleep. Hold for `EXTENDED_HOLD_DURATION_MS` to reboot. |
+| Mode | Cycles to the next top-level mode or favorite list. |
+| Previous | Selects the previous item in the current mode. |
+| Next | Selects the next item in the current mode. |
+| Settings | Cycles through the available detail/settings views for the current item. In alarm mode, hold for `EXTENDED_HOLD_DURATION_MS` to trigger the alarm action. |
+| Minus | Decreases the current adjustable setting. In Weather mode, cycles backward through detail views. |
+| Plus | Increases the current adjustable setting. In Weather mode, cycles forward through detail views. |
+| Circle | Positive or activate action in most modes: turn on, open, lock, play/pause, run, arm, or dismiss. |
+| Square | Negative or deactivate action in most modes: turn off, close, unlock, stop, or disarm. |
+
+Common usage pattern:
+
+- Use `Mode` to move between favorite lists, Notifications, and Info.
+- Use `Previous` and `Next` to choose an item.
+- Use `Settings` to pick which detail or control you want to adjust.
+- Use `Plus` and `Minus` to change the selected value or browse weather details.
+- Use `Circle` and `Square` for the main action on the current item.
+
+Long-press protection:
+
+- Locks, covers, and automations require holding the action button for `LONG_PRESS_DURATION_MS`.
+- Alarm arming and disarming also use long-press protection.
+- Alarm trigger on the Settings button and wake-button reboot both use `EXTENDED_HOLD_DURATION_MS`.
+
+## Mode Map
+
+| Mode | Primary actions |
+| --- | --- |
+| Favorites: Lights | `Circle` on, `Square` off, `Settings` selects brightness/effect when available. |
+| Favorites: Switches | `Circle` on, `Square` off. |
+| Favorites: Climate | `Circle` on, `Square` off, `Settings` cycles target/fan/humidity/preset/state views. |
+| Favorites: Humidifiers | `Circle` on, `Square` off, `Settings` cycles humidity/mode/action/state views. |
+| Favorites: Fans | `Circle` on, `Square` off, `Settings` can expose speed/preset/oscillation/direction. |
+| Favorites: Covers | `Circle` open, `Square` close. |
+| Favorites: Locks | `Circle` lock, `Square` unlock. |
+| Favorites: Media | `Circle` play/pause, `Square` stop, `Settings` cycles volume/source/shuffle/repeat/sound/state views. |
+| Favorites: Water Heaters | `Circle` on, `Square` off, `Settings` cycles target/mode/away views. |
+| Favorites: Automation / Script / Scene | `Circle` run. |
+| Notifications | `Circle` dismiss selected notification. |
+| Alarms | `Circle` arm, `Square` disarm, `Plus` / `Minus` change arm mode. |
+| Weather | `Settings`, `Plus`, and `Minus` browse weather detail views. |
+| Info | Read-only status screens for time/date, network, and version. |
+
+Mode-specific action examples:
+
+- Lights: `Circle` turns on, `Square` turns off, `Settings` can expose brightness and effect controls, and `Plus` / `Minus` adjust the selected setting.
+- Switches: `Circle` turns on and `Square` turns off.
+- Climate: `Circle` turns on, `Square` turns off, `Settings` cycles through target temperature, fan, humidity, preset, action, and state views when available.
+- Humidifiers: `Circle` turns on, `Square` turns off, and `Settings` cycles humidity, mode, action, and state views.
+- Fans: `Circle` turns on, `Square` turns off, and `Settings` can expose speed, preset, oscillation, and direction.
+- Covers: `Circle` opens, `Square` closes, and long-press protection applies.
+- Locks: `Circle` locks, `Square` unlocks, and long-press protection applies.
+- Media: `Circle` play/pause, `Square` stop, and `Settings` can expose volume, source, shuffle, repeat, sound mode, and state.
+- Notifications: `Circle` dismisses the selected notification.
+- Alarms: `Circle` arms with the selected arm mode, `Square` disarms, and `Settings` cycles the alarm-state view. `Plus` and `Minus` change the selected arm mode.
+- Weather: `Settings`, `Plus`, and `Minus` are used to browse condition, humidity, wind, pressure, precipitation, UV, dew point, apparent temperature, and high/low detail views.
+
 ## UI Notes
 
 - The remote restores the previously selected favorite list and selected item after wake or reboot.
 - Empty favorite lists are skipped automatically.
 - Holding the wake/power button for `EXTENDED_HOLD_DURATION_MS` reboots the remote. The screen shows `HOLD TO REBOOT` while held, then `REBOOTING...` briefly before restart.
 - Lock, cover, and automation actions use long-press protection.
-- Circle is the primary action button. Play/pause is the alternate action button.
-- When a favorite entry resolves to a lock, circle locks and play/pause unlocks. The remote shows temporary detail-line feedback such as `LOCKING...`, `UNLOCKING...`, `LOCKED`, `UNLOCKED`, `JAMMED`, `ALREADY LOCKED`, and `ALREADY UNLOCKED`.
-- When a favorite entry resolves to a cover, circle opens and play/pause closes. The remote shows temporary detail-line feedback such as `OPENING...`, `CLOSING...`, `OPENED`, `CLOSED`, and `OPEN xx%`.
+- When a favorite entry resolves to a lock, circle locks and square unlocks. The remote shows temporary detail-line feedback such as `LOCKING...`, `UNLOCKING...`, `LOCKED`, `UNLOCKED`, `JAMMED`, `ALREADY LOCKED`, and `ALREADY UNLOCKED`.
+- When a favorite entry resolves to a cover, circle opens and square closes. The remote shows temporary detail-line feedback such as `OPENING...`, `CLOSING...`, `OPENED`, `CLOSED`, and `OPEN xx%`.
 - When a favorite entry resolves to an automation, script, or scene, the remote shows temporary feedback such as `TRIGGERING...`, `ACTIVATING...`, `RUNNING...`, `TRIGGERED`, `ACTIVATED`, `STARTED`, and `COMPLETED`.
 - When a favorite entry resolves to an alarm, circle long-press arms using the currently selected arm mode when the panel is disarmed.
-- When a favorite entry resolves to an alarm, play/pause long-press disarms the panel.
+- When a favorite entry resolves to an alarm, square long-press disarms the panel.
 - When a favorite entry resolves to an alarm, dimmer up and dimmer down cycle `away`, `home`, `night`, and `vacation` arm modes in the details line for 5 seconds.
 - When a favorite entry resolves to an alarm, the Settings button must be held for `EXTENDED_HOLD_DURATION_MS` to call `alarm_trigger`. The details line shows `HOLD TO TRIGGER` while held.
 - Alarm actions use temporary details-line feedback such as `ARMING...`, `DISARMING...`, `TRIGGERING...`, `ARMED HOME`, `DISARMED`, `TRIGGERED`, and `FAILED`-style responses when Home Assistant reports an error.
@@ -479,6 +550,12 @@ These substitutions in `esphome/settings.yaml` are the main things you may want 
   Hold time for protected actions.
 - `EXTENDED_HOLD_DURATION_MS`
   Shared hold time for the alarm trigger action on the Settings button and wake-button reboot.
+- `WAKE_BUTTON_DEBOUNCE_MS`
+  Debounce time for the wake/power button.
+- `NAVIGATION_SYNC_DELAY_MS`
+  Delay before the UI resumes sync after navigation.
+- `REBOOT_MESSAGE_DURATION_MS`
+  Duration of the `REBOOTING...` confirmation screen.
 - `ALARM_CODE`
   Optional alarm code. This can stay empty or be set from `!secret alarm_code`.
 - `LOW_BATTERY_VOLTAGE`

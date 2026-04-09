@@ -112,7 +112,7 @@ interval:
                                           lambda: |-
                                             uint32_t now = millis();
                                             return id(last_navigation_requested_at) == 0 ||
-                                                   (now - id(last_navigation_requested_at)) >= 250;
+                                                   (now - id(last_navigation_requested_at)) >= ${NAVIGATION_SYNC_DELAY_MS};
                                         then:
                                           - script.execute: sync_current_mode_status
                                     - if:

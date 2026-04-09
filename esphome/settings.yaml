@@ -3,7 +3,7 @@ substitutions:
   DEVICE_NAME: "esphome-remote"
   FRIENDLY_NAME: "ESPHome Remote"
   VERSION: "2.6"
-  FRAMEBUFFER_WEB_DEBUG: "0"
+  FRAMEBUFFER_WEB_DEBUG: "0" # Set to 1 to enable the framebuffer web debugging server on port 80 (see web_server: section below)
   NOTIFICATION_FEED_MAX_ITEMS: "16" # Max number of notifications to keep in the feed and show on the remote
   MAX_PERSISTED_FAVORITE_LISTS: "16" # Max number of favorite lists that can be persisted (must be >= the number of lists defined in your configuration)
   TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
@@ -11,9 +11,12 @@ substitutions:
   PRESSURE_UNIT: "hPa" # Set to "kPa" when Home Assistant pressure values are in kilopascals
   PRECIPITATION_UNIT: "in" # Set to "mm" when Home Assistant precipitation values are in millimeters
   SLEEP_DURATION: "120" # seconds until auto-sleep
-  DEEP_SLEEP_DURATION: "360min"
+  DEEP_SLEEP_DURATION: "360min" # duration for deep sleep mode (set to 0 or remove if not using deep sleep)
   LONG_PRESS_DURATION_MS: "2000" # hold time for lock/cover/automation actions
   EXTENDED_HOLD_DURATION_MS: "5000" # shared hold time for alarm trigger and wake-button reboot
+  WAKE_BUTTON_DEBOUNCE_MS: "30" # debounce time for wake/power button press and release
+  NAVIGATION_SYNC_DELAY_MS: "250" # short quiet period after navigation before sync refreshes
+  REBOOT_MESSAGE_DURATION_MS: "2000" # how long REBOOTING... stays on screen before restart
   ALARM_STATUS_UPDATE_DELAY_MS: "20000" # wait before replacing arming/disarming status feedback
   LOW_BATTERY_VOLTAGE: "3.45" # boot warning threshold when battery monitoring is available
   

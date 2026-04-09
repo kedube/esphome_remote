@@ -33,7 +33,7 @@ script:
     mode: single
     then:
       - script.execute: show_rebooting_screen
-      - delay: 2000ms
+      - delay: ${REBOOT_MESSAGE_DURATION_MS}ms
       - lambda: |-
           App.safe_reboot();
 
