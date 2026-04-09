@@ -125,9 +125,6 @@ void render_remote_ui(
     return !std::isnan(ctx.selected_climate_target_temp_low) &&
            !std::isnan(ctx.selected_climate_target_temp_high);
   };
-  auto draw_footer_nodividers = [&]() {
-    it->filled_rectangle(0, 52, 128, 1, display::COLOR_ON);
-  };
   auto draw_footer_dividers = [&]() {
     it->filled_rectangle(0, 52, 128, 1, display::COLOR_ON);
     it->filled_rectangle(30, 53, 1, 11, display::COLOR_ON);
@@ -143,15 +140,11 @@ void render_remote_ui(
     it->printf(6, 50, medium_symbols, display::COLOR_ON, left_icon);
     it->printf(108, 50, medium_symbols, display::COLOR_ON, right_icon);
   };
-
-  auto draw_blank_footer = [&]() {
-    draw_footer_nodividers();
-  };
   auto draw_blank_or_contrast_footer = [&]() {
     if (show_contrast_feedback) {
       draw_contrast_footer();
     } else {
-      draw_blank_footer();
+      draw_footer_dividers();
     }
   };
   auto draw_footer_text = [&](const char *text) {
@@ -194,7 +187,7 @@ void render_remote_ui(
     const char *left_icon = remote_setting_left_icon(option);
     const char *right_icon = remote_setting_right_icon(option);
     if (label == nullptr || label[0] == '\0') {
-      draw_blank_footer();
+      draw_footer_dividers();
       return;
     }
     draw_footer_chrome(left_icon, right_icon);
@@ -211,7 +204,7 @@ void render_remote_ui(
     } else if (show_contrast_feedback) {
       draw_contrast_footer();
     } else if (!show_setting_detail_feedback) {
-      draw_blank_footer();
+      draw_footer_dividers;
     }
   };
   auto draw_feedback_state_mode = [&](const char *state_text, const char *feedback_text, bool compact = false) {
