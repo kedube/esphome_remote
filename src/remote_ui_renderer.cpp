@@ -215,7 +215,7 @@ void render_remote_ui(
     }
   };
   auto draw_feedback_state_mode = [&](const char *state_text, const char *feedback_text, bool compact = false) {
-    draw_centered_state(state_text, 33, compact);
+    draw_centered_state(state_text, 35, compact);
     if (feedback_text != nullptr && feedback_text[0] != '\0') {
       draw_detail_text(feedback_text);
     }
@@ -300,7 +300,7 @@ void render_remote_ui(
       if (show_switch_feedback) {
         write_state_label(last_switch_feedback, label_secondary, sizeof(label_secondary), "");
       }
-      draw_centered_state(label_primary, 33, false);
+      draw_centered_state(label_primary, 35, false);
       if (!draw_setting_detail_if_needed() && show_switch_feedback) {
         draw_detail_text(label_secondary);
       }
@@ -435,7 +435,7 @@ void render_remote_ui(
       bool show_cover_position_bar = ui_recent_interaction(ctx.now, ctx.last_cover_position_interaction, 3000);
       write_state_label(selected_item_state, label_primary, sizeof(label_primary));
       write_state_label(last_cover_feedback, label_secondary, sizeof(label_secondary), "");
-      draw_centered_state(label_primary, 33, true);
+      draw_centered_state(label_primary, 35, true);
       if (show_cover_position_bar) {
         draw_progress_footer(ctx.selected_cover_position_pct, "POSITION");
       } else {
@@ -468,9 +468,9 @@ void render_remote_ui(
       bool media_is_on = selected_item_state != "off" && selected_item_state != "unknown";
       if (is_tv) {
         snprintf(status_line, sizeof(status_line), "%s", media_is_on ? "ON" : "OFF");
-        draw_centered_state(status_line, 33);
+        draw_centered_state(status_line, 35);
       } else if (!selected_media_title.empty()) {
-        draw_centered_state(selected_media_title.c_str(), 33, true);
+        draw_centered_state(selected_media_title.c_str(), 35, true);
       }
       const char *media_detail = "";
       if (!show_media_feedback) {
@@ -510,9 +510,9 @@ void render_remote_ui(
       }
       if (!selected_sensor_unit.empty() && sensor_value != "SYNCING" && sensor_value != "ON" && sensor_value != "OFF") {
         snprintf(status_line, sizeof(status_line), "%s %s", sensor_value.c_str(), selected_sensor_unit.c_str());
-        draw_centered_state(status_line, 33, strlen(status_line) > 12);
+        draw_centered_state(status_line, 35, strlen(status_line) > 12);
       } else {
-        draw_centered_state(sensor_value.c_str(), 33, sensor_value.size() > 12);
+        draw_centered_state(sensor_value.c_str(), 35, sensor_value.size() > 12);
       }
       draw_blank_or_contrast_footer();
       break;
@@ -526,7 +526,7 @@ void render_remote_ui(
       const char *automation_type = automation_kind_label(ctx.automation_index);
       snprintf(status_line, sizeof(status_line), "%s",
                (show_automation_feedback && label_secondary[0] != '\0') ? label_secondary : label_primary);
-      it->print(64, 33, small_font, display::COLOR_ON, display::TextAlign::CENTER, automation_type);
+      it->print(64, 35, small_font, display::COLOR_ON, display::TextAlign::CENTER, automation_type);
       if (!draw_setting_detail_if_needed()) {
         draw_detail_text(status_line);
       }
@@ -547,7 +547,7 @@ void render_remote_ui(
       if (show_alarm_feedback) {
         write_state_label(last_alarm_feedback, label_secondary, sizeof(label_secondary), "");
       }
-      draw_centered_state(label_primary, 33, true);
+      draw_centered_state(label_primary, 35, true);
       if (show_alarm_feedback) {
         if (label_secondary[0] != '\0') {
           draw_detail_text(label_secondary);
@@ -568,7 +568,7 @@ void render_remote_ui(
       for (int i = 0; i < 3; i++) {
         if (!lines[i].empty()) {
           it->print(
-              64, i == 0 ? 20 : (i == 1 ? 33 : 45), tiny_font, display::COLOR_ON, display::TextAlign::CENTER,
+              64, i == 0 ? 20 : (i == 1 ? 35 : 45), tiny_font, display::COLOR_ON, display::TextAlign::CENTER,
               lines[i].c_str());
         }
       }
@@ -586,7 +586,7 @@ void render_remote_ui(
       }
       bool weather_ready = strcmp(status_line, "SYNCING") != 0 && strcmp(label_primary, "SYNCING") != 0;
       if (!weather_ready) {
-        draw_centered_state("SYNCING", 33);
+        draw_centered_state("SYNCING", 35);
       } else {
         if (weather_condition_is_partly_cloudy(selected_weather_condition)) {
           it->print(
@@ -597,7 +597,7 @@ void render_remote_ui(
           it->print(46, 32, weather_symbols, display::COLOR_ON, display::TextAlign::CENTER,
                     weather_condition_icon(selected_weather_condition));
         }
-        it->print(76, 33, medium_font, display::COLOR_ON, display::TextAlign::CENTER, status_line);
+        it->print(76, 35, medium_font, display::COLOR_ON, display::TextAlign::CENTER, status_line);
         bool show_condition_label =
             ctx.selected_setting_option == static_cast<int>(REMOTE_SETTING_NONE) ||
             ctx.selected_setting_option == static_cast<int>(REMOTE_SETTING_WEATHER_CONDITIONS);
@@ -628,13 +628,13 @@ void render_remote_ui(
     case REMOTE_MODE_INFO:
     default:
       if (ctx.info_index == 0) {
-        it->print(64, 33, medium_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_primary_text.c_str());
+        it->print(64, 35, medium_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_primary_text.c_str());
         it->print(64, 45, small_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_secondary_text.c_str());
       } else if (ctx.info_index == 1) {
-        it->print(64, 33, small_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_primary_text.c_str());
+        it->print(64, 35, small_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_primary_text.c_str());
         it->print(64, 45, tiny_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_secondary_text.c_str());
       } else {
-        it->print(64, 33, medium_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_primary_text.c_str());
+        it->print(64, 35, medium_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_primary_text.c_str());
         it->print(64, 45, tiny_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_secondary_text.c_str());
       }
       draw_blank_or_contrast_footer();
