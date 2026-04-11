@@ -24,7 +24,8 @@ substitutions:
 packages:
   select_pcb: !include
     # Select the appropriate PCB file to include based on your remote control hardware revision.
-    file: packages/pcb_proto.yaml
+    file: packages/pcb_rev1.yaml
+    #file: packages/pcb_rev2.yaml
     #file: packages/pcb_rev31.yaml
 
 # Uncomment to enable framebuffer web debugging on port 80. Make sure to also set REMOTE_FRAMEBUFFER_WEB_DEBUG to 1 in the substitutions section above.
