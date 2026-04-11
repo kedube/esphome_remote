@@ -250,17 +250,6 @@ You can define as many favorite lists as you want. Empty favorite lists compile 
 _Example:_
 
 ```cpp
-struct FavoriteEntity {
-  const char *name;
-  const char *entity_id;
-};
-
-struct FavoriteList {
-  const char *title;
-  const FavoriteEntity *entries;
-  size_t count;
-};
-
 static const FavoriteEntity MAIN_FAVORITES[] = {
   {"Living Room Lamp", "light.living_room_lamp"},
   {"Bedroom TV", "media_player.bedroom_tv"},
@@ -271,8 +260,6 @@ static const FavoriteEntity MAIN_FAVORITES[] = {
 static const FavoriteList FAVORITE_LISTS[] = {
   make_favorite_list("MAIN", MAIN_FAVORITES),
 };
-
-static constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);
 ```
 
 Minimal multi-list example:
@@ -289,8 +276,6 @@ static const FavoriteList FAVORITE_LISTS[] = {
   make_favorite_list("UPSTAIRS", UPSTAIRS_FAVORITES),
   make_favorite_list("OUTDOOR", OUTDOOR_FAVORITES),
 };
-
-static constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);
 ```
 
 Notifications are configured in the same file with optional feed defines:
@@ -310,7 +295,7 @@ Notes:
 - `NOTIFICATION_FEED_IDS_ATTRIBUTE` is the attribute on that entity containing notification IDs for dismiss actions.
 - `NOTIFICATION_FEED_SEPARATOR` is used when multiple notifications are packed into one string.
 
-If Home Assistant no longer exposes a ready-made `sensor.persistent_notifications`, add the included template sensor on the Home Assistant side to recreate the feed the remote expects.
+Since Home Assistant no longer exposes a ready-made `sensor.persistent_notifications`, the included template sensor must be added to Home Assistant to recreate the feed the remote expects.
 
 Copy [`home_assistant/remote_notifications.yaml`](home_assistant/remote_notifications.yaml) into your Home Assistant `template:` configuration, or include it as a package. It publishes:
 
@@ -327,7 +312,7 @@ In Notifications mode, pressing the circle or play/pause action button dismisses
 
 Open `esphome/settings.yaml` and update the shared settings for your remote. This file is intended to be the main place for device-level customization.
 
-At minimum, choose the board package that matches your hardware:
+At a minimum, choose the board package that matches your remote hardware PCB:
 
 ```yaml
 packages:
@@ -414,7 +399,7 @@ substitutions:
   FRAMEBUFFER_WEB_DEBUG: "1"
 ```
 
-Then uncomment the web server section in the same file:
+Then, uncomment the web server section in the same file:
 
 ```yaml
 web_server:
@@ -445,13 +430,13 @@ The remote is designed around nine physical inputs:
 
 | Button | Default behavior |
 | --- | --- |
-| Wake / Power | Short press and release puts the remote to sleep. Hold for `EXTENDED_HOLD_DURATION_MS` to reboot. |
+| Wake / Power | Short-press and release puts the remote to sleep. Hold for `EXTENDED_HOLD_DURATION_MS` to reboot. |
 | Mode | Cycles to the next top-level mode or favorite list. |
 | Previous | Selects the previous item in the current mode. |
 | Next | Selects the next item in the current mode. |
 | Settings | Cycles through the available detail/settings views for the current item. In alarm mode, hold for `EXTENDED_HOLD_DURATION_MS` to trigger the alarm action. |
-| Minus | Decreases the current adjustable setting. In Weather mode, cycles backward through detail views. |
-| Plus | Increases the current adjustable setting. In Weather mode, cycles forward through detail views. |
+| Minus | Decreases the current adjustable setting. In Weather mode, it cycles backward through detail views. |
+| Plus | Increases the current adjustable setting. In Weather mode, it cycles forward through detail views. |
 | Circle | Positive or activate action in most modes: turn on, open, lock, play/pause, run, arm, or dismiss. |
 | Square | Negative or deactivate action in most modes: turn off, close, unlock, stop, or disarm. |
 
@@ -547,7 +532,7 @@ These substitutions in `esphome/settings.yaml` are the main things you may want 
 - `NOTIFICATION_FEED_MAX_ITEMS`
   Maximum number of notification items retained in the remote's notification feed cache.
 - `MAX_PERSISTED_FAVORITE_LISTS`
-  Maximum number of favorite lists that can be stored in persisted UI state.
+  Maximum number of favorite lists that can be stored in the persisted UI state.
 - `SLEEP_DURATION`
   Idle time before the remote sleeps.
 - `DEEP_SLEEP_DURATION`
@@ -605,7 +590,7 @@ Ensure there are no typos in the entity name. You can check the list of entity n
 
 Check these items:
 
-- Your alarm entity supports the requested service such as `alarm_arm_home`, `alarm_arm_night`, or `alarm_disarm`.
+- Your alarm entity supports the requested service, such as `alarm_arm_home`, `alarm_arm_night`, or `alarm_disarm`.
 - If your integration requires a code, `ALARM_CODE` is set in `esphome/settings.yaml` and `alarm_code` exists in `esphome/secrets.yaml`.
 - If your integration does not require a code, leave `ALARM_CODE` empty.
 
