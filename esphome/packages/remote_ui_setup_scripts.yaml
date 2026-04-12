@@ -4,6 +4,9 @@ script:
     then:
       - lambda: |-
           auto it = id(oled_display);
+          if (it->is_failed() || !it->is_ready()) {
+            return;
+          }
           it->clear();
           it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue8ac");
           it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "POWERING OFF");
@@ -14,6 +17,9 @@ script:
     then:
       - lambda: |-
           auto it = id(oled_display);
+          if (it->is_failed() || !it->is_ready()) {
+            return;
+          }
           it->clear();
           it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\uf053");
           it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "HOLD TO REBOOT");
@@ -24,6 +30,9 @@ script:
     then:
       - lambda: |-
           auto it = id(oled_display);
+          if (it->is_failed() || !it->is_ready()) {
+            return;
+          }
           it->clear();
           it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\uf053");
           it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "REBOOTING...");
@@ -42,6 +51,9 @@ script:
     then:
       - lambda: |-
           auto it = id(oled_display);
+          if (it->is_failed() || !it->is_ready()) {
+            return;
+          }
           it->clear();
           it->display();
 
@@ -123,6 +135,9 @@ script:
           then:
             - lambda: |-
                 auto it = id(oled_display);
+                if (it->is_failed() || !it->is_ready()) {
+                  return;
+                }
                 it->clear();
                 it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue63e");
                 it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WIFI CONNECTED");
@@ -131,6 +146,9 @@ script:
           else:
             - lambda: |-
                 auto it = id(oled_display);
+                if (it->is_failed() || !it->is_ready()) {
+                  return;
+                }
                 it->clear();
                 it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue648");
                 it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "CONNECTING TO WIFI");
@@ -148,6 +166,9 @@ script:
           id(updated_ui) = true;
 
           auto it = id(oled_display);
+          if (it->is_failed() || !it->is_ready()) {
+            return;
+          }
           it->clear();
           it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue19c");
           it->print(64, 26, id(small_font), COLOR_ON, display::TextAlign::CENTER, "LOW BATTERY");
@@ -165,6 +186,9 @@ script:
     then:
       - lambda: |-
           auto it = id(oled_display);
+          if (it->is_failed() || !it->is_ready()) {
+            return;
+          }
           it->clear();
           it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue63e");
           it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WIFI CONNECTED");
@@ -176,6 +200,9 @@ script:
     then:
       - lambda: |-
           auto it = id(oled_display);
+          if (it->is_failed() || !it->is_ready()) {
+            return;
+          }
           it->clear();
           it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue648");
           it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WIFI DISCONNECTED");

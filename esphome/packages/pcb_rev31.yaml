@@ -6,6 +6,10 @@ substitutions:
 
 esphome:
   on_boot:
+    - priority: 700
+      then:
+        - output.turn_on: oled_power
+        - delay: 10ms
     - priority: -10
       then:
         - script.execute: update_battery

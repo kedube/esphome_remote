@@ -1,7 +1,7 @@
 substitutions:
   BOARD: "esp32dev"
-  DEVICE_NAME: "esphome-remote"
-  FRIENDLY_NAME: "ESPHome Remote"
+  DEVICE_NAME: "esphome-remote31"
+  FRIENDLY_NAME: "ESPHome Remote 3.1"
   VERSION: "2.6"
   FRAMEBUFFER_WEB_DEBUG: "0" # Set to 1 to enable the framebuffer web debugging server on port 80 (see web_server: section below)
   NOTIFICATION_FEED_MAX_ITEMS: "16" # Max number of notifications to keep in the feed and show on the remote
@@ -24,9 +24,9 @@ substitutions:
 packages:
   select_pcb: !include
     # Select the appropriate PCB file to include based on your remote control hardware revision.
-    file: packages/pcb_rev1.yaml
+    #file: packages/pcb_rev1.yaml
     #file: packages/pcb_rev2.yaml
-    #file: packages/pcb_rev31.yaml
+    file: packages/pcb_rev31.yaml
 
 # Uncomment to enable framebuffer web debugging on port 80. Make sure to also set REMOTE_FRAMEBUFFER_WEB_DEBUG to 1 in the substitutions section above.
 #web_server:

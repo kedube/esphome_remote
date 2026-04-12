@@ -8,6 +8,13 @@ script:
           then:
             - lambda: |-
                 auto it = id(oled_display);
+                if (it->is_failed()) {
+                  id(updated_ui) = false;
+                  return;
+                }
+                if (!it->is_ready()) {
+                  return;
+                }
                 RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
                 UiMenuHeader header = ui_menu_header(id(current_menu_index), mode);
                 RemoteRenderContext ctx;
