@@ -37,6 +37,8 @@ If you just want to get the remote running:
 4. Open [`esphome/settings.yaml`](esphome/settings.yaml) and choose the correct PCB package.
 5. Run `esphome run esphome/remote_control.yaml`.
 
+The current release series is `2.7`.
+
 ## Navigation Model
 
 - One or more user-defined favorite lists containing mixed entity types
@@ -317,8 +319,8 @@ At a minimum, choose the board package that matches your remote hardware PCB:
 ```yaml
 packages:
   select_pcb: !include
-    # file: packages/pcb_rev1.yaml
-    # file: packages/pcb_rev2.yaml
+    #file: packages/pcb_rev1.yaml
+    #file: packages/pcb_rev2.yaml
     file: packages/pcb_rev31.yaml
 ```
 
@@ -384,7 +386,7 @@ INFO Build Info: config_hash=0x694d2e36 build_time_str=2026-04-01 14:02:17 -0400
 INFO Successfully compiled program.
 Found multiple options for uploading, please choose one:
   [1] /dev/cu.usbserial-8320 (USB Serial)
-  [2] Over The Air (esp32-remote.local)
+  [2] Over The Air (esphome-remote.local)
 (number):
 ```
 
