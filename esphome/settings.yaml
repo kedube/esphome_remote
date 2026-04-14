@@ -2,7 +2,7 @@ substitutions:
   BOARD: "esp32dev"
   DEVICE_NAME: "esphome-remote31"
   FRIENDLY_NAME: "ESPHome Remote"
-  VERSION: "2.7"
+  VERSION: "2.7.1"
   FRAMEBUFFER_WEB_DEBUG: "0" # Set to 1 to enable the framebuffer web debugging server on port 80 (see web_server: section below)
   NOTIFICATION_FEED_MAX_ITEMS: "16" # Max number of notifications to keep in the feed and show on the remote
   MAX_PERSISTED_FAVORITE_LISTS: "16" # Max number of favorite lists that can be persisted (must be >= the number of lists defined in your configuration)
