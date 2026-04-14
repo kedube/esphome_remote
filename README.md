@@ -37,8 +37,6 @@ If you just want to get the remote running:
 4. Open [`esphome/settings.yaml`](esphome/settings.yaml) and choose the correct PCB package.
 5. Run `esphome run esphome/remote_control.yaml`.
 
-The current release series is `2.7`.
-
 ## Navigation Model
 
 - One or more user-defined favorite lists containing mixed entity types
@@ -312,9 +310,15 @@ In Notifications mode, pressing the circle or play/pause action button dismisses
 
 ## 5. Configure `settings.yaml`
 
-Open `esphome/settings.yaml` and update the shared settings for your remote. This file is intended to be the main place for device-level customization.
+Open `esphome/settings.yaml` and update the shared settings for your remote. This is the main file for device-level customization.
 
-At a minimum, choose the board package that matches your remote hardware PCB:
+Use this file for three things:
+
+1. Select the PCB package that matches your hardware.
+2. Set the shared substitutions that control naming, timing, and battery behavior.
+3. Enable optional features such as framebuffer web debugging.
+
+Start by choosing the board package that matches your remote hardware PCB:
 
 ```yaml
 packages:
@@ -324,7 +328,7 @@ packages:
     file: packages/pcb_rev31.yaml
 ```
 
-This file also contains the most common substitutions you may want to change:
+  The same file also contains the most common substitutions you may want to change:
 
 | Setting | Purpose |
 | --- | --- |
@@ -341,18 +345,23 @@ This file also contains the most common substitutions you may want to change:
 | `WAKE_BUTTON_DEBOUNCE_MS` | Debounce time for the wake/power button press and release handling. |
 | `NAVIGATION_SYNC_DELAY_MS` | Short quiet period after navigation before subscription-backed state sync resumes. |
 | `REBOOT_MESSAGE_DURATION_MS` | How long the `REBOOTING...` message stays on screen before the remote restarts. |
+| `SAFE_MODE_BOOT_IS_GOOD_AFTER` | How long a new boot must survive before ESPHome considers it successful for safe mode and OTA rollback. |
 | `ALARM_CODE` | Optional alarm code. Leave it empty or replace it with `!secret alarm_code`. |
 | `LOW_BATTERY_VOLTAGE` | Battery warning threshold for battery-monitoring boards. |
+| `BATTERY_DIVIDER_MULTIPLIER` | Voltage divider scaling factor for battery-monitoring boards. |
+| `BATTERY_VOLTAGE_MIN` | Battery voltage treated as 0% for the percentage estimate. |
+| `BATTERY_VOLTAGE_MAX` | Battery voltage treated as 100% for the percentage estimate. |
+| `BATTERY_VOLTAGE_CURVE_GAMMA` | Curve shaping factor for the battery percentage estimate. |
 | `FRAMEBUFFER_WEB_DEBUG` | Set to `"1"` only when using the optional framebuffer download endpoint. |
 
 Notes:
 
 - `NOTIFICATION_FEED_MAX_ITEMS` and `MAX_PERSISTED_FAVORITE_LISTS` are compile-time capacity limits. Changing them requires recompiling the firmware and may increase memory usage.
-- The timing substitutions such as `SLEEP_DURATION`, `LONG_PRESS_DURATION_MS`, `EXTENDED_HOLD_DURATION_MS`, `WAKE_BUTTON_DEBOUNCE_MS`, `NAVIGATION_SYNC_DELAY_MS`, and `REBOOT_MESSAGE_DURATION_MS` control runtime behavior and are the safest settings to tune first.
+- The timing substitutions such as `SLEEP_DURATION`, `LONG_PRESS_DURATION_MS`, `EXTENDED_HOLD_DURATION_MS`, `WAKE_BUTTON_DEBOUNCE_MS`, `NAVIGATION_SYNC_DELAY_MS`, `REBOOT_MESSAGE_DURATION_MS`, and `SAFE_MODE_BOOT_IS_GOOD_AFTER` control runtime behavior and are the safest settings to tune first.
 - Safe starting points:
-  `NOTIFICATION_FEED_MAX_ITEMS: "16"`, `MAX_PERSISTED_FAVORITE_LISTS: "16"`, `WAKE_BUTTON_DEBOUNCE_MS: "30"`, `NAVIGATION_SYNC_DELAY_MS: "250"`, `REBOOT_MESSAGE_DURATION_MS: "2000"`.
+  `NOTIFICATION_FEED_MAX_ITEMS: "16"`, `MAX_PERSISTED_FAVORITE_LISTS: "16"`, `WAKE_BUTTON_DEBOUNCE_MS: "30"`, `NAVIGATION_SYNC_DELAY_MS: "250"`, `REBOOT_MESSAGE_DURATION_MS: "2000"`, `SAFE_MODE_BOOT_IS_GOOD_AFTER: "10s"`.
 
-`esphome/remote_control.yaml` still contains the board-specific `PIN_*` substitutions that are provided by the selected PCB package.
+`esphome/remote_control.yaml` includes this shared settings file. The board-specific `PIN_*` substitutions still come from the selected PCB package.
 
 If your alarm integration requires a code, set it in `esphome/settings.yaml` like this:
 
@@ -524,37 +533,6 @@ Mode-specific action examples:
 - `alarm_control_panel.*`
 - `water_heater.*`
 - `weather.*`
-
-## Important Settings
-
-These substitutions in `esphome/settings.yaml` are the main things you may want to customize:
-
-- `TEMPERATURE_UNIT`
-  Set to `"F"` or `"C"` to match your Home Assistant climate values.
-- `NOTIFICATION_FEED_MAX_ITEMS`
-  Maximum number of notification items retained in the remote's notification feed cache.
-- `MAX_PERSISTED_FAVORITE_LISTS`
-  Maximum number of favorite lists that can be stored in the persisted UI state.
-- `SLEEP_DURATION`
-  Idle time before the remote sleeps.
-- `DEEP_SLEEP_DURATION`
-  Duration of deep sleep.
-- `LONG_PRESS_DURATION_MS`
-  Hold time for protected actions.
-- `EXTENDED_HOLD_DURATION_MS`
-  Shared hold time for the alarm trigger action on the Settings button and wake-button reboot.
-- `WAKE_BUTTON_DEBOUNCE_MS`
-  Debounce time for the wake/power button.
-- `NAVIGATION_SYNC_DELAY_MS`
-  Delay before the UI resumes sync after navigation.
-- `REBOOT_MESSAGE_DURATION_MS`
-  Duration of the `REBOOTING...` confirmation screen.
-- `ALARM_CODE`
-  Optional alarm code. This can stay empty or be set from `!secret alarm_code`.
-- `LOW_BATTERY_VOLTAGE`
-  Battery warning threshold for battery-monitoring boards.
-- `PIN_*`
-  Button, wake, and I2C pin assignments are defined by the selected board package.
 
 ## Troubleshooting
 

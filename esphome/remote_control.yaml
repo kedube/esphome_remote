@@ -138,6 +138,9 @@ ota:
   - platform: esphome
     password: !secret ota_password
 
+safe_mode:
+  boot_is_good_after: ${SAFE_MODE_BOOT_IS_GOOD_AFTER}
+
 logger:
   level: INFO # DEBUG
 

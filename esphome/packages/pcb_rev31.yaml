@@ -10,7 +10,7 @@ esphome:
       then:
         - output.turn_on: oled_power
         - delay: 10ms
-    - priority: -10
+    - priority: 400
       then:
         - script.execute: update_battery
 
@@ -26,7 +26,7 @@ sensor:
     attenuation: 12db
     update_interval: never
     filters:
-      - multiply: 1.68
+      - multiply: ${BATTERY_DIVIDER_MULTIPLIER}
 
   - platform: template
     id: battery_voltage_sensor
@@ -58,9 +58,9 @@ sensor:
       float v = id(battery_adc).state;
       static float v_avg = 0;
 
-      const float V_MIN = 3.30;
-      const float V_MAX = 4.20;
-      const float GAMMA = 2.2;
+      const float V_MIN = ${BATTERY_VOLTAGE_MIN};
+      const float V_MAX = ${BATTERY_VOLTAGE_MAX};
+      const float GAMMA = ${BATTERY_VOLTAGE_CURVE_GAMMA};
 
       if (isnan(v) || v < 2.5 || v > 4.5) {
         return NAN;
@@ -86,7 +86,7 @@ script:
       - script.execute: clear_display_for_sleep
       - delay: 500ms
       - output.turn_off: oled_power
-      - delay: 5ms
+      - delay: 10ms
       - deep_sleep.enter: go_sleep
 
   - id: update_battery
@@ -104,10 +104,12 @@ script:
       - component.update: battery_voltage_sensor
       - component.update: battery_percent_sensor
       - lambda: |-
-          id(battery_monitoring_available) = true;
-          id(battery_voltage) = id(battery_voltage_sensor).has_state() ? id(battery_voltage_sensor).state : NAN;
-          id(battery_percentage) =
-              id(battery_percent_sensor).has_state() ? int(roundf(id(battery_percent_sensor).state)) : 0;
+          bool voltage_valid = id(battery_voltage_sensor).has_state() && !isnan(id(battery_voltage_sensor).state);
+          bool percentage_valid = id(battery_percent_sensor).has_state() && !isnan(id(battery_percent_sensor).state);
+
+          id(battery_monitoring_available) = voltage_valid && percentage_valid;
+          id(battery_voltage) = voltage_valid ? id(battery_voltage_sensor).state : NAN;
+          id(battery_percentage) = percentage_valid ? int(roundf(id(battery_percent_sensor).state)) : 0;
           id(last_battery_update) = millis();
           id(updated_ui) = true;
 
