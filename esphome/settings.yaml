@@ -11,7 +11,7 @@ substitutions:
   PRESSURE_UNIT: "hPa" # Set to "kPa" when Home Assistant pressure values are in kilopascals
   PRECIPITATION_UNIT: "in" # Set to "mm" when Home Assistant precipitation values are in millimeters
   SLEEP_DURATION: "120" # seconds until auto-sleep
-  DEEP_SLEEP_DURATION: "360min" # duration for deep sleep mode (set to 0 or remove if not using deep sleep)
+  DEEP_SLEEP_DURATION: "3min" # duration for deep sleep mode (set to 0 or remove if not using deep sleep)
   LONG_PRESS_DURATION_MS: "2000" # hold time for lock/cover/automation actions
   EXTENDED_HOLD_DURATION_MS: "5000" # shared hold time for alarm trigger and wake-button reboot
   WAKE_BUTTON_DEBOUNCE_MS: "30" # debounce time for wake/power button press and release
