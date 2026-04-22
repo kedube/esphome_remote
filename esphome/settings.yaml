@@ -1,6 +1,6 @@
 substitutions:
   BOARD: "esp32dev"
-  DEVICE_NAME: "esphome-remote31"
+  DEVICE_NAME: "esphome-remote"
   FRIENDLY_NAME: "ESPHome Remote"
   VERSION: "2.8"
   FRAMEBUFFER_WEB_DEBUG: "0" # Set to 1 to enable the framebuffer web debugging server on port 80 (see web_server: section below)
