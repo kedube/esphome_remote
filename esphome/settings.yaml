@@ -24,7 +24,6 @@ substitutions:
   BATTERY_VOLTAGE_MIN: "3.30" # 0% battery voltage for the Li-ion percentage estimate
   BATTERY_VOLTAGE_MAX: "4.20" # 100% battery voltage for the Li-ion percentage estimate
   BATTERY_VOLTAGE_CURVE_GAMMA: "2.2" # curve shaping factor for the percentage estimate
-  
 
 packages:
   select_pcb: !include
