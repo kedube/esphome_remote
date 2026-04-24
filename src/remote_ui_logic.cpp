@@ -230,7 +230,12 @@ void populate_remote_info_text(
   }
 
   if (info_index == 1) {
-    primary_text = wifi::global_wifi_component != nullptr ? wifi::global_wifi_component->wifi_ssid() : "";
+    if (wifi::global_wifi_component != nullptr) {
+      char ssid_buffer[wifi::SSID_BUFFER_SIZE];
+      primary_text = wifi::global_wifi_component->wifi_ssid_to(ssid_buffer);
+    } else {
+      primary_text.clear();
+    }
     if (primary_text.empty()) {
       primary_text = "DISCONNECTED";
     }

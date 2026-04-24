@@ -6,6 +6,10 @@ substitutions:
 
 esphome:
   on_boot:
+    - priority: 700
+      then:
+        - switch.turn_on: oled_power
+        - delay: 10ms
     - priority: 400
       then:
         - script.execute: update_battery
@@ -13,9 +17,7 @@ esphome:
 switch:
   - platform: gpio
     id: oled_power
-    internal: true
     pin: ${PIN_OLED_EN}
-    restore_mode: ALWAYS_ON
 
 sensor:
   - platform: adc

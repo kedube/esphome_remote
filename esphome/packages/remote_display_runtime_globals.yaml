@@ -173,10 +173,6 @@ globals:
     type: bool
     initial_value: 'false'
 
-  - id: ignore_next_wake_button_cycle
-    type: bool
-    initial_value: 'false'
-
   - id: last_mode_action_command
     type: int
     initial_value: '0'

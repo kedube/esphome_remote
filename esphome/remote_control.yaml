@@ -68,8 +68,6 @@ esphome:
     - priority: 250
       then:
         - lambda: |-
-            id(ignore_next_wake_button_cycle) =
-                esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0 && gpio_get_level(GPIO_NUM_${PIN_WAKE}) == 0;
             ensure_light_status_tracker();
             id(last_active) = millis() / 1000;
             PersistedUIStateData restored = unpack_persisted_ui_state(id(persisted_ui_state), id(persisted_ui_state_aux));
@@ -145,16 +143,16 @@ safe_mode:
 
 logger:
   level: INFO # DEBUG
-  baud_rate: 460800 # Disable logging over UART
+  baud_rate: 0 # Disable logging over UART
 
 deep_sleep:
   id: go_sleep
+  sleep_duration: ${DEEP_SLEEP_DURATION}
   wakeup_pin:
     number: ${PIN_WAKE}
-    inverted: true
     allow_other_uses: true
     ignore_strapping_warning: true
-  wakeup_pin_mode: KEEP_AWAKE
+  wakeup_pin_mode: INVERT_WAKEUP
 
 i2c:
   sda: ${PIN_I2C_SDA}
