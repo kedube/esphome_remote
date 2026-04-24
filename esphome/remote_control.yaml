@@ -14,7 +14,6 @@ substitutions:
 packages:
   settings: !include settings.yaml
   remote_fonts: !include packages/remote_fonts.yaml
-  remote_display_core: !include packages/remote_display_core.yaml
   remote_display_runtime_globals: !include packages/remote_display_runtime_globals.yaml
   remote_display_selection_globals: !include packages/remote_display_selection_globals.yaml
   remote_display_state_globals: !include packages/remote_display_state_globals.yaml
@@ -147,7 +146,7 @@ logger:
 
 deep_sleep:
   id: go_sleep
-  sleep_duration: ${DEEP_SLEEP_DURATION}
+  run_duration: ${DEEP_SLEEP_DURATION}
   wakeup_pin:
     number: ${PIN_WAKE}
     allow_other_uses: true
@@ -159,3 +158,11 @@ i2c:
   scl: ${PIN_I2C_SCL}
   frequency: 400kHz
   scan: false
+
+display:
+  - platform: ssd1306_i2c
+    model: "SH1106 128x64"
+    address: 0x3C
+    rotation: 180
+    contrast: 0.5
+    id: oled_display

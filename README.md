@@ -339,7 +339,7 @@ packages:
 | `MAX_PERSISTED_FAVORITE_LISTS` | Maximum number of favorite lists stored in persisted UI state. This must be at least as large as your configured favorite list count. |
 | `TEMPERATURE_UNIT` | Set to `"F"` or `"C"` to match your Home Assistant climate values. |
 | `SLEEP_DURATION` | Idle time before the remote sleeps. |
-| `DEEP_SLEEP_DURATION` | Duration of deep sleep. |
+| `DEEP_SLEEP_DURATION` | Maximum awake time before the remote enters deep sleep. |
 | `LONG_PRESS_DURATION_MS` | Hold time for protected actions. |
 | `EXTENDED_HOLD_DURATION_MS` | Shared hold time for long protected actions that use the extended timer, including the Settings button alarm trigger and wake-button reboot. |
 | `WAKE_BUTTON_DEBOUNCE_MS` | Debounce time for the wake/power button press and release handling. |
