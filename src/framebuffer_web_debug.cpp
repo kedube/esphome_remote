@@ -51,7 +51,7 @@ class FramebufferDumpHandler : public web_server_idf::AsyncWebHandler {
       int bit = 7;
       for (int x = 0; x < width; x++) {
         const int source_x = width - 1 - x;
-        if (framebuffer_pixel_is_on(this->display_, source_x, source_y)) {
+        if (!framebuffer_pixel_is_on(this->display_, source_x, source_y)) {
           packed |= static_cast<uint8_t>(1u << bit);
         }
         bit--;
