@@ -93,7 +93,6 @@ esphome_remote/
 │   │   ├── remote_actions_security.yaml
 │   │   ├── remote_button_action_scripts.yaml
 │   │   ├── remote_button_press_scripts.yaml
-│   │   ├── remote_display_core.yaml
 │   │   ├── remote_display_runtime_globals.yaml
 │   │   ├── remote_display_scripts.yaml
 │   │   ├── remote_display_selection_globals.yaml
