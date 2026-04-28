@@ -332,7 +332,13 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
   }
 
   if (mode == REMOTE_MODE_INFO) {
-    const char *state = idx == 0 ? "date" : idx == 1 ? "network" : "version";
+    const char *state =
+        idx == 0 ? "date"
+                 : idx == 1 ? "wireless"
+                 : idx == 2 ? "network"
+                 : idx == 3 ? "device_name"
+                 : idx == 4 ? "battery"
+                            : "version";
     *ui.updated_ui = assign_string_if_changed(ui.selected_item_state, state) || *ui.updated_ui;
   }
 }

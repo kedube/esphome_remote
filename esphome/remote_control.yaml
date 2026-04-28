@@ -71,11 +71,14 @@ esphome:
             id(last_active) = millis() / 1000;
             PersistedUIStateData restored = unpack_persisted_ui_state(id(persisted_ui_state), id(persisted_ui_state_aux));
 
-            for (int i = 0; i < FAVORITE_LIST_COUNT_INT; i++) {
-              favorite_selected_index_ref(i) = restored.favorite_indices[i];
+            if (menu_index_is_favorite(restored.current_menu_index) && restored.current_menu_index < FAVORITE_LIST_COUNT_INT) {
+              favorite_selected_index_ref(restored.current_menu_index) = restored.current_favorite_index;
             }
             id(selected_notification_index) = restored.selected_notification_index;
             id(selected_info_index) = restored.selected_info_index;
+            id(selected_setting_option) = restored.selected_setting_option;
+            id(selected_weather_detail_index) = restored.selected_weather_detail_index;
+            id(selected_alarm_arm_mode) = static_cast<int>(clamp_alarm_arm_mode(restored.selected_alarm_arm_mode));
 
             if (restored.contrast >= 1 && restored.contrast <= 10) {
               id(contrast) = restored.contrast;
@@ -85,7 +88,9 @@ esphome:
             id(oled_display).set_contrast(id(contrast) * 1.0f / 10.0f);
 
             id(current_menu_index) = clamp_menu_index(restored.current_menu_index);
-            id(current_mode) = REMOTE_MODE_INFO;
+            id(current_mode) = restored.current_mode >= 0 && restored.current_mode < REMOTE_MODE_COUNT
+                ? restored.current_mode
+                : REMOTE_MODE_INFO;
             id(updated_ui) = true;
         - script.execute: update_selected_item
     - priority: -100

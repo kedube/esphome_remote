@@ -23,8 +23,8 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 - Multiple board package options for different PCB revisions
 - Favorite-list navigation with mixed Home Assistant entity types in each list
 - Automatic hiding of empty favorite lists and optional Notifications mode
-- Persistent restore of the current favorite list, selected item per favorite list, and contrast
-- Notification, weather, version, time/date, and network info screens
+- Persistent restore of the current menu, selected item, contrast, and lightweight mode-selection UI state after wake or reboot
+- Notification, weather, and detailed info screens for time/date, wireless, network, device name, battery, and version
 - Optional framebuffer download endpoint for capturing clean UI screenshots
 
 ## Quick Start
@@ -174,7 +174,7 @@ esphome_remote/
 - `include/remote_ui_bindings.h`
   Shared UI binding helpers used to build reset/sync state objects without duplicating YAML wiring blocks.
 - `include/ui_state_helpers.h`
-  Persistent UI save/restore helpers for favorite-list menu state.
+  Persistent UI save/restore helpers for menu, selection, and lightweight mode state.
 - `esphome/remote_control.yaml`
   Top-level composition file that imports the modular ESPHome packages and C++ helpers.
 
@@ -336,7 +336,7 @@ packages:
 | `DEVICE_NAME` | Network name used by ESPHome and OTA. |
 | `FRIENDLY_NAME` | Human-readable device name shown in Home Assistant. |
 | `NOTIFICATION_FEED_MAX_ITEMS` | Maximum number of notification messages cached and exposed in Notifications mode. |
-| `MAX_PERSISTED_FAVORITE_LISTS` | Maximum number of favorite lists stored in persisted UI state. This must be at least as large as your configured favorite list count. |
+| `MAX_PERSISTED_FAVORITE_LISTS` | Compile-time capacity limit for configured favorite lists. This must be at least as large as your configured favorite list count. |
 | `TEMPERATURE_UNIT` | Set to `"F"` or `"C"` to match your Home Assistant climate values. |
 | `SLEEP_DURATION` | Idle time before the remote sleeps. |
 | `DEEP_SLEEP_DURATION` | Maximum awake time before the remote enters deep sleep. |
@@ -482,7 +482,7 @@ Long-press protection:
 | Notifications | `Circle` dismiss selected notification. |
 | Alarms | `Circle` arm, `Square` disarm, `Plus` / `Minus` change arm mode. |
 | Weather | `Settings`, `Plus`, and `Minus` browse weather detail views. |
-| Info | Read-only status screens for time/date, network, and version. |
+| Info | Read-only status screens for time/date, wireless, network, device name, battery, and version. |
 
 Mode-specific action examples:
 
@@ -500,7 +500,7 @@ Mode-specific action examples:
 
 ## UI Notes
 
-- The remote restores the previously selected favorite list and selected item after wake or reboot.
+- The remote restores the previously selected menu, item, contrast, and lightweight detail-selection state after wake or reboot.
 - Empty favorite lists are skipped automatically.
 - Holding the wake/power button for `EXTENDED_HOLD_DURATION_MS` reboots the remote. The screen shows `HOLD TO REBOOT` while held, then `REBOOTING...` briefly before restart.
 - Lock, cover, and automation actions use long-press protection.
@@ -512,7 +512,7 @@ Mode-specific action examples:
 - When a favorite entry resolves to an alarm, dimmer up and dimmer down cycle `away`, `home`, `night`, and `vacation` arm modes in the details line for 5 seconds.
 - When a favorite entry resolves to an alarm, the Settings button must be held for `EXTENDED_HOLD_DURATION_MS` to call `alarm_trigger`. The details line shows `HOLD TO TRIGGER` while held.
 - Alarm actions use temporary details-line feedback such as `ARMING...`, `DISARMING...`, `TRIGGERING...`, `ARMED HOME`, `DISARMED`, `TRIGGERED`, and `FAILED`-style responses when Home Assistant reports an error.
-- Info mode includes Time & Date, Network, and Version screens.
+- Info mode includes Time & Date, Wireless, Network, Device Name, Battery, and Version screens.
 - Notifications reads from `NOTIFICATION_FEED_ENTITY` in `esphome/local_entities.h`.
 
 ## Supported Home Assistant Entity Domains

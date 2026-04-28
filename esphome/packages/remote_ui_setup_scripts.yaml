@@ -119,13 +119,25 @@ script:
           PersistedUIStateData state;
           state.contrast = id(contrast);
           state.current_menu_index = id(current_menu_index);
-          for (int i = 0; i < FAVORITE_LIST_COUNT_INT; i++) {
-            state.favorite_indices[i] = favorite_selected_index_ref(i);
+          state.current_mode = id(current_mode);
+          if (menu_index_is_favorite(id(current_menu_index))) {
+            state.current_favorite_index = favorite_selected_index_ref(id(current_menu_index));
           }
           state.selected_notification_index = id(selected_notification_index);
           state.selected_info_index = id(selected_info_index);
+          state.selected_setting_option = id(selected_setting_option);
+          state.selected_weather_detail_index = id(selected_weather_detail_index);
+          state.selected_alarm_arm_mode = id(selected_alarm_arm_mode);
           id(persisted_ui_state) = pack_persisted_ui_state(state);
           id(persisted_ui_state_aux) = pack_persisted_ui_state_aux(state);
+
+  - id: persist_ui_state_and_sync
+    then:
+      - script.execute: persist_ui_state
+      - lambda: |-
+          if (esphome::global_preferences != nullptr) {
+            esphome::global_preferences->sync();
+          }
 
   - id: boot_screen
     then:

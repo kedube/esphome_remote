@@ -99,8 +99,9 @@ script:
 
                 if (mode == REMOTE_MODE_INFO) {
                   populate_remote_info_text(
-                      ctx.info_index, current_time, "${VERSION}", ctx.battery_monitoring_available,
-                      ctx.battery_percentage, ctx.battery_voltage, ctx.info_primary_text, ctx.info_secondary_text);
+                      ctx.info_index, current_time, "${VERSION}", "${DEVICE_NAME}", "${FRIENDLY_NAME}",
+                      ctx.battery_monitoring_available, ctx.battery_percentage, ctx.battery_voltage,
+                      ctx.info_primary_text, ctx.info_secondary_text);
                 }
 
                 render_remote_ui(

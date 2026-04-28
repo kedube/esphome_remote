@@ -5,6 +5,7 @@
 
 #include "esphome/components/network/ip_address.h"
 #include "esphome/components/wifi/wifi_component.h"
+#include "esphome/core/version.h"
 
 namespace esphome {
 
@@ -204,8 +205,9 @@ RemoteUiActionGroup group_remote_mode_action_command(RemoteUiActionCommand comma
 }
 
 void populate_remote_info_text(
-    int info_index, const ESPTime &time_now, const char *version, bool battery_monitoring_available,
-    int battery_percentage, float battery_voltage, std::string &primary_text, std::string &secondary_text) {
+    int info_index, const ESPTime &time_now, const char *version, const char *device_name,
+    const char *friendly_name, bool battery_monitoring_available, int battery_percentage, float battery_voltage,
+    std::string &primary_text, std::string &secondary_text) {
   primary_text.clear();
   secondary_text.clear();
 
@@ -240,29 +242,56 @@ void populate_remote_info_text(
       primary_text = "DISCONNECTED";
     }
     if (wifi::global_wifi_component != nullptr) {
+      char rssi_buffer[20];
+      snprintf(rssi_buffer, sizeof(rssi_buffer), "%d dBm", wifi::global_wifi_component->wifi_rssi());
+      secondary_text = rssi_buffer;
+    }
+    if (secondary_text.empty()) {
+      secondary_text = "NO SIGNAL";
+    }
+    return;
+  }
+
+  if (info_index == 2) {
+    if (wifi::global_wifi_component != nullptr) {
       auto ip_addresses = wifi::global_wifi_component->wifi_sta_ip_addresses();
       for (const auto &ip : ip_addresses) {
         if (ip.is_set()) {
           char ip_buffer[network::IP_ADDRESS_BUFFER_SIZE];
-          secondary_text = ip.str_to(ip_buffer);
+          primary_text = ip.str_to(ip_buffer);
           break;
         }
       }
     }
-    if (secondary_text.empty() || secondary_text == "0.0.0.0") {
-      secondary_text = "NO IP ADDRESS";
+    if (primary_text.empty() || primary_text == "0.0.0.0") {
+      primary_text = "NO IP ADDRESS";
+    }
+    return;
+  }
+
+  if (info_index == 3) {
+    primary_text = device_name != nullptr ? device_name : "";
+    secondary_text = friendly_name != nullptr ? friendly_name : "";
+    return;
+  }
+
+  if (info_index == 4) {
+    if (battery_monitoring_available) {
+      char battery_pct_buffer[12];
+      char battery_voltage_buffer[16];
+      snprintf(battery_pct_buffer, sizeof(battery_pct_buffer), "%d%%", battery_percentage);
+      snprintf(battery_voltage_buffer, sizeof(battery_voltage_buffer), "%.02fV", battery_voltage);
+      primary_text = battery_pct_buffer;
+      secondary_text = battery_voltage_buffer;
+    } else {
+      primary_text = "N/A";
+      secondary_text = "BATTERY: N/A";
     }
     return;
   }
 
   primary_text = version != nullptr ? version : "";
-  if (battery_monitoring_available) {
-    char battery_buffer[27];
-    snprintf(battery_buffer, sizeof(battery_buffer), "BATTERY: %d%% (%.02fV)", battery_percentage, battery_voltage);
-    secondary_text = battery_buffer;
-  } else {
-    secondary_text = "BATTERY: N/A";
-  }
+  secondary_text = ESPHOME_VERSION;
 }
 
 }  // namespace esphome

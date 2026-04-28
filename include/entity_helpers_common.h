@@ -13,6 +13,7 @@
 #include "esphome/core/application.h"
 #include "esphome/core/component.h"
 #include "esphome/core/log.h"
+#include "esphome/core/preferences.h"
 #include "esphome/core/string_ref.h"
 
 enum RemoteMode {
@@ -228,8 +229,9 @@ static constexpr const EntityEntry *SENSOR_LIST = SENSOR_LIST_STORAGE.data();
 static constexpr const EntityEntry *AUTOMATION_LIST = AUTOMATION_LIST_STORAGE.data();
 static constexpr const EntityEntry *ALARM_LIST = ALARM_LIST_STORAGE.data();
 static constexpr const EntityEntry *WEATHER_LIST = WEATHER_LIST_STORAGE.data();
-static const char *const INFO_ITEM_NAMES[] = {"Time & Date", "Network", "Version"};
-static const char *const INFO_ITEM_ENTITIES[] = {"info.date", "info.network", "info.version"};
+static const char *const INFO_ITEM_NAMES[] = {"Time & Date", "Wireless", "Network", "Device Name", "Battery", "Version"};
+static const char *const INFO_ITEM_ENTITIES[] = {
+    "info.date", "info.wireless", "info.network", "info.device_name", "info.battery", "info.version"};
 static const int INFO_ITEM_COUNT = sizeof(INFO_ITEM_NAMES) / sizeof(INFO_ITEM_NAMES[0]);
 
 #ifndef REMOTE_NOTIFICATION_FEED_MAX_ITEMS

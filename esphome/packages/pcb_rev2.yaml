@@ -71,6 +71,7 @@ script:
   - id: turn_off
     mode: single
     then:
+      - script.execute: persist_ui_state_and_sync
       - script.execute: show_powering_off_screen
       - delay: 1s
       - script.execute: clear_display_for_sleep
