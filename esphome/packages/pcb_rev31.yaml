@@ -18,7 +18,9 @@ switch:
   - platform: gpio
     id: oled_power
     pin: ${PIN_OLED_EN}
-
+    internal: true
+    restore_mode: ALWAYS_ON
+    
 sensor:
   - platform: adc
     pin: ${PIN_BAT_ADC}
