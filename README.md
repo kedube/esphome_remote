@@ -72,6 +72,10 @@ Please refer to the [Quick Start Guide](https://tech.lugowski.dev/smart-remote-k
 
 ```text
 esphome_remote/
+├── .vscode/
+│   ├── c_cpp_properties.json
+│   ├── extensions.json
+│   └── launch.json
 ├── LICENSE
 ├── README.md
 ├── assets/
@@ -127,14 +131,17 @@ esphome_remote/
 ├── images/
 │   ├── remote_*.jpeg
 │   └── remote_UI-*.png
-└── src/
-    ├── framebuffer_web_debug.cpp
-    ├── remote_ui_feedback.cpp
-    ├── remote_ui_input_logic.cpp
-    ├── remote_ui_logic.cpp
-    ├── remote_ui_renderer.cpp
-    ├── remote_ui_runtime.cpp
-    └── remote_ui_sync.cpp
+├── platformio.ini
+├── src/
+│   ├── framebuffer_web_debug.cpp
+│   ├── remote_ui_feedback.cpp
+│   ├── remote_ui_input_logic.cpp
+│   ├── remote_ui_logic.cpp
+│   ├── remote_ui_renderer.cpp
+│   ├── remote_ui_runtime.cpp
+│   └── remote_ui_sync.cpp
+└── tools/
+    └── pio_esphome_bridge.py
 ```
 
 ## Important Files
@@ -159,6 +166,8 @@ esphome_remote/
   Modular ESPHome packages for actions, button/input handling, runtime behavior, display globals, fonts, and UI scripts.
 - `src/framebuffer_web_debug.cpp` and `include/framebuffer_web_debug.h`
   Optional debug-only PBM framebuffer export for screenshot capture.
+- `platformio.ini` and `tools/pio_esphome_bridge.py`
+  Root PlatformIO wrapper that delegates the IDE build button and `pio run` to the ESPHome toolchain.
 - `home_assistant/remote_notifications.yaml`
   Optional Home Assistant template sensor bridge for the Notifications mode.
 
@@ -230,7 +239,10 @@ wifi_ssid: "YourWiFiName"
 wifi_password: "YourWiFiPassword"
 encryption_key: "YourESPHomeAPIKey"
 ota_password: "YourOTAPassword"
+alarm_code: ""
 ```
+
+`alarm_code` is optional. Leave it empty unless your alarm integration requires a code (see the alarm notes in step 5).
 
 ## 4. Create Your Favorite Lists
 
@@ -249,14 +261,14 @@ You can define as many favorite lists as you want. Empty favorite lists compile 
 _Example:_
 
 ```cpp
-static const FavoriteEntity MAIN_FAVORITES[] = {
+inline constexpr FavoriteEntity MAIN_FAVORITES[] = {
   {"Living Room Lamp", "light.living_room_lamp"},
   {"Bedroom TV", "media_player.bedroom_tv"},
   {"Main Thermostat", "climate.main_thermostat"},
   {"Front Door", "lock.front_door"},
 };
 
-static const FavoriteList FAVORITE_LISTS[] = {
+inline constexpr FavoriteList FAVORITE_LISTS[] = {
   make_favorite_list("MAIN", MAIN_FAVORITES),
 };
 ```
@@ -264,14 +276,14 @@ static const FavoriteList FAVORITE_LISTS[] = {
 Minimal multi-list example:
 
 ```cpp
-static const FavoriteEntity UPSTAIRS_FAVORITES[] = {
+inline constexpr FavoriteEntity UPSTAIRS_FAVORITES[] = {
   {"Hallway Thermostat", "climate.hallway_thermostat"},
   {"Bedroom Fan", "fan.bedroom_fan"},
 };
 
-static const FavoriteEntity OUTDOOR_FAVORITES[] = {};
+inline constexpr FavoriteEntity OUTDOOR_FAVORITES[] = {};
 
-static const FavoriteList FAVORITE_LISTS[] = {
+inline constexpr FavoriteList FAVORITE_LISTS[] = {
   make_favorite_list("UPSTAIRS", UPSTAIRS_FAVORITES),
   make_favorite_list("OUTDOOR", OUTDOOR_FAVORITES),
 };
@@ -334,9 +346,13 @@ packages:
 | `BOARD` | ESPHome board definition, currently `esp32dev`. |
 | `DEVICE_NAME` | Network name used by ESPHome and OTA. |
 | `FRIENDLY_NAME` | Human-readable device name shown in Home Assistant. |
+| `VERSION` | Firmware version label shown on the boot screen and the Info version screen. |
 | `NOTIFICATION_FEED_MAX_ITEMS` | Maximum number of notification messages cached and exposed in Notifications mode. |
 | `MAX_PERSISTED_FAVORITE_LISTS` | Compile-time capacity limit for configured favorite lists. This must be at least as large as your configured favorite list count. |
 | `TEMPERATURE_UNIT` | Set to `"F"` or `"C"` to match your Home Assistant climate values. |
+| `SPEED_UNIT` | Wind speed unit label (`"MPH"` or `"KPH"`) shown in the weather wind and gust views. |
+| `PRESSURE_UNIT` | Pressure unit label (`"hPa"` or `"kPa"`) shown in the weather pressure view. |
+| `PRECIPITATION_UNIT` | Precipitation unit label (`"in"` or `"mm"`) shown in the weather precipitation view. |
 | `SLEEP_DURATION` | Idle time before the remote sleeps. |
 | `DEEP_SLEEP_DURATION` | Maximum awake time before the remote enters deep sleep. |
 | `LONG_PRESS_DURATION_MS` | Hold time for protected actions. |
@@ -344,8 +360,8 @@ packages:
 | `WAKE_BUTTON_DEBOUNCE_MS` | Debounce time for the wake/power button press and release handling. |
 | `NAVIGATION_SYNC_DELAY_MS` | Short quiet period after navigation before subscription-backed state sync resumes. |
 | `REBOOT_MESSAGE_DURATION_MS` | How long the `REBOOTING...` message stays on screen before the remote restarts. |
+| `ALARM_STATUS_UPDATE_DELAY_MS` | How long `ARMING...` / `DISARMING...` feedback waits before being replaced by the reported alarm state. |
 | `SAFE_MODE_BOOT_IS_GOOD_AFTER` | How long a new boot must survive before ESPHome considers it successful for safe mode and OTA rollback. |
-| `ALARM_CODE` | Optional alarm code. Leave it empty or replace it with `!secret alarm_code`. |
 | `LOW_BATTERY_VOLTAGE` | Battery warning threshold for battery-monitoring boards. |
 | `BATTERY_DIVIDER_MULTIPLIER` | Voltage divider scaling factor for battery-monitoring boards. |
 | `BATTERY_VOLTAGE_MIN` | Battery voltage treated as 0% for the percentage estimate. |
@@ -356,24 +372,19 @@ packages:
 Notes:
 
 - `NOTIFICATION_FEED_MAX_ITEMS` and `MAX_PERSISTED_FAVORITE_LISTS` are compile-time capacity limits. Changing them requires recompiling the firmware and may increase memory usage.
-- The timing substitutions such as `SLEEP_DURATION`, `LONG_PRESS_DURATION_MS`, `EXTENDED_HOLD_DURATION_MS`, `WAKE_BUTTON_DEBOUNCE_MS`, `NAVIGATION_SYNC_DELAY_MS`, `REBOOT_MESSAGE_DURATION_MS`, and `SAFE_MODE_BOOT_IS_GOOD_AFTER` control runtime behavior and are the safest settings to tune first.
+- The timing substitutions such as `SLEEP_DURATION`, `LONG_PRESS_DURATION_MS`, `EXTENDED_HOLD_DURATION_MS`, `WAKE_BUTTON_DEBOUNCE_MS`, `NAVIGATION_SYNC_DELAY_MS`, `REBOOT_MESSAGE_DURATION_MS`, `ALARM_STATUS_UPDATE_DELAY_MS`, and `SAFE_MODE_BOOT_IS_GOOD_AFTER` control runtime behavior and are the safest settings to tune first.
 - Safe starting points:
   `NOTIFICATION_FEED_MAX_ITEMS: "16"`, `MAX_PERSISTED_FAVORITE_LISTS: "16"`, `WAKE_BUTTON_DEBOUNCE_MS: "30"`, `NAVIGATION_SYNC_DELAY_MS: "250"`, `REBOOT_MESSAGE_DURATION_MS: "2000"`, `SAFE_MODE_BOOT_IS_GOOD_AFTER: "10s"`.
 
 `esphome/remote_control.yaml` includes this shared settings file. The board-specific `PIN_*` substitutions still come from the selected PCB package.
 
-If your alarm integration requires a code, set it in `esphome/settings.yaml` like this:
-
-```yaml
-substitutions:
-  ALARM_CODE: !secret alarm_code
-```
-
-Then add the value to `esphome/secrets.yaml`:
+If your alarm integration requires a code, add it to `esphome/secrets.yaml`:
 
 ```yaml
 alarm_code: "1234"
 ```
+
+The `ALARM_CODE` substitution is already wired to `!secret alarm_code` in `esphome/remote_control.yaml`, so no other file needs to change. Leave `alarm_code` empty in `esphome/secrets.yaml` if your integration does not use a code — the remote will arm and disarm without one.
 
 ## 6. Validate The Configuration
 
@@ -397,6 +408,17 @@ Found multiple options for uploading, please choose one:
   [2] Over The Air (esphome-remote.local)
 (number):
 ```
+
+### Building From VS Code / PlatformIO IDE
+
+The real PlatformIO project for this firmware is generated by ESPHome under `esphome/.esphome/build/<device>/` and pins its own platform and frameworks, so the root `platformio.ini` does not compile the firmware directly. Instead, its default build target delegates to the ESPHome toolchain through `tools/pio_esphome_bridge.py`. This means the PlatformIO IDE build button just works, as do the equivalent terminal commands:
+
+```bash
+pio run                    # runs: esphome compile esphome/remote_control.yaml
+pio run -t esphome-upload  # runs: esphome run esphome/remote_control.yaml (build + flash)
+```
+
+The `.vscode/` folder ships matching IntelliSense (`c_cpp_properties.json`), extension recommendations, and launch settings for working on the C++ sources in `include/` and `src/`.
 
 ## Optional Framebuffer Download Debugging
 
@@ -570,8 +592,8 @@ Ensure there are no typos in the entity name. You can check the list of entity n
 Check these items:
 
 - Your alarm entity supports the requested service, such as `alarm_arm_home`, `alarm_arm_night`, or `alarm_disarm`.
-- If your integration requires a code, `ALARM_CODE` is set in `esphome/settings.yaml` and `alarm_code` exists in `esphome/secrets.yaml`.
-- If your integration does not require a code, leave `ALARM_CODE` empty.
+- If your integration requires a code, `alarm_code` is set in `esphome/secrets.yaml` (it feeds the `ALARM_CODE` substitution in `esphome/remote_control.yaml`).
+- If your integration does not require a code, leave `alarm_code` empty.
 
 ### The framebuffer download URL does not work
 
