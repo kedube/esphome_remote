@@ -16,6 +16,16 @@ bool remote_ui_has_dual_climate_target(
          (selected_item_state == "heat_cool" || target_temp_low != target_temp_high);
 }
 
+void format_climate_target_detail(
+    char *buffer, size_t buffer_size, bool dual_target, float low, float high, float single_target,
+    const char *temperature_unit) {
+  if (dual_target) {
+    snprintf(buffer, buffer_size, "LOW: %.0f°%s   HIGH: %.0f°%s", low, temperature_unit, high, temperature_unit);
+  } else {
+    snprintf(buffer, buffer_size, "TARGET: %.0f°%s", single_target, temperature_unit);
+  }
+}
+
 static inline RemoteUiActionCommand resolve_primary_action(RemoteMode mode, bool dual_climate_target) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:

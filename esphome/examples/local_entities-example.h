@@ -1,6 +1,6 @@
 #pragma once
 
-static const FavoriteEntity LIVING_ROOM_FAVORITES[] = {
+inline constexpr FavoriteEntity LIVING_ROOM_FAVORITES[] = {
     {"Lamp", "light.living_room_lamp"},
     {"Thermostat", "climate.main_thermostat"},
     {"Front Door", "lock.front_door"},
@@ -8,7 +8,7 @@ static const FavoriteEntity LIVING_ROOM_FAVORITES[] = {
     {"Home Alarm", "alarm_control_panel.home"},
 };
 
-static const FavoriteEntity KITCHEN_FAVORITES[] = {
+inline constexpr FavoriteEntity KITCHEN_FAVORITES[] = {
     {"Ceiling Light", "light.kitchen_ceiling"},
     {"Coffee Maker", "switch.coffee_maker"},
     {"Garage Door", "cover.garage_door"},
@@ -17,7 +17,7 @@ static const FavoriteEntity KITCHEN_FAVORITES[] = {
     {"Evening Scene", "scene.evening"},
 };
 
-static const FavoriteList FAVORITE_LISTS[] = {
+inline constexpr FavoriteList FAVORITE_LISTS[] = {
     make_favorite_list("LIVING ROOM", LIVING_ROOM_FAVORITES),
     make_favorite_list("KITCHEN", KITCHEN_FAVORITES),
 };

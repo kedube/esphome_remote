@@ -2,6 +2,14 @@
 
 #include "entity_helpers_common.h"
 
+// Trackers are subscription-driven: Home Assistant pushes the current value of
+// every subscribed state/attribute right after the API handshake and streams
+// changes afterwards, so no explicit fetches are needed. Note that
+// api::APIServer::get_home_assistant_state() must NOT be used for periodic
+// refreshes: each call permanently appends to the server's subscription
+// vector (it is never pruned), and entries added after the handshake are never
+// announced to Home Assistant — a heap leak that fetches nothing.
+
 template <typename Entity, int Count>
 class SingleStateTracker : public esphome::api::CustomAPIDevice {
  public:
@@ -11,20 +19,7 @@ class SingleStateTracker : public esphome::api::CustomAPIDevice {
     for (int i = 0; i < Count; i++) {
       this->subscribe_homeassistant_state(&SingleStateTracker::on_state_, this->entities_[i].entity_id);
     }
-    this->request_all_states();
   }
-
-  void request_state(int idx) {
-    if (idx < 0 || idx >= Count) {
-      return;
-    }
-
-    const char *entity_id = this->entities_[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-  }
-
-  void request_all_states() { request_all_states_by_count(Count, [this](int i) { this->request_state(i); }); }
 
   const std::string &state(int idx) const {
     if (idx < 0 || idx >= Count) {
@@ -41,7 +36,7 @@ class SingleStateTracker : public esphome::api::CustomAPIDevice {
     }
   }
 
-  void store_state_(int idx, esphome::StringRef state) { this->state_[idx] = ha_state_or_unknown(state); }
+  void store_state_(int idx, esphome::StringRef state) { ha_assign_state_or_unknown(this->state_[idx], state); }
 
   int find_index_(const std::string &entity_id) const {
     return find_entity_index(this->entities_, Count, entity_id);
@@ -62,27 +57,6 @@ class LightStatusTracker : public esphome::api::CustomAPIDevice {
       this->subscribe_homeassistant_state(
           &LightStatusTracker::on_light_effect_list_, LIGHT_LIST[i].entity_id, "effect_list");
     }
-    this->request_all_states();
-  }
-
-  void request_light_state(int idx) {
-    if (idx < 0 || idx >= LIGHT_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = LIGHT_LIST[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "brightness", [this, idx](esphome::StringRef state) { this->store_brightness_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "effect", [this, idx](esphome::StringRef state) { this->store_effect_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "effect_list", [this, idx](esphome::StringRef state) { this->store_effect_list_(idx, state); });
-  }
-
-  void request_all_states() {
-    request_all_states_by_count(LIGHT_LIST_COUNT, [this](int i) { this->request_light_state(i); });
   }
 
   bool has_state(int idx) const { return idx >= 0 && idx < LIGHT_LIST_COUNT && this->has_state_[idx]; }
@@ -149,7 +123,7 @@ class LightStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void store_state_(int idx, esphome::StringRef state) {
-    this->state_[idx] = ha_state_or_unknown(state);
+    ha_assign_state_or_unknown(this->state_[idx], state);
     this->has_state_[idx] = this->state_[idx] != "unknown";
   }
 
@@ -158,40 +132,9 @@ class LightStatusTracker : public esphome::api::CustomAPIDevice {
     this->has_brightness_[idx] = !std::isnan(this->brightness_[idx]);
   }
 
-  void store_effect_(int idx, esphome::StringRef state) { this->effect_[idx] = state.str(); }
+  void store_effect_(int idx, esphome::StringRef state) { ha_assign(this->effect_[idx], state); }
 
-  void store_effect_list_(int idx, esphome::StringRef state) {
-    this->effect_list_[idx].clear();
-    std::string payload = state.str();
-    if (ha_state_missing(payload)) {
-      return;
-    }
-    if (!ha_payload_looks_like_json(payload)) {
-      return;
-    }
-
-    JsonDocument doc;
-    if (!ha_deserialize_json_silently(payload, doc)) {
-      return;
-    }
-    if (!doc.is<JsonArray>()) {
-      return;
-    }
-
-    JsonArray effect_list = doc.as<JsonArray>();
-    bool first = true;
-    for (JsonVariant value : effect_list) {
-      std::string effect = trim_copy(value.as<std::string>());
-      if (effect.empty()) {
-        continue;
-      }
-      if (!first) {
-        this->effect_list_[idx] += "|";
-      }
-      this->effect_list_[idx] += effect;
-      first = false;
-    }
-  }
+  void store_effect_list_(int idx, esphome::StringRef state) { ha_store_joined_list(this->effect_list_[idx], state); }
 
   int find_index_(const std::string &entity_id) const {
     return find_entity_index(LIGHT_LIST, LIGHT_LIST_COUNT, entity_id);
@@ -218,31 +161,6 @@ class FanStatusTracker : public esphome::api::CustomAPIDevice {
       this->subscribe_homeassistant_state(&FanStatusTracker::on_fan_oscillating_, FAN_LIST[i].entity_id, "oscillating");
       this->subscribe_homeassistant_state(&FanStatusTracker::on_fan_direction_, FAN_LIST[i].entity_id, "direction");
     }
-    this->request_all_states();
-  }
-
-  void request_fan_state(int idx) {
-    if (idx < 0 || idx >= FAN_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = FAN_LIST[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "percentage", [this, idx](esphome::StringRef state) { this->store_percentage_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "preset_mode", [this, idx](esphome::StringRef state) { this->store_preset_mode_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "preset_modes", [this, idx](esphome::StringRef state) { this->store_preset_modes_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "oscillating", [this, idx](esphome::StringRef state) { this->store_oscillating_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "direction", [this, idx](esphome::StringRef state) { this->store_direction_(idx, state); });
-  }
-
-  void request_all_states() {
-    request_all_states_by_count(FAN_LIST_COUNT, [this](int i) { this->request_fan_state(i); });
   }
 
   const std::string &state(int idx) const {
@@ -332,45 +250,20 @@ class FanStatusTracker : public esphome::api::CustomAPIDevice {
     }
   }
 
-  void store_state_(int idx, esphome::StringRef state) { this->state_[idx] = ha_state_or_unknown(state); }
+  void store_state_(int idx, esphome::StringRef state) { ha_assign_state_or_unknown(this->state_[idx], state); }
 
   void store_percentage_(int idx, esphome::StringRef state) {
     this->percentage_[idx] = ha_parse_float(state);
     this->has_percentage_[idx] = !std::isnan(this->percentage_[idx]);
   }
 
-  void store_preset_mode_(int idx, esphome::StringRef state) { this->preset_mode_[idx] = state.str(); }
+  void store_preset_mode_(int idx, esphome::StringRef state) { ha_assign(this->preset_mode_[idx], state); }
 
-  void store_preset_modes_(int idx, esphome::StringRef state) {
-    this->preset_modes_[idx].clear();
-    std::string payload = state.str();
-    if (ha_state_missing(payload)) {
-      return;
-    }
-    if (!ha_payload_looks_like_json(payload)) {
-      return;
-    }
-    JsonDocument doc;
-    if (!ha_deserialize_json_silently(payload, doc)) {
-      return;
-    }
-    if (!doc.is<JsonArray>()) {
-      return;
-    }
-    JsonArray modes = doc.as<JsonArray>();
-    bool first = true;
-    for (JsonVariant value : modes) {
-      std::string mode = trim_copy(value.as<std::string>());
-      if (mode.empty()) continue;
-      if (!first) this->preset_modes_[idx] += "|";
-      this->preset_modes_[idx] += mode;
-      first = false;
-    }
-  }
+  void store_preset_modes_(int idx, esphome::StringRef state) { ha_store_joined_list(this->preset_modes_[idx], state); }
 
-  void store_oscillating_(int idx, esphome::StringRef state) { this->oscillating_[idx] = state.str(); }
+  void store_oscillating_(int idx, esphome::StringRef state) { ha_assign(this->oscillating_[idx], state); }
 
-  void store_direction_(int idx, esphome::StringRef state) { this->direction_[idx] = state.str(); }
+  void store_direction_(int idx, esphome::StringRef state) { ha_assign(this->direction_[idx], state); }
 
   int find_index_(const std::string &entity_id) const {
     return find_entity_index(FAN_LIST, FAN_LIST_COUNT, entity_id);
@@ -397,34 +290,6 @@ class HumidifierStatusTracker : public esphome::api::CustomAPIDevice {
       this->subscribe_homeassistant_state(&HumidifierStatusTracker::on_current_humidity_, entity_id, "current_humidity");
       this->subscribe_homeassistant_state(&HumidifierStatusTracker::on_action_, entity_id, "action");
     }
-    this->request_all_states();
-  }
-
-  void request_humidifier_state(int idx) {
-    if (idx < 0 || idx >= HUMIDIFIER_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = HUMIDIFIER_LIST[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "mode", [this, idx](esphome::StringRef state) { this->store_mode_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "available_modes",
-        [this, idx](esphome::StringRef state) { this->store_available_modes_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "humidity",
-        [this, idx](esphome::StringRef state) { this->store_target_humidity_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "current_humidity",
-        [this, idx](esphome::StringRef state) { this->store_current_humidity_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "action", [this, idx](esphome::StringRef state) { this->store_action_(idx, state); });
-  }
-
-  void request_all_states() {
-    request_all_states_by_count(HUMIDIFIER_LIST_COUNT, [this](int i) { this->request_humidifier_state(i); });
   }
 
   const std::string &state(int idx) const {
@@ -512,43 +377,14 @@ class HumidifierStatusTracker : public esphome::api::CustomAPIDevice {
     }
   }
 
-  void store_state_(int idx, esphome::StringRef state) { this->state_[idx] = ha_state_or_unknown(state); }
-  void store_mode_(int idx, esphome::StringRef state) { this->mode_[idx] = state.str(); }
+  void store_state_(int idx, esphome::StringRef state) { ha_assign_state_or_unknown(this->state_[idx], state); }
+  void store_mode_(int idx, esphome::StringRef state) { ha_assign(this->mode_[idx], state); }
   void store_available_modes_(int idx, esphome::StringRef state) {
-    this->available_modes_[idx].clear();
-    std::string payload = state.str();
-    if (ha_state_missing(payload)) {
-      return;
-    }
-    if (!ha_payload_looks_like_json(payload)) {
-      return;
-    }
-
-    JsonDocument doc;
-    if (!ha_deserialize_json_silently(payload, doc)) {
-      return;
-    }
-    if (!doc.is<JsonArray>()) {
-      return;
-    }
-
-    JsonArray mode_list = doc.as<JsonArray>();
-    bool first = true;
-    for (JsonVariant value : mode_list) {
-      std::string mode = trim_copy(value.as<std::string>());
-      if (mode.empty()) {
-        continue;
-      }
-      if (!first) {
-        this->available_modes_[idx] += "|";
-      }
-      this->available_modes_[idx] += mode;
-      first = false;
-    }
+    ha_store_joined_list(this->available_modes_[idx], state);
   }
   void store_target_humidity_(int idx, esphome::StringRef state) { this->target_humidity_[idx] = ha_parse_float(state); }
   void store_current_humidity_(int idx, esphome::StringRef state) { this->current_humidity_[idx] = ha_parse_float(state); }
-  void store_action_(int idx, esphome::StringRef state) { this->action_[idx] = ha_state_or_unknown(state); }
+  void store_action_(int idx, esphome::StringRef state) { ha_assign_state_or_unknown(this->action_[idx], state); }
 
   int find_index_(const std::string &entity_id) const {
     return find_entity_index(HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, entity_id);
@@ -583,95 +419,6 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
       this->subscribe_homeassistant_state(&ClimateStatusTracker::on_preset_mode_, entity_id, "preset_mode");
       this->subscribe_homeassistant_state(&ClimateStatusTracker::on_preset_modes_, entity_id, "preset_modes");
     }
-    this->request_all_states();
-  }
-
-  void request_climate_state(int idx) {
-    if (idx < 0 || idx >= CLIMATE_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = CLIMATE_LIST[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "temperature",
-        [this, idx](esphome::StringRef state) { this->store_target_temperature_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "target_temp_low",
-        [this, idx](esphome::StringRef state) { this->store_target_temperature_low_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "target_temp_high",
-        [this, idx](esphome::StringRef state) { this->store_target_temperature_high_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "current_temperature",
-        [this, idx](esphome::StringRef state) { this->store_current_temperature_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "hvac_action",
-        [this, idx](esphome::StringRef state) { this->store_hvac_action_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "hvac_mode", [this, idx](esphome::StringRef state) { this->store_hvac_mode_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "hvac_modes", [this, idx](esphome::StringRef state) { this->store_hvac_modes_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "fan_mode", [this, idx](esphome::StringRef state) { this->store_fan_mode_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "fan_modes", [this, idx](esphome::StringRef state) { this->store_fan_modes_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "humidity", [this, idx](esphome::StringRef state) { this->store_target_humidity_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "preset_mode", [this, idx](esphome::StringRef state) { this->store_preset_mode_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "preset_modes", [this, idx](esphome::StringRef state) { this->store_preset_modes_(idx, state); });
-  }
-
-  void request_missing_climate_state(int idx) {
-    if (idx < 0 || idx >= CLIMATE_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = CLIMATE_LIST[idx].entity_id;
-    if (this->state_[idx] == "unknown") {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-    }
-    if (std::isnan(this->target_temperature_[idx])) {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "temperature",
-          [this, idx](esphome::StringRef state) { this->store_target_temperature_(idx, state); });
-    }
-    if (std::isnan(this->target_temperature_low_[idx])) {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "target_temp_low",
-          [this, idx](esphome::StringRef state) { this->store_target_temperature_low_(idx, state); });
-    }
-    if (std::isnan(this->target_temperature_high_[idx])) {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "target_temp_high",
-          [this, idx](esphome::StringRef state) { this->store_target_temperature_high_(idx, state); });
-    }
-    if (std::isnan(this->current_temperature_[idx])) {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "current_temperature",
-          [this, idx](esphome::StringRef state) { this->store_current_temperature_(idx, state); });
-    }
-    if (this->hvac_action_[idx] == "unknown") {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "hvac_action",
-          [this, idx](esphome::StringRef state) { this->store_hvac_action_(idx, state); });
-    }
-    if (this->hvac_mode_[idx].empty()) {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "hvac_mode", [this, idx](esphome::StringRef state) { this->store_hvac_mode_(idx, state); });
-    }
-    if (std::isnan(this->target_humidity_[idx])) {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "humidity", [this, idx](esphome::StringRef state) { this->store_target_humidity_(idx, state); });
-    }
-  }
-
-  void request_all_states() {
-    request_all_states_by_count(CLIMATE_LIST_COUNT, [this](int i) { this->request_climate_state(i); });
   }
 
   const std::string &state(int idx) const {
@@ -852,7 +599,7 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void store_state_(int idx, esphome::StringRef state) {
-    this->state_[idx] = ha_state_or_unknown(state);
+    ha_assign_state_or_unknown(this->state_[idx], state);
   }
 
   void store_target_temperature_(int idx, esphome::StringRef state) {
@@ -872,66 +619,30 @@ class ClimateStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void store_hvac_action_(int idx, esphome::StringRef state) {
-    std::string value = ha_state_or_unknown(state);
+    std::string &value = this->hvac_action_[idx];
+    ha_assign_state_or_unknown(value, state);
     if (value != "unknown") {
       for (auto &c : value) {
         if (c >= 'a' && c <= 'z') c = c - 'a' + 'A';
       }
     }
-    this->hvac_action_[idx] = value;
   }
 
-  void store_hvac_mode_(int idx, esphome::StringRef state) { this->hvac_mode_[idx] = state.str(); }
+  void store_hvac_mode_(int idx, esphome::StringRef state) { ha_assign(this->hvac_mode_[idx], state); }
 
-  void store_hvac_modes_(int idx, esphome::StringRef state) { this->store_list_(this->hvac_modes_[idx], state); }
+  void store_hvac_modes_(int idx, esphome::StringRef state) { ha_store_joined_list(this->hvac_modes_[idx], state); }
 
-  void store_fan_mode_(int idx, esphome::StringRef state) { this->fan_mode_[idx] = state.str(); }
+  void store_fan_mode_(int idx, esphome::StringRef state) { ha_assign(this->fan_mode_[idx], state); }
 
-  void store_fan_modes_(int idx, esphome::StringRef state) { this->store_list_(this->fan_modes_[idx], state); }
+  void store_fan_modes_(int idx, esphome::StringRef state) { ha_store_joined_list(this->fan_modes_[idx], state); }
 
   void store_target_humidity_(int idx, esphome::StringRef state) { this->target_humidity_[idx] = ha_parse_float(state); }
 
-  void store_preset_mode_(int idx, esphome::StringRef state) { this->preset_mode_[idx] = state.str(); }
+  void store_preset_mode_(int idx, esphome::StringRef state) { ha_assign(this->preset_mode_[idx], state); }
 
   void store_preset_modes_(int idx, esphome::StringRef state) {
-    this->supports_preset_[idx] = false;
-
-    std::string payload = state.str();
-    if (ha_state_missing(payload)) {
-      return;
-    }
-
-    this->store_list_(this->preset_modes_[idx], state);
+    ha_store_joined_list(this->preset_modes_[idx], state);
     this->supports_preset_[idx] = !this->preset_modes_[idx].empty();
-  }
-
-  void store_list_(std::string &target, esphome::StringRef state) {
-    target.clear();
-    std::string payload = state.str();
-    if (ha_state_missing(payload)) {
-      return;
-    }
-    if (!ha_payload_looks_like_json(payload)) {
-      return;
-    }
-
-    JsonDocument doc;
-    if (!ha_deserialize_json_silently(payload, doc)) {
-      return;
-    }
-    if (!doc.is<JsonArray>()) {
-      return;
-    }
-
-    JsonArray list = doc.as<JsonArray>();
-    bool first = true;
-    for (JsonVariant value : list) {
-      std::string item = trim_copy(value.as<std::string>());
-      if (item.empty()) continue;
-      if (!first) target += "|";
-      target += item;
-      first = false;
-    }
   }
 
   int find_index_(const std::string &entity_id) const {
@@ -973,17 +684,6 @@ class SensorStatusTracker : public SingleStateTracker<EntityEntry, SENSOR_LIST_C
       this->subscribe_homeassistant_state(
           &SensorStatusTracker::on_unit_, this->entities_[i].entity_id, "unit_of_measurement");
     }
-    this->request_all_states();
-  }
-
-  void request_state(int idx) {
-    SingleStateTracker<EntityEntry, SENSOR_LIST_COUNT>::request_state(idx);
-    if (idx < 0 || idx >= SENSOR_LIST_COUNT) return;
-    const char *entity_id = this->entities_[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "suggested_unit_of_measurement", [this, idx](esphome::StringRef state) { this->store_unit_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "unit_of_measurement", [this, idx](esphome::StringRef state) { this->store_unit_(idx, state); });
   }
 
   const std::string &unit(int idx) const {
@@ -1017,26 +717,7 @@ class CoverStatusTracker : public esphome::api::CustomAPIDevice {
       this->subscribe_homeassistant_state(&CoverStatusTracker::on_tilt_, entity_id, "current_tilt_position");
       this->subscribe_homeassistant_state(&CoverStatusTracker::on_supported_features_, entity_id, "supported_features");
     }
-    this->request_all_states();
   }
-
-  void request_cover_state(int idx) {
-    if (idx < 0 || idx >= COVER_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = COVER_LIST[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "current_position", [this, idx](esphome::StringRef state) { this->store_position_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "current_tilt_position", [this, idx](esphome::StringRef state) { this->store_tilt_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "supported_features", [this, idx](esphome::StringRef state) { this->store_supported_features_(idx, state); });
-  }
-
-  void request_all_states() { request_all_states_by_count(COVER_LIST_COUNT, [this](int i) { this->request_cover_state(i); }); }
 
   const std::string &state(int idx) const {
     if (idx < 0 || idx >= COVER_LIST_COUNT) {
@@ -1086,22 +767,24 @@ class CoverStatusTracker : public esphome::api::CustomAPIDevice {
     if (idx >= 0) this->store_supported_features_(idx, state);
   }
 
-  void store_state_(int idx, esphome::StringRef state) { this->state_[idx] = ha_state_or_unknown(state); }
+  void store_state_(int idx, esphome::StringRef state) { ha_assign_state_or_unknown(this->state_[idx], state); }
 
-  void store_position_(int idx, esphome::StringRef state) {
-    float value = ha_parse_float(state);
-    this->position_[idx] = value;
-  }
+  void store_position_(int idx, esphome::StringRef state) { this->position_[idx] = ha_parse_float(state); }
 
-  void store_tilt_(int idx, esphome::StringRef state) {
-    float value = ha_parse_float(state);
-    this->tilt_[idx] = value;
-  }
+  void store_tilt_(int idx, esphome::StringRef state) { this->tilt_[idx] = ha_parse_float(state); }
 
   void store_supported_features_(int idx, esphome::StringRef state) {
-    std::string value = state.str();
-    if (!ha_state_missing(value)) {
-      this->supported_features_[idx] = static_cast<int>(strtol(value.c_str(), nullptr, 10));
+    if (ha_state_missing(state)) {
+      return;
+    }
+    char buffer[16];
+    size_t len = state.size() < sizeof(buffer) - 1 ? state.size() : sizeof(buffer) - 1;
+    memcpy(buffer, state.c_str(), len);
+    buffer[len] = '\0';
+    char *end = nullptr;
+    long value = strtol(buffer, &end, 10);
+    if (end != buffer) {
+      this->supported_features_[idx] = static_cast<int>(value);
     }
   }
 
@@ -1130,61 +813,6 @@ class MediaStatusTracker : public esphome::api::CustomAPIDevice {
       this->subscribe_homeassistant_state(&MediaStatusTracker::on_sound_mode_, entity_id, "sound_mode");
       this->subscribe_homeassistant_state(&MediaStatusTracker::on_sound_mode_list_, entity_id, "sound_mode_list");
     }
-    this->request_all_states();
-  }
-
-  void request_media_state(int idx) {
-    if (idx < 0 || idx >= MEDIA_PLAYER_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = MEDIA_PLAYER_LIST[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "device_class", [this, idx](esphome::StringRef state) { this->store_device_class_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "source_list", [this, idx](esphome::StringRef state) { this->store_source_list_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "volume_level", [this, idx](esphome::StringRef state) { this->store_volume_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "media_title", [this, idx](esphome::StringRef state) { this->store_title_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "media_artist", [this, idx](esphome::StringRef state) { this->store_artist_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "source", [this, idx](esphome::StringRef state) { this->store_source_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "shuffle", [this, idx](esphome::StringRef state) { this->store_shuffle_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "repeat", [this, idx](esphome::StringRef state) { this->store_repeat_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "sound_mode", [this, idx](esphome::StringRef state) { this->store_sound_mode_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "sound_mode_list", [this, idx](esphome::StringRef state) { this->store_sound_mode_list_(idx, state); });
-  }
-
-  void request_missing_media_state(int idx) {
-    if (idx < 0 || idx >= MEDIA_PLAYER_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = MEDIA_PLAYER_LIST[idx].entity_id;
-    if (this->state_[idx] == "unknown") {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-    }
-    if (this->device_class_[idx].empty()) {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "device_class", [this, idx](esphome::StringRef state) { this->store_device_class_(idx, state); });
-    }
-    if (std::isnan(this->volume_[idx])) {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "volume_level", [this, idx](esphome::StringRef state) { this->store_volume_(idx, state); });
-    }
-  }
-
-  void request_all_states() {
-    request_all_states_by_count(MEDIA_PLAYER_LIST_COUNT, [this](int i) { this->request_media_state(i); });
   }
 
   const std::string &state(int idx) const {
@@ -1334,84 +962,44 @@ class MediaStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void store_state_(int idx, esphome::StringRef state) {
-    this->state_[idx] = ha_state_or_unknown(state);
+    ha_assign_state_or_unknown(this->state_[idx], state);
   }
 
-  void store_title_(int idx, esphome::StringRef state) { this->title_[idx] = state.str(); }
+  void store_title_(int idx, esphome::StringRef state) { ha_assign(this->title_[idx], state); }
 
-  void store_artist_(int idx, esphome::StringRef state) { this->artist_[idx] = state.str(); }
+  void store_artist_(int idx, esphome::StringRef state) { ha_assign(this->artist_[idx], state); }
 
   void store_source_(int idx, esphome::StringRef state) {
-    std::string source = state.str();
-    std::string device_class = this->device_class_[idx];
-    if ((device_class == "tv" || device_class == "receiver") && trim_copy(source).empty()) {
-      return;
+    const std::string &device_class = this->device_class_[idx];
+    if (device_class == "tv" || device_class == "receiver") {
+      // TVs/receivers briefly report an empty source during switching; keep the last one.
+      size_t i = 0;
+      while (i < state.size() && (state[i] == ' ' || state[i] == '\t' || state[i] == '\r' || state[i] == '\n')) {
+        i++;
+      }
+      if (i == state.size()) {
+        return;
+      }
     }
-    this->source_[idx] = source;
+    ha_assign(this->source_[idx], state);
   }
 
-  void store_device_class_(int idx, esphome::StringRef state) { this->device_class_[idx] = state.str(); }
+  void store_device_class_(int idx, esphome::StringRef state) { ha_assign(this->device_class_[idx], state); }
 
-  void store_source_list_(int idx, esphome::StringRef state) {
-    this->source_list_[idx].clear();
-    std::string payload = state.str();
-    if (ha_state_missing(payload)) {
-      return;
-    }
-    if (!ha_payload_looks_like_json(payload)) {
-      return;
-    }
-
-    JsonDocument doc;
-    if (!ha_deserialize_json_silently(payload, doc)) {
-      return;
-    }
-    if (!doc.is<JsonArray>()) {
-      return;
-    }
-
-    JsonArray source_list = doc.as<JsonArray>();
-    bool first = true;
-    for (JsonVariant value : source_list) {
-      std::string source = trim_copy(value.as<std::string>());
-      if (source.empty()) {
-        continue;
-      }
-      if (!first) {
-        this->source_list_[idx] += "|";
-      }
-      this->source_list_[idx] += source;
-      first = false;
-    }
-  }
+  void store_source_list_(int idx, esphome::StringRef state) { ha_store_joined_list(this->source_list_[idx], state); }
 
   void store_volume_(int idx, esphome::StringRef state) {
     this->volume_[idx] = ha_parse_float(state);
   }
 
-  void store_shuffle_(int idx, esphome::StringRef state) { this->shuffle_[idx] = state.str(); }
+  void store_shuffle_(int idx, esphome::StringRef state) { ha_assign(this->shuffle_[idx], state); }
 
-  void store_repeat_(int idx, esphome::StringRef state) { this->repeat_[idx] = state.str(); }
+  void store_repeat_(int idx, esphome::StringRef state) { ha_assign(this->repeat_[idx], state); }
 
-  void store_sound_mode_(int idx, esphome::StringRef state) { this->sound_mode_[idx] = state.str(); }
+  void store_sound_mode_(int idx, esphome::StringRef state) { ha_assign(this->sound_mode_[idx], state); }
 
   void store_sound_mode_list_(int idx, esphome::StringRef state) {
-    this->sound_mode_list_[idx].clear();
-    std::string payload = state.str();
-    if (ha_state_missing(payload)) return;
-    if (!ha_payload_looks_like_json(payload)) return;
-    JsonDocument doc;
-    if (!ha_deserialize_json_silently(payload, doc)) return;
-    if (!doc.is<JsonArray>()) return;
-    JsonArray list = doc.as<JsonArray>();
-    bool first = true;
-    for (JsonVariant value : list) {
-      std::string item = trim_copy(value.as<std::string>());
-      if (item.empty()) continue;
-      if (!first) this->sound_mode_list_[idx] += "|";
-      this->sound_mode_list_[idx] += item;
-      first = false;
-    }
+    ha_store_joined_list(this->sound_mode_list_[idx], state);
   }
 
   int find_index_(const std::string &entity_id) const {
@@ -1442,20 +1030,8 @@ class WaterHeaterStatusTracker : public esphome::api::CustomAPIDevice {
       this->subscribe_homeassistant_state(&WaterHeaterStatusTracker::on_operation_list_, entity_id, "operation_list");
       this->subscribe_homeassistant_state(&WaterHeaterStatusTracker::on_away_mode_, entity_id, "away_mode");
     }
-    this->request_all_states();
   }
 
-  void request_water_heater_state(int idx) {
-    if (idx < 0 || idx >= WATER_HEATER_LIST_COUNT) return;
-    const char *entity_id = WATER_HEATER_LIST[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(entity_id, "temperature", [this, idx](esphome::StringRef state) { this->store_target_temperature_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(entity_id, "operation_mode", [this, idx](esphome::StringRef state) { this->store_operation_mode_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(entity_id, "operation_list", [this, idx](esphome::StringRef state) { this->store_operation_list_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(entity_id, "away_mode", [this, idx](esphome::StringRef state) { this->store_away_mode_(idx, state); });
-  }
-
-  void request_all_states() { request_all_states_by_count(WATER_HEATER_LIST_COUNT, [this](int i) { this->request_water_heater_state(i); }); }
   const std::string &state(int idx) const { return (idx >= 0 && idx < WATER_HEATER_LIST_COUNT) ? this->state_[idx] : unknown_string(); }
   float target_temperature(int idx) const { return (idx >= 0 && idx < WATER_HEATER_LIST_COUNT) ? this->target_temperature_[idx] : NAN; }
   const std::string &operation_mode(int idx) const { return (idx >= 0 && idx < WATER_HEATER_LIST_COUNT) ? this->operation_mode_[idx] : empty_string(); }
@@ -1468,28 +1044,11 @@ class WaterHeaterStatusTracker : public esphome::api::CustomAPIDevice {
   void on_operation_mode_(const std::string &entity_id, esphome::StringRef state) { int idx = this->find_index_(entity_id); if (idx >= 0) this->store_operation_mode_(idx, state); }
   void on_operation_list_(const std::string &entity_id, esphome::StringRef state) { int idx = this->find_index_(entity_id); if (idx >= 0) this->store_operation_list_(idx, state); }
   void on_away_mode_(const std::string &entity_id, esphome::StringRef state) { int idx = this->find_index_(entity_id); if (idx >= 0) this->store_away_mode_(idx, state); }
-  void store_state_(int idx, esphome::StringRef state) { this->state_[idx] = ha_state_or_unknown(state); }
+  void store_state_(int idx, esphome::StringRef state) { ha_assign_state_or_unknown(this->state_[idx], state); }
   void store_target_temperature_(int idx, esphome::StringRef state) { this->target_temperature_[idx] = ha_parse_float(state); }
-  void store_operation_mode_(int idx, esphome::StringRef state) { this->operation_mode_[idx] = state.str(); }
-  void store_operation_list_(int idx, esphome::StringRef state) {
-    this->operation_list_[idx].clear();
-    std::string payload = state.str();
-    if (ha_state_missing(payload)) return;
-    if (!ha_payload_looks_like_json(payload)) return;
-    JsonDocument doc;
-    if (!ha_deserialize_json_silently(payload, doc)) return;
-    if (!doc.is<JsonArray>()) return;
-    JsonArray list = doc.as<JsonArray>();
-    bool first = true;
-    for (JsonVariant value : list) {
-      std::string item = trim_copy(value.as<std::string>());
-      if (item.empty()) continue;
-      if (!first) this->operation_list_[idx] += "|";
-      this->operation_list_[idx] += item;
-      first = false;
-    }
-  }
-  void store_away_mode_(int idx, esphome::StringRef state) { this->away_mode_[idx] = state.str(); }
+  void store_operation_mode_(int idx, esphome::StringRef state) { ha_assign(this->operation_mode_[idx], state); }
+  void store_operation_list_(int idx, esphome::StringRef state) { ha_store_joined_list(this->operation_list_[idx], state); }
+  void store_away_mode_(int idx, esphome::StringRef state) { ha_assign(this->away_mode_[idx], state); }
   int find_index_(const std::string &entity_id) const { return find_entity_index(WATER_HEATER_LIST, WATER_HEATER_LIST_COUNT, entity_id); }
   std::array<std::string, WATER_HEATER_LIST_COUNT> state_{};
   std::array<float, WATER_HEATER_LIST_COUNT> target_temperature_ = filled_array<float, WATER_HEATER_LIST_COUNT>(NAN);
@@ -1510,100 +1069,15 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
       this->subscribe_homeassistant_state(&WeatherStatusTracker::on_temperature_, entity_id, "temperature");
       this->subscribe_homeassistant_state(&WeatherStatusTracker::on_humidity_, entity_id, "humidity");
       this->subscribe_homeassistant_state(&WeatherStatusTracker::on_forecast_, entity_id, "forecast");
+      this->subscribe_homeassistant_state(&WeatherStatusTracker::on_wind_speed_, entity_id, "wind_speed");
+      this->subscribe_homeassistant_state(&WeatherStatusTracker::on_wind_bearing_, entity_id, "wind_bearing");
+      this->subscribe_homeassistant_state(&WeatherStatusTracker::on_wind_gust_speed_, entity_id, "wind_gust_speed");
+      this->subscribe_homeassistant_state(&WeatherStatusTracker::on_pressure_, entity_id, "pressure");
+      this->subscribe_homeassistant_state(&WeatherStatusTracker::on_cloud_coverage_, entity_id, "cloud_coverage");
+      this->subscribe_homeassistant_state(&WeatherStatusTracker::on_uv_index_, entity_id, "uv_index");
+      this->subscribe_homeassistant_state(&WeatherStatusTracker::on_dew_point_, entity_id, "dew_point");
+      this->subscribe_homeassistant_state(&WeatherStatusTracker::on_apparent_temperature_, entity_id, "apparent_temperature");
     }
-    this->request_all_states();
-  }
-
-  void request_weather_state(int idx) {
-    if (idx < 0 || idx >= WEATHER_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = WEATHER_LIST[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "temperature",
-        [this, idx](esphome::StringRef state) { this->store_temperature_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "humidity", [this, idx](esphome::StringRef state) { this->store_humidity_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "forecast", [this, idx](esphome::StringRef state) { this->store_forecast_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "wind_speed", [this, idx](esphome::StringRef state) { this->store_wind_speed_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "wind_bearing", [this, idx](esphome::StringRef state) { this->store_wind_bearing_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "wind_gust_speed", [this, idx](esphome::StringRef state) { this->store_wind_gust_speed_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "pressure", [this, idx](esphome::StringRef state) { this->store_pressure_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "cloud_coverage", [this, idx](esphome::StringRef state) { this->store_cloud_coverage_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "uv_index", [this, idx](esphome::StringRef state) { this->store_uv_index_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "dew_point", [this, idx](esphome::StringRef state) { this->store_dew_point_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "apparent_temperature", [this, idx](esphome::StringRef state) { this->store_apparent_temperature_(idx, state); });
-  }
-
-  void request_missing_weather_state(int idx) {
-    if (idx < 0 || idx >= WEATHER_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = WEATHER_LIST[idx].entity_id;
-    if (this->state_[idx] == "unknown") {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "", [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
-    }
-    if (std::isnan(this->temperature_[idx])) {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "temperature",
-          [this, idx](esphome::StringRef state) { this->store_temperature_(idx, state); });
-    }
-    if (std::isnan(this->humidity_[idx])) {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "humidity", [this, idx](esphome::StringRef state) { this->store_humidity_(idx, state); });
-    }
-    if (std::isnan(this->high_temperature_[idx]) || std::isnan(this->low_temperature_[idx]) ||
-        std::isnan(this->precipitation_[idx])) {
-      esphome::api::global_api_server->get_home_assistant_state(
-          entity_id, "forecast", [this, idx](esphome::StringRef state) { this->store_forecast_(idx, state); });
-    }
-    this->request_weather_supplemental_state(idx);
-  }
-
-  void request_weather_supplemental_state(int idx) {
-    if (idx < 0 || idx >= WEATHER_LIST_COUNT) {
-      return;
-    }
-
-    const char *entity_id = WEATHER_LIST[idx].entity_id;
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "wind_speed", [this, idx](esphome::StringRef state) { this->store_wind_speed_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "wind_bearing", [this, idx](esphome::StringRef state) { this->store_wind_bearing_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "wind_gust_speed", [this, idx](esphome::StringRef state) { this->store_wind_gust_speed_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "pressure", [this, idx](esphome::StringRef state) { this->store_pressure_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "cloud_coverage", [this, idx](esphome::StringRef state) { this->store_cloud_coverage_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "uv_index", [this, idx](esphome::StringRef state) { this->store_uv_index_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "dew_point", [this, idx](esphome::StringRef state) { this->store_dew_point_(idx, state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        entity_id, "apparent_temperature", [this, idx](esphome::StringRef state) { this->store_apparent_temperature_(idx, state); });
-  }
-
-  void request_all_supplemental_states() {
-    request_all_states_by_count(WEATHER_LIST_COUNT, [this](int i) { this->request_weather_supplemental_state(i); });
-  }
-
-  void request_all_states() {
-    request_all_states_by_count(WEATHER_LIST_COUNT, [this](int i) { this->request_weather_state(i); });
   }
 
   const std::string &state(int idx) const {
@@ -1756,7 +1230,7 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void store_state_(int idx, esphome::StringRef state) {
-    this->state_[idx] = ha_state_or_unknown(state);
+    ha_assign_state_or_unknown(this->state_[idx], state);
   }
 
   void store_temperature_(int idx, esphome::StringRef state) {
@@ -1772,14 +1246,7 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
   }
 
   void store_wind_bearing_(int idx, esphome::StringRef state) {
-    std::string value = state.str();
-    if (ha_state_missing(value)) {
-      this->wind_bearing_[idx] = NAN;
-      return;
-    }
-    char *end;
-    float result = strtof(value.c_str(), &end);
-    this->wind_bearing_[idx] = (end != value.c_str()) ? result : NAN;
+    this->wind_bearing_[idx] = ha_parse_float(state);
   }
 
   void store_wind_gust_speed_(int idx, esphome::StringRef state) {
@@ -1811,16 +1278,31 @@ class WeatherStatusTracker : public esphome::api::CustomAPIDevice {
     this->low_temperature_[idx] = NAN;
     this->precipitation_[idx] = NAN;
 
-    std::string payload = state.str();
-    if (ha_state_missing(payload)) {
-      return;
-    }
-    if (!ha_payload_looks_like_json(payload)) {
+    if (ha_state_missing(state) || !ha_payload_looks_like_json(state)) {
       return;
     }
 
+    // The forecast attribute is routinely 5-30 KB; a filter keeps only the few
+    // keys read below so the parsed document stays small, and parsing directly
+    // from the StringRef avoids copying the payload. The payload is either a
+    // bare array or {"forecast": [...]} — the filter must match that shape.
+    size_t first = 0;
+    while (first < state.size() && (state[first] == ' ' || state[first] == '\t' ||
+                                    state[first] == '\r' || state[first] == '\n')) {
+      first++;
+    }
+    JsonDocument filter;
+    JsonObject entry =
+        state[first] == '[' ? filter[0].to<JsonObject>() : filter["forecast"][0].to<JsonObject>();
+    for (const char *key : {"temperature", "temperature_high", "native_temperature", "native_temperature_high",
+                            "templow", "temperature_low", "native_templow", "native_temperature_low",
+                            "precipitation", "native_precipitation"}) {
+      entry[key] = true;
+    }
+
     JsonDocument doc;
-    if (!ha_deserialize_json_silently(payload, doc)) {
+    if (deserializeJson(doc, state.c_str(), state.size(), DeserializationOption::Filter(filter)) !=
+        DeserializationError::Ok) {
       return;
     }
     JsonArray forecast;
@@ -1907,32 +1389,30 @@ class NotificationFeedTracker : public esphome::api::CustomAPIDevice {
     this->subscribe_homeassistant_state(
         &NotificationFeedTracker::on_ids_payload_, notification_feed_entity_(),
         notification_feed_ids_attribute_());
-    this->request_notifications();
-  }
-
-  void request_notifications() {
-    if (notification_feed_entity_()[0] == '\0') {
-      this->clear_();
-      return;
-    }
-
-    esphome::api::global_api_server->get_home_assistant_state(
-        notification_feed_entity_(), notification_feed_attribute_(),
-        [this](esphome::StringRef state) { this->on_payload_(state); });
-    esphome::api::global_api_server->get_home_assistant_state(
-        notification_feed_entity_(), notification_feed_ids_attribute_(),
-        [this](esphome::StringRef state) { this->on_ids_payload_(state); });
   }
 
   int item_count() const { return this->count_ > 0 ? this->count_ : 1; }
 
-  std::string label(int idx) const {
+  void label_to_buffer(int idx, char *buffer, size_t buffer_size) const {
+    if (buffer == nullptr || buffer_size == 0) {
+      return;
+    }
     if (this->count_ <= 0) {
-      return ""; // NO ALERTS HEADER
+      buffer[0] = '\0';  // NO ALERTS HEADER
+      return;
     }
     idx = clamp_mode_index(idx, this->count_);
-    return std::to_string(idx + 1) + " OF " + std::to_string(this->count_);
+    snprintf(buffer, buffer_size, "%d OF %d", idx + 1, this->count_);
   }
+
+  std::string label(int idx) const {
+    char buffer[24];
+    buffer[0] = '\0';
+    this->label_to_buffer(idx, buffer, sizeof(buffer));
+    return std::string(buffer);
+  }
+
+  static const char *entity_cstr() { return notification_feed_entity_(); }
 
   std::string entity() const { return notification_feed_entity_(); }
 
@@ -1953,18 +1433,6 @@ class NotificationFeedTracker : public esphome::api::CustomAPIDevice {
   }
 
  private:
-  static std::string trim_copy_(const std::string &value) {
-    size_t start = 0;
-    size_t end = value.size();
-    while (start < end && (value[start] == ' ' || value[start] == '\n' || value[start] == '\r' || value[start] == '\t')) {
-      start++;
-    }
-    while (end > start && (value[end - 1] == ' ' || value[end - 1] == '\n' || value[end - 1] == '\r' || value[end - 1] == '\t')) {
-      end--;
-    }
-    return value.substr(start, end - start);
-  }
-
   static const char *notification_feed_entity_() {
     return NOTIFICATION_FEED_ENTITY;
   }
@@ -1982,59 +1450,42 @@ class NotificationFeedTracker : public esphome::api::CustomAPIDevice {
     return separator.empty() ? std::string("||") : separator;
   }
 
-  void clear_() {
-    this->count_ = 0;
+  // Splits payload into positional slots. Interior empty items keep their slot
+  // so that the messages and ids attributes stay index-aligned even when one
+  // item is empty; only trailing empties are dropped. Returns the slot count.
+  static int parse_delimited_slots_(const std::string &payload, std::string *slots) {
     for (int i = 0; i < NOTIFICATION_FEED_MAX_ITEMS; i++) {
-      this->messages_[i].clear();
-      this->ids_[i].clear();
+      slots[i].clear();
     }
+    if (ha_state_missing(payload) || payload == "[]" || payload == "none") {
+      return 0;
+    }
+
+    const std::string separator = notification_feed_separator_();
+    size_t start = 0;
+    int count = 0;
+    while (count < NOTIFICATION_FEED_MAX_ITEMS) {
+      size_t end = payload.find(separator, start);
+      slots[count++] = trim_copy(payload.substr(start, end == std::string::npos ? std::string::npos : end - start));
+      if (end == std::string::npos) {
+        break;
+      }
+      start = end + separator.size();
+    }
+    while (count > 0 && slots[count - 1].empty()) {
+      count--;
+    }
+    return count;
   }
 
   void on_payload_(esphome::StringRef state) {
-    std::string payload = trim_copy_(state.str());
-    this->clear_();
-    if (ha_state_missing(payload) || payload == "[]" || payload == "none") {
-      return;
-    }
-
-    const std::string separator = notification_feed_separator_();
-    size_t start = 0;
-    while (start <= payload.size() && this->count_ < NOTIFICATION_FEED_MAX_ITEMS) {
-      size_t end = payload.find(separator, start);
-      std::string item = trim_copy_(payload.substr(start, end == std::string::npos ? std::string::npos : end - start));
-      if (!item.empty()) {
-        this->messages_[this->count_++] = item;
-      }
-      if (end == std::string::npos) {
-        break;
-      }
-      start = end + separator.size();
-    }
+    std::string payload = trim_copy(state.str());
+    this->count_ = parse_delimited_slots_(payload, this->messages_);
   }
 
   void on_ids_payload_(esphome::StringRef state) {
-    std::string payload = trim_copy_(state.str());
-    for (int i = 0; i < NOTIFICATION_FEED_MAX_ITEMS; i++) {
-      this->ids_[i].clear();
-    }
-    if (ha_state_missing(payload) || payload == "[]" || payload == "none") {
-      return;
-    }
-
-    const std::string separator = notification_feed_separator_();
-    size_t start = 0;
-    int idx = 0;
-    while (start <= payload.size() && idx < NOTIFICATION_FEED_MAX_ITEMS) {
-      size_t end = payload.find(separator, start);
-      std::string item = trim_copy_(payload.substr(start, end == std::string::npos ? std::string::npos : end - start));
-      if (!item.empty()) {
-        this->ids_[idx++] = item;
-      }
-      if (end == std::string::npos) {
-        break;
-      }
-      start = end + separator.size();
-    }
+    std::string payload = trim_copy(state.str());
+    parse_delimited_slots_(payload, this->ids_);
   }
 
   int count_{0};

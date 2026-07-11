@@ -74,29 +74,32 @@ struct RemoteUiResetState {
   bool *updated_ui = nullptr;
 };
 
+// Pointers to the interaction-timestamp globals. apply_remote_ui_timeout_updates
+// zeroes each timestamp when its feedback window expires (a fire-once latch),
+// so the fields must reference the globals rather than hold copies.
 struct RemoteUiTimeoutState {
-  uint32_t last_brightness_interaction = 0;
-  uint32_t last_switch_interaction = 0;
-  uint32_t last_contrast_interaction = 0;
-  uint32_t last_setting_interaction = 0;
-  uint32_t last_climate_interaction = 0;
-  uint32_t last_fan_speed_interaction = 0;
-  uint32_t last_humidifier_interaction = 0;
-  uint32_t last_humidifier_mode_interaction = 0;
-  uint32_t last_lock_interaction = 0;
-  uint32_t last_cover_interaction = 0;
-  uint32_t last_cover_position_interaction = 0;
-  uint32_t last_climate_target_focus_interaction = 0;
-  uint32_t last_media_volume_interaction = 0;
-  uint32_t last_media_source_interaction = 0;
-  uint32_t last_media_power_interaction = 0;
-  uint32_t last_automation_interaction = 0;
-  uint32_t last_alarm_interaction = 0;
-  int climate_target_focus = 0;
-  float climate_target_focus_value = NAN;
+  uint32_t *last_brightness_interaction = nullptr;
+  uint32_t *last_switch_interaction = nullptr;
+  uint32_t *last_contrast_interaction = nullptr;
+  uint32_t *last_setting_interaction = nullptr;
+  uint32_t *last_climate_interaction = nullptr;
+  uint32_t *last_fan_speed_interaction = nullptr;
+  uint32_t *last_humidifier_interaction = nullptr;
+  uint32_t *last_humidifier_mode_interaction = nullptr;
+  uint32_t *last_lock_interaction = nullptr;
+  uint32_t *last_cover_interaction = nullptr;
+  uint32_t *last_cover_position_interaction = nullptr;
+  uint32_t *last_climate_target_focus_interaction = nullptr;
+  uint32_t *last_media_volume_interaction = nullptr;
+  uint32_t *last_media_source_interaction = nullptr;
+  uint32_t *last_media_power_interaction = nullptr;
+  uint32_t *last_automation_interaction = nullptr;
+  uint32_t *last_alarm_interaction = nullptr;
+  int *climate_target_focus = nullptr;
+  float *climate_target_focus_value = nullptr;
   std::string *selected_setting_detail = nullptr;
   bool preserve_selected_setting_detail = false;
-  bool updated_ui = false;
+  bool *updated_ui = nullptr;
 };
 
 void reset_remote_ui_state(RemoteUiResetState &state);

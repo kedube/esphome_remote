@@ -14,35 +14,30 @@ interval:
           else:
             - lambda: |-
                 RemoteUiTimeoutState state;
-                state.last_brightness_interaction = id(last_brightness_interaction);
-                state.last_switch_interaction = id(last_switch_interaction);
-                state.last_contrast_interaction = id(last_contrast_interaction);
-                state.last_setting_interaction = id(last_setting_interaction);
-                state.last_climate_interaction = id(last_climate_interaction);
-                state.last_fan_speed_interaction = id(last_fan_speed_interaction);
-                state.last_humidifier_interaction = id(last_humidifier_interaction);
-                state.last_humidifier_mode_interaction = id(last_humidifier_mode_interaction);
-                state.last_lock_interaction = id(last_lock_interaction);
-                state.last_cover_interaction = id(last_cover_interaction);
-                state.last_cover_position_interaction = id(last_cover_position_interaction);
-                state.last_climate_target_focus_interaction = id(last_climate_target_focus_interaction);
-                state.last_media_volume_interaction = id(last_media_volume_interaction);
-                state.last_media_source_interaction = id(last_media_source_interaction);
-                state.last_media_power_interaction = id(last_media_power_interaction);
-                state.last_automation_interaction = id(last_automation_interaction);
-                state.last_alarm_interaction = id(last_alarm_interaction);
-                state.climate_target_focus = id(climate_target_focus);
-                state.climate_target_focus_value = id(climate_target_focus_value);
+                state.last_brightness_interaction = &id(last_brightness_interaction);
+                state.last_switch_interaction = &id(last_switch_interaction);
+                state.last_contrast_interaction = &id(last_contrast_interaction);
+                state.last_setting_interaction = &id(last_setting_interaction);
+                state.last_climate_interaction = &id(last_climate_interaction);
+                state.last_fan_speed_interaction = &id(last_fan_speed_interaction);
+                state.last_humidifier_interaction = &id(last_humidifier_interaction);
+                state.last_humidifier_mode_interaction = &id(last_humidifier_mode_interaction);
+                state.last_lock_interaction = &id(last_lock_interaction);
+                state.last_cover_interaction = &id(last_cover_interaction);
+                state.last_cover_position_interaction = &id(last_cover_position_interaction);
+                state.last_climate_target_focus_interaction = &id(last_climate_target_focus_interaction);
+                state.last_media_volume_interaction = &id(last_media_volume_interaction);
+                state.last_media_source_interaction = &id(last_media_source_interaction);
+                state.last_media_power_interaction = &id(last_media_power_interaction);
+                state.last_automation_interaction = &id(last_automation_interaction);
+                state.last_alarm_interaction = &id(last_alarm_interaction);
+                state.climate_target_focus = &id(climate_target_focus);
+                state.climate_target_focus_value = &id(climate_target_focus_value);
                 state.selected_setting_detail = &id(selected_setting_detail);
                 state.preserve_selected_setting_detail =
                   id(selected_setting_option) == static_cast<int>(REMOTE_SETTING_ALARM_STATE);
-                state.updated_ui = id(updated_ui);
+                state.updated_ui = &id(updated_ui);
                 apply_remote_ui_timeout_updates(millis(), state);
-                id(climate_target_focus) = state.climate_target_focus;
-                id(climate_target_focus_value) = state.climate_target_focus_value;
-                id(last_setting_interaction) = state.last_setting_interaction;
-                id(last_climate_target_focus_interaction) = state.last_climate_target_focus_interaction;
-                id(updated_ui) = state.updated_ui;
             - if:
                 condition:
                   lambda: |-
@@ -128,7 +123,3 @@ interval:
                                           lambda: 'return id(updated_ui);'
                                         then:
                                           - script.execute: update_display
-  - interval: 30min
-    then:
-      - lambda: |-
-          request_all_weather_status();

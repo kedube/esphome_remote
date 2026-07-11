@@ -14,11 +14,32 @@ struct PersistedUIStateData {
   int selected_alarm_arm_mode = ALARM_ARM_MODE_AWAY;
 };
 
-static constexpr uint32_t UI_STATE_AUX_FORMAT_MASK = 3UL << 30;
-static constexpr uint32_t UI_STATE_AUX_FORMAT_V7 = 1UL << 31;
-static constexpr uint32_t UI_STATE_AUX_FORMAT_V8 = 3UL << 30;
+inline constexpr uint32_t UI_STATE_AUX_FORMAT_MASK = 3UL << 30;
+inline constexpr uint32_t UI_STATE_AUX_FORMAT_V7 = 1UL << 31;
+inline constexpr uint32_t UI_STATE_AUX_FORMAT_V8 = 3UL << 30;
 
-static inline PersistedUIStateData default_persisted_ui_state() {
+// The V8 pack below masks each field to a fixed bit width; these asserts tie
+// every width to the constant that bounds the corresponding value so a raised
+// limit cannot silently wrap the restored index.
+constexpr size_t max_favorite_list_entry_count() {
+  size_t max_count = 0;
+  for (size_t i = 0; i < FAVORITE_LIST_COUNT; i++) {
+    if (FAVORITE_LISTS[i].count > max_count) {
+      max_count = FAVORITE_LISTS[i].count;
+    }
+  }
+  return max_count;
+}
+
+static_assert(MAX_PERSISTED_FAVORITE_LISTS + 2 <= 32, "current_menu_index is packed into 5 bits");
+static_assert(max_favorite_list_entry_count() <= 64, "current_favorite_index is packed into 6 bits");
+static_assert(NOTIFICATION_FEED_MAX_ITEMS <= 64, "selected_notification_index is packed into 6 bits");
+static_assert(INFO_ITEM_COUNT <= 64, "selected_info_index is packed into 6 bits");
+static_assert(REMOTE_MODE_COUNT <= 16, "current_mode is packed into 4 bits");
+static_assert(REMOTE_SETTING_WATER_HEATER_AWAY < 64, "selected_setting_option is packed into 6 bits");
+static_assert(ALARM_ARM_MODE_COUNT <= 8, "selected_alarm_arm_mode is packed into 3 bits");
+
+inline PersistedUIStateData default_persisted_ui_state() {
   PersistedUIStateData data;
   data.contrast = 5;
   data.current_menu_index = 0;
@@ -26,7 +47,7 @@ static inline PersistedUIStateData default_persisted_ui_state() {
   return data;
 }
 
-static inline PersistedUIStateData unpack_persisted_ui_state(uint64_t state, uint32_t aux_state) {
+inline PersistedUIStateData unpack_persisted_ui_state(uint64_t state, uint32_t aux_state) {
   uint32_t format = aux_state & UI_STATE_AUX_FORMAT_MASK;
   if (format == UI_STATE_AUX_FORMAT_V8) {
     PersistedUIStateData data;
@@ -57,7 +78,7 @@ static inline PersistedUIStateData unpack_persisted_ui_state(uint64_t state, uin
   return default_persisted_ui_state();
 }
 
-static inline uint64_t pack_persisted_ui_state(const PersistedUIStateData &data) {
+inline uint64_t pack_persisted_ui_state(const PersistedUIStateData &data) {
   return uint64_t(data.contrast & 0x0F) |
          (uint64_t(data.current_menu_index & 0x1F) << 4) |
          (uint64_t(data.current_favorite_index & 0x3F) << 9) |
@@ -69,7 +90,7 @@ static inline uint64_t pack_persisted_ui_state(const PersistedUIStateData &data)
          (uint64_t(data.selected_alarm_arm_mode & 0x07) << 41);
 }
 
-static inline uint32_t pack_persisted_ui_state_aux(const PersistedUIStateData &data) {
+inline uint32_t pack_persisted_ui_state_aux(const PersistedUIStateData &data) {
   (void) data;
   return UI_STATE_AUX_FORMAT_V8;
 }

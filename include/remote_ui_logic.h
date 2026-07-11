@@ -58,6 +58,12 @@ enum RemoteUiActionGroup {
 bool remote_ui_has_dual_climate_target(
     const std::string &selected_item_state, float target_temp_low, float target_temp_high);
 
+// Formats the climate/water-heater target line shown in the detail row:
+// "LOW: 68°F   HIGH: 74°F" when dual_target, otherwise "TARGET: 70°F".
+void format_climate_target_detail(
+    char *buffer, size_t buffer_size, bool dual_target, float low, float high, float single_target,
+    const char *temperature_unit);
+
 RemoteUiActionCommand resolve_remote_mode_action_command(RemoteMode mode, int action, bool dual_climate_target);
 RemoteUiActionGroup group_remote_mode_action_command(RemoteUiActionCommand command);
 

@@ -1,9 +1,11 @@
 #include "remote_ui_renderer.h"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
+
+#include "remote_ui_logic.h"
 
 #include "esphome/components/display/display.h"
 #include "esphome/components/font/font.h"
@@ -62,29 +64,48 @@ static inline bool weather_condition_is_partly_cloudy(const std::string &raw) {
   return raw == "partlycloudy";
 }
 
-static inline std::array<std::string, 3> split_notification_lines(std::string message) {
-  std::array<std::string, 3> lines;
-  for (auto &ch : message) {
-    if (ch == '\n' || ch == '\r' || ch == '\t') {
-      ch = ' ';
+// Backs pos up to the start of a UTF-8 code point so slicing at fixed byte
+// offsets cannot split a multi-byte character from an HA notification.
+static inline size_t utf8_floor(const char *data, size_t size, size_t pos) {
+  if (pos > size) {
+    pos = size;
+  }
+  while (pos > 0 && (static_cast<unsigned char>(data[pos]) & 0xC0) == 0x80) {
+    pos--;
+  }
+  return pos;
+}
+
+struct NotificationLines {
+  char line[3][26];
+};
+
+static inline NotificationLines split_notification_lines(const std::string &message) {
+  NotificationLines lines{};
+  const char *data = message.c_str();
+  size_t size = message.size();
+  if (size == 0) {
+    data = "NO NOTIFICATIONS";
+    size = strlen(data);
+  }
+
+  // Three 22-byte display rows; a longer message is truncated with "...".
+  bool truncated = size > 66;
+  size_t limit = truncated ? utf8_floor(data, size, 63) : size;
+  size_t breaks[4] = {0, utf8_floor(data, size, 22), utf8_floor(data, size, 44), limit};
+  for (int i = 0; i < 3; i++) {
+    size_t begin = std::min(breaks[i], limit);
+    size_t end = std::min(breaks[i + 1], limit);
+    size_t len = end - begin;
+    size_t out = 0;
+    for (size_t j = 0; j < len; j++) {
+      char ch = data[begin + j];
+      lines.line[i][out++] = (ch == '\n' || ch == '\r' || ch == '\t') ? ' ' : ch;
     }
+    lines.line[i][out] = '\0';
   }
-  if (message.empty()) {
-    message = "NO NOTIFICATIONS";
-  }
-
-  bool truncated = message.size() > 66;
   if (truncated) {
-    message = message.substr(0, 66);
-  }
-
-  lines[0] = message.substr(0, std::min<size_t>(22, message.size()));
-  lines[1] = message.size() > 22 ? message.substr(22, std::min<size_t>(22, message.size() - 22)) : "";
-  lines[2] = message.size() > 44 ? message.substr(44, std::min<size_t>(22, message.size() - 44)) : "";
-  if (truncated && lines[2].size() >= 3) {
-    lines[2].replace(lines[2].size() - 3, 3, "...");
-  } else if (truncated) {
-    lines[2] = "...";
+    strncat(lines.line[2], "...", sizeof(lines.line[2]) - strlen(lines.line[2]) - 1);
   }
   return lines;
 }
@@ -116,10 +137,8 @@ void render_remote_ui(
   bool show_setting_detail_feedback = ctx.selected_setting_option != static_cast<int>(REMOTE_SETTING_NONE);
 
   auto has_dual_climate_target = [&]() {
-    return !std::isnan(ctx.selected_climate_target_temp_low) &&
-           !std::isnan(ctx.selected_climate_target_temp_high) &&
-           (selected_item_state == "heat_cool" ||
-            ctx.selected_climate_target_temp_low != ctx.selected_climate_target_temp_high);
+    return remote_ui_has_dual_climate_target(
+        selected_item_state, ctx.selected_climate_target_temp_low, ctx.selected_climate_target_temp_high);
   };
   auto has_dual_climate_target_values = [&]() {
     return !std::isnan(ctx.selected_climate_target_temp_low) &&
@@ -137,8 +156,8 @@ void render_remote_ui(
   };
   auto draw_footer_chrome = [&](const char *left_icon, const char *right_icon) {
     draw_footer_dividers();
-    it->printf(6, 50, medium_symbols, display::COLOR_ON, left_icon);
-    it->printf(108, 50, medium_symbols, display::COLOR_ON, right_icon);
+    it->print(6, 50, medium_symbols, display::COLOR_ON, left_icon);
+    it->print(108, 50, medium_symbols, display::COLOR_ON, right_icon);
   };
   auto draw_blank_or_contrast_footer = [&]() {
     if (show_contrast_feedback) {
@@ -193,20 +212,6 @@ void render_remote_ui(
     draw_footer_chrome(left_icon, right_icon);
     draw_footer_text(label);
   };
-  auto draw_power_mode = [&](int percent_value, bool show_progress, const char *progress_label) {
-    draw_centered_state(ui_power_state_label(selected_item_state), 35);
-    if (selected_item_state == "on" && !show_progress && !show_setting_detail_feedback) {
-      snprintf(detail_line, sizeof(detail_line), "%d%%", percent_value);
-      draw_detail_text(detail_line);
-    }
-    if (show_progress) {
-      draw_progress_footer(percent_value, progress_label);
-    } else if (show_contrast_feedback) {
-      draw_contrast_footer();
-    } else if (!show_setting_detail_feedback) {
-      draw_footer_dividers;
-    }
-  };
   auto draw_feedback_state_mode = [&](const char *state_text, const char *feedback_text, bool compact = false) {
     draw_centered_state(state_text, 35, compact);
     if (feedback_text != nullptr && feedback_text[0] != '\0') {
@@ -233,11 +238,26 @@ void render_remote_ui(
   };
   auto write_climate_target_detail = [&](char *buffer, size_t buffer_size, bool dual_target,
                                          float low, float high, float single_target) {
-    if (dual_target) {
-      snprintf(buffer, buffer_size, "LOW: %.0f°%s   HIGH: %.0f°%s",
-               low, ctx.temperature_unit, high, ctx.temperature_unit);
+    format_climate_target_detail(buffer, buffer_size, dual_target, low, high, single_target, ctx.temperature_unit);
+  };
+  // Shared LIGHTS/FANS rendering: on/off state, optional percent detail, and a
+  // footer owned entirely here (progress bar during adjustment, setting footer
+  // while on, contrast/blank otherwise).
+  auto draw_toggle_percent_mode = [&](int percent_value, bool show_progress, const char *progress_label) {
+    draw_centered_state(ui_power_state_label(selected_item_state), 35);
+    if (selected_item_state == "on" && !show_progress && !show_setting_detail_feedback) {
+      snprintf(detail_line, sizeof(detail_line), "%d%%", percent_value);
+      draw_detail_text(detail_line);
+    }
+    if (show_progress) {
+      draw_progress_footer(percent_value, progress_label);
+      return;
+    }
+    if (selected_item_state == "on") {
+      draw_setting_detail_if_needed();
+      draw_setting_footer();
     } else {
-      snprintf(buffer, buffer_size, "TARGET: %.0f°%s", single_target, ctx.temperature_unit);
+      draw_blank_or_contrast_footer();
     }
   };
 
@@ -245,12 +265,12 @@ void render_remote_ui(
   const char *header_icon = ctx.mode_icon_override != nullptr ? ctx.mode_icon_override : mode_icon(ctx.mode);
   const char *header_title = ctx.mode_title_override != nullptr ? ctx.mode_title_override : mode_title(ctx.mode);
   it->print(0, -3, symbols, display::COLOR_ON, display::TextAlign::LEFT, header_icon);
-  it->printf(64, 4, small_font, display::COLOR_ON, display::TextAlign::CENTER, header_title);
+  it->print(64, 4, small_font, display::COLOR_ON, display::TextAlign::CENTER, header_title);
   it->print(128, -3, symbols, display::COLOR_ON, display::TextAlign::RIGHT, header_icon);
 
   it->filled_rectangle(0, 12, 128, 1, display::COLOR_ON);
   if (ctx.mode != REMOTE_MODE_NOTIFICATIONS) {
-    it->printf(64, 20, medium_font, display::COLOR_ON, display::TextAlign::CENTER, selected_item_name.c_str());
+    it->print(64, 20, medium_font, display::COLOR_ON, display::TextAlign::CENTER, selected_item_name.c_str());
   }
 
   switch (ctx.mode) {
@@ -258,15 +278,7 @@ void render_remote_ui(
       bool show_brightness_bar =
           ui_recent_interaction(ctx.now, ctx.last_brightness_interaction, 3000) &&
           selected_item_state == "on";
-      draw_power_mode(ctx.selected_brightness_pct, show_brightness_bar, "BRIGHTNESS");
-      if (!show_brightness_bar) {
-        if (selected_item_state == "on") {
-          draw_setting_detail_if_needed();
-          draw_setting_footer();
-        } else {
-          draw_blank_or_contrast_footer();
-        }
-      }
+      draw_toggle_percent_mode(ctx.selected_brightness_pct, show_brightness_bar, "BRIGHTNESS");
       break;
     }
 
@@ -274,15 +286,7 @@ void render_remote_ui(
       bool show_fan_speed_bar =
           ui_recent_interaction(ctx.now, ctx.last_fan_speed_interaction, 3000) &&
           selected_item_state == "on";
-      draw_power_mode(ctx.selected_fan_speed_pct, show_fan_speed_bar, "SPEED");
-      if (!show_fan_speed_bar) {
-        if (selected_item_state == "on") {
-          draw_setting_detail_if_needed();
-          draw_setting_footer();
-        } else {
-          draw_blank_or_contrast_footer();
-        }
-      }
+      draw_toggle_percent_mode(ctx.selected_fan_speed_pct, show_fan_speed_bar, "SPEED");
       break;
     }
 
@@ -456,7 +460,6 @@ void render_remote_ui(
       bool show_media_feedback = ui_recent_interaction(ctx.now, ctx.last_media_volume_interaction, 3000);
       bool show_media_source_feedback = ui_recent_interaction(ctx.now, ctx.last_media_source_interaction, 5000);
       bool show_media_power_feedback = ui_recent_interaction(ctx.now, ctx.last_media_power_interaction, 5000);
-      write_state_label(selected_item_state, label_primary, sizeof(label_primary));
       bool is_tv = selected_media_device_class == "tv" || selected_media_device_class == "receiver";
       bool media_is_on = selected_item_state != "off" && selected_item_state != "unknown";
       if (is_tv) {
@@ -493,19 +496,23 @@ void render_remote_ui(
 
     case REMOTE_MODE_SENSORS: {
       const std::string &selected_sensor_unit = render_string(ctx.selected_sensor_unit);
-      std::string sensor_value = selected_item_state;
-      if (sensor_value == "unknown" || sensor_value.empty()) {
+      const char *sensor_value;
+      bool numeric_value = false;
+      if (selected_item_state.empty() || selected_item_state == "unknown") {
         sensor_value = "SYNCING";
-      } else if (sensor_value == "on") {
+      } else if (selected_item_state == "on") {
         sensor_value = "ON";
-      } else if (sensor_value == "off") {
+      } else if (selected_item_state == "off") {
         sensor_value = "OFF";
+      } else {
+        sensor_value = selected_item_state.c_str();
+        numeric_value = true;
       }
-      if (!selected_sensor_unit.empty() && sensor_value != "SYNCING" && sensor_value != "ON" && sensor_value != "OFF") {
-        snprintf(status_line, sizeof(status_line), "%s %s", sensor_value.c_str(), selected_sensor_unit.c_str());
+      if (!selected_sensor_unit.empty() && numeric_value) {
+        snprintf(status_line, sizeof(status_line), "%s %s", sensor_value, selected_sensor_unit.c_str());
         draw_centered_state(status_line, 35, strlen(status_line) > 12);
       } else {
-        draw_centered_state(sensor_value.c_str(), 35, sensor_value.size() > 12);
+        draw_centered_state(sensor_value, 35, strlen(sensor_value) > 12);
       }
       draw_blank_or_contrast_footer();
       break;
@@ -553,16 +560,17 @@ void render_remote_ui(
     }
 
     case REMOTE_MODE_NOTIFICATIONS: {
-      bool show_dismiss_feedback =
-          ctx.last_notification_dismiss_interaction > 0 &&
-          (ctx.now - ctx.last_notification_dismiss_interaction) <= 3000;
-      auto lines = show_dismiss_feedback ? std::array<std::string, 3>{"", "DISMISSED", ""}
-                                         : split_notification_lines(selected_item_state);
-      for (int i = 0; i < 3; i++) {
-        if (!lines[i].empty()) {
-          it->print(
-              64, i == 0 ? 20 : (i == 1 ? 35 : 45), tiny_font, display::COLOR_ON, display::TextAlign::CENTER,
-              lines[i].c_str());
+      bool show_dismiss_feedback = ui_recent_interaction(ctx.now, ctx.last_notification_dismiss_interaction, 3000);
+      if (show_dismiss_feedback) {
+        it->print(64, 35, tiny_font, display::COLOR_ON, display::TextAlign::CENTER, "DISMISSED");
+      } else {
+        NotificationLines lines = split_notification_lines(selected_item_state);
+        for (int i = 0; i < 3; i++) {
+          if (lines.line[i][0] != '\0') {
+            it->print(
+                64, i == 0 ? 20 : (i == 1 ? 35 : 45), tiny_font, display::COLOR_ON, display::TextAlign::CENTER,
+                lines.line[i]);
+          }
         }
       }
       draw_setting_footer();
@@ -619,19 +627,14 @@ void render_remote_ui(
     }
 
     case REMOTE_MODE_INFO:
-    default:
-      if (ctx.info_index == 0) {
-        it->print(64, 35, medium_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_primary_text.c_str());
-        it->print(64, 45, small_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_secondary_text.c_str());
-      } else if (ctx.info_index == 1) {
-        it->print(64, 35, small_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_primary_text.c_str());
-        it->print(64, 45, tiny_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_secondary_text.c_str());
-      } else {
-        it->print(64, 35, medium_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_primary_text.c_str());
-        it->print(64, 45, tiny_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_secondary_text.c_str());
-      }
+    default: {
+      font::Font *primary_font = ctx.info_index == 1 ? small_font : medium_font;
+      font::Font *secondary_font = ctx.info_index == 0 ? small_font : tiny_font;
+      it->print(64, 35, primary_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_primary_text.c_str());
+      it->print(64, 45, secondary_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_secondary_text.c_str());
       draw_blank_or_contrast_footer();
       break;
+    }
   }
 
 }

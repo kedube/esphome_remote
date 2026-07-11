@@ -34,8 +34,8 @@ enum RemoteMode {
   REMOTE_MODE_ALARMS = 14,
 };
 
-static constexpr int REMOTE_MODE_COUNT = 15;
-static constexpr RemoteMode MENU_MODE_ORDER[] = {
+inline constexpr int REMOTE_MODE_COUNT = 15;
+inline constexpr RemoteMode MENU_MODE_ORDER[] = {
     REMOTE_MODE_LIGHTS,
     REMOTE_MODE_SWITCHES,
     REMOTE_MODE_CLIMATE,
@@ -71,23 +71,23 @@ struct FavoriteList {
 };
 
 template <size_t Count>
-static constexpr FavoriteList make_favorite_list(const char *title, const FavoriteEntity (&entries)[Count]) {
+inline constexpr FavoriteList make_favorite_list(const char *title, const FavoriteEntity (&entries)[Count]) {
   return {title, entries, Count};
 }
 
 #include "local_entities.h"
 
-static constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);
+inline constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);
 
-static constexpr int FAVORITE_LIST_COUNT_INT = static_cast<int>(FAVORITE_LIST_COUNT);
+inline constexpr int FAVORITE_LIST_COUNT_INT = static_cast<int>(FAVORITE_LIST_COUNT);
 #ifndef REMOTE_MAX_PERSISTED_FAVORITE_LISTS
 #define REMOTE_MAX_PERSISTED_FAVORITE_LISTS 16
 #endif
 
-static constexpr int MAX_PERSISTED_FAVORITE_LISTS = REMOTE_MAX_PERSISTED_FAVORITE_LISTS;
+inline constexpr int MAX_PERSISTED_FAVORITE_LISTS = REMOTE_MAX_PERSISTED_FAVORITE_LISTS;
 static_assert(FAVORITE_LIST_COUNT_INT <= MAX_PERSISTED_FAVORITE_LISTS, "Too many favorite lists for persisted state");
 
-static constexpr bool cstr_eq_constexpr(const char *lhs, const char *rhs) {
+inline constexpr bool cstr_eq_constexpr(const char *lhs, const char *rhs) {
   if (lhs == rhs) {
     return true;
   }
@@ -104,7 +104,7 @@ static constexpr bool cstr_eq_constexpr(const char *lhs, const char *rhs) {
   return *lhs == *rhs;
 }
 
-static constexpr bool cstr_starts_with_constexpr(const char *value, const char *prefix) {
+inline constexpr bool cstr_starts_with_constexpr(const char *value, const char *prefix) {
   if (value == nullptr || prefix == nullptr) {
     return false;
   }
@@ -118,7 +118,7 @@ static constexpr bool cstr_starts_with_constexpr(const char *value, const char *
   return true;
 }
 
-static constexpr RemoteMode favorite_entity_mode_constexpr(const char *entity_id) {
+inline constexpr RemoteMode favorite_entity_mode_constexpr(const char *entity_id) {
   return cstr_starts_with_constexpr(entity_id, "light.")            ? REMOTE_MODE_LIGHTS :
          cstr_starts_with_constexpr(entity_id, "switch.")           ? REMOTE_MODE_SWITCHES :
          cstr_starts_with_constexpr(entity_id, "climate.")          ? REMOTE_MODE_CLIMATE :
@@ -138,7 +138,7 @@ static constexpr RemoteMode favorite_entity_mode_constexpr(const char *entity_id
                                                                         REMOTE_MODE_INFO;
 }
 
-static constexpr bool favorite_entity_seen_earlier(size_t list_index, size_t entry_index, const char *entity_id) {
+inline constexpr bool favorite_entity_seen_earlier(size_t list_index, size_t entry_index, const char *entity_id) {
   for (size_t i = 0; i <= list_index && i < FAVORITE_LIST_COUNT; i++) {
     size_t limit = i == list_index ? entry_index : FAVORITE_LISTS[i].count;
     for (size_t j = 0; j < limit; j++) {
@@ -150,7 +150,7 @@ static constexpr bool favorite_entity_seen_earlier(size_t list_index, size_t ent
   return false;
 }
 
-static constexpr int count_unique_mode_entities(RemoteMode mode) {
+inline constexpr int count_unique_mode_entities(RemoteMode mode) {
   int count = 0;
   for (size_t i = 0; i < FAVORITE_LIST_COUNT; i++) {
     for (size_t j = 0; j < FAVORITE_LISTS[i].count; j++) {
@@ -168,7 +168,7 @@ static constexpr int count_unique_mode_entities(RemoteMode mode) {
 }
 
 template <size_t Count>
-static constexpr std::array<EntityEntry, Count> make_mode_entity_array(RemoteMode mode) {
+inline constexpr std::array<EntityEntry, Count> make_mode_entity_array(RemoteMode mode) {
   std::array<EntityEntry, Count> entities{};
   size_t out = 0;
   for (size_t i = 0; i < FAVORITE_LIST_COUNT; i++) {
@@ -188,57 +188,57 @@ static constexpr std::array<EntityEntry, Count> make_mode_entity_array(RemoteMod
   return entities;
 }
 
-static constexpr int LIGHT_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_LIGHTS);
-static constexpr int SWITCH_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_SWITCHES);
-static constexpr int CLIMATE_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_CLIMATE);
-static constexpr int WATER_HEATER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_WATER_HEATERS);
-static constexpr int HUMIDIFIER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_HUMIDIFIERS);
-static constexpr int FAN_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_FANS);
-static constexpr int COVER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_COVERS);
-static constexpr int LOCK_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_LOCKS);
-static constexpr int MEDIA_PLAYER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_MEDIA);
-static constexpr int SENSOR_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_SENSORS);
-static constexpr int AUTOMATION_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_AUTOMATION);
-static constexpr int ALARM_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_ALARMS);
-static constexpr int WEATHER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_WEATHER);
+inline constexpr int LIGHT_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_LIGHTS);
+inline constexpr int SWITCH_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_SWITCHES);
+inline constexpr int CLIMATE_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_CLIMATE);
+inline constexpr int WATER_HEATER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_WATER_HEATERS);
+inline constexpr int HUMIDIFIER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_HUMIDIFIERS);
+inline constexpr int FAN_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_FANS);
+inline constexpr int COVER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_COVERS);
+inline constexpr int LOCK_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_LOCKS);
+inline constexpr int MEDIA_PLAYER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_MEDIA);
+inline constexpr int SENSOR_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_SENSORS);
+inline constexpr int AUTOMATION_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_AUTOMATION);
+inline constexpr int ALARM_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_ALARMS);
+inline constexpr int WEATHER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_WEATHER);
 
-static constexpr auto LIGHT_LIST_STORAGE = make_mode_entity_array<LIGHT_LIST_COUNT>(REMOTE_MODE_LIGHTS);
-static constexpr auto SWITCH_LIST_STORAGE = make_mode_entity_array<SWITCH_LIST_COUNT>(REMOTE_MODE_SWITCHES);
-static constexpr auto CLIMATE_LIST_STORAGE = make_mode_entity_array<CLIMATE_LIST_COUNT>(REMOTE_MODE_CLIMATE);
-static constexpr auto WATER_HEATER_LIST_STORAGE = make_mode_entity_array<WATER_HEATER_LIST_COUNT>(REMOTE_MODE_WATER_HEATERS);
-static constexpr auto HUMIDIFIER_LIST_STORAGE = make_mode_entity_array<HUMIDIFIER_LIST_COUNT>(REMOTE_MODE_HUMIDIFIERS);
-static constexpr auto FAN_LIST_STORAGE = make_mode_entity_array<FAN_LIST_COUNT>(REMOTE_MODE_FANS);
-static constexpr auto COVER_LIST_STORAGE = make_mode_entity_array<COVER_LIST_COUNT>(REMOTE_MODE_COVERS);
-static constexpr auto LOCK_LIST_STORAGE = make_mode_entity_array<LOCK_LIST_COUNT>(REMOTE_MODE_LOCKS);
-static constexpr auto MEDIA_PLAYER_LIST_STORAGE = make_mode_entity_array<MEDIA_PLAYER_LIST_COUNT>(REMOTE_MODE_MEDIA);
-static constexpr auto SENSOR_LIST_STORAGE = make_mode_entity_array<SENSOR_LIST_COUNT>(REMOTE_MODE_SENSORS);
-static constexpr auto AUTOMATION_LIST_STORAGE = make_mode_entity_array<AUTOMATION_LIST_COUNT>(REMOTE_MODE_AUTOMATION);
-static constexpr auto ALARM_LIST_STORAGE = make_mode_entity_array<ALARM_LIST_COUNT>(REMOTE_MODE_ALARMS);
-static constexpr auto WEATHER_LIST_STORAGE = make_mode_entity_array<WEATHER_LIST_COUNT>(REMOTE_MODE_WEATHER);
+inline constexpr auto LIGHT_LIST_STORAGE = make_mode_entity_array<LIGHT_LIST_COUNT>(REMOTE_MODE_LIGHTS);
+inline constexpr auto SWITCH_LIST_STORAGE = make_mode_entity_array<SWITCH_LIST_COUNT>(REMOTE_MODE_SWITCHES);
+inline constexpr auto CLIMATE_LIST_STORAGE = make_mode_entity_array<CLIMATE_LIST_COUNT>(REMOTE_MODE_CLIMATE);
+inline constexpr auto WATER_HEATER_LIST_STORAGE = make_mode_entity_array<WATER_HEATER_LIST_COUNT>(REMOTE_MODE_WATER_HEATERS);
+inline constexpr auto HUMIDIFIER_LIST_STORAGE = make_mode_entity_array<HUMIDIFIER_LIST_COUNT>(REMOTE_MODE_HUMIDIFIERS);
+inline constexpr auto FAN_LIST_STORAGE = make_mode_entity_array<FAN_LIST_COUNT>(REMOTE_MODE_FANS);
+inline constexpr auto COVER_LIST_STORAGE = make_mode_entity_array<COVER_LIST_COUNT>(REMOTE_MODE_COVERS);
+inline constexpr auto LOCK_LIST_STORAGE = make_mode_entity_array<LOCK_LIST_COUNT>(REMOTE_MODE_LOCKS);
+inline constexpr auto MEDIA_PLAYER_LIST_STORAGE = make_mode_entity_array<MEDIA_PLAYER_LIST_COUNT>(REMOTE_MODE_MEDIA);
+inline constexpr auto SENSOR_LIST_STORAGE = make_mode_entity_array<SENSOR_LIST_COUNT>(REMOTE_MODE_SENSORS);
+inline constexpr auto AUTOMATION_LIST_STORAGE = make_mode_entity_array<AUTOMATION_LIST_COUNT>(REMOTE_MODE_AUTOMATION);
+inline constexpr auto ALARM_LIST_STORAGE = make_mode_entity_array<ALARM_LIST_COUNT>(REMOTE_MODE_ALARMS);
+inline constexpr auto WEATHER_LIST_STORAGE = make_mode_entity_array<WEATHER_LIST_COUNT>(REMOTE_MODE_WEATHER);
 
-static constexpr const EntityEntry *LIGHT_LIST = LIGHT_LIST_STORAGE.data();
-static constexpr const EntityEntry *SWITCH_LIST = SWITCH_LIST_STORAGE.data();
-static constexpr const EntityEntry *CLIMATE_LIST = CLIMATE_LIST_STORAGE.data();
-static constexpr const EntityEntry *WATER_HEATER_LIST = WATER_HEATER_LIST_STORAGE.data();
-static constexpr const EntityEntry *HUMIDIFIER_LIST = HUMIDIFIER_LIST_STORAGE.data();
-static constexpr const EntityEntry *FAN_LIST = FAN_LIST_STORAGE.data();
-static constexpr const EntityEntry *COVER_LIST = COVER_LIST_STORAGE.data();
-static constexpr const EntityEntry *LOCK_LIST = LOCK_LIST_STORAGE.data();
-static constexpr const EntityEntry *MEDIA_PLAYER_LIST = MEDIA_PLAYER_LIST_STORAGE.data();
-static constexpr const EntityEntry *SENSOR_LIST = SENSOR_LIST_STORAGE.data();
-static constexpr const EntityEntry *AUTOMATION_LIST = AUTOMATION_LIST_STORAGE.data();
-static constexpr const EntityEntry *ALARM_LIST = ALARM_LIST_STORAGE.data();
-static constexpr const EntityEntry *WEATHER_LIST = WEATHER_LIST_STORAGE.data();
-static const char *const INFO_ITEM_NAMES[] = {"Time & Date", "Wireless", "Network", "Device Name", "Battery", "Version"};
-static const char *const INFO_ITEM_ENTITIES[] = {
+inline constexpr const EntityEntry *LIGHT_LIST = LIGHT_LIST_STORAGE.data();
+inline constexpr const EntityEntry *SWITCH_LIST = SWITCH_LIST_STORAGE.data();
+inline constexpr const EntityEntry *CLIMATE_LIST = CLIMATE_LIST_STORAGE.data();
+inline constexpr const EntityEntry *WATER_HEATER_LIST = WATER_HEATER_LIST_STORAGE.data();
+inline constexpr const EntityEntry *HUMIDIFIER_LIST = HUMIDIFIER_LIST_STORAGE.data();
+inline constexpr const EntityEntry *FAN_LIST = FAN_LIST_STORAGE.data();
+inline constexpr const EntityEntry *COVER_LIST = COVER_LIST_STORAGE.data();
+inline constexpr const EntityEntry *LOCK_LIST = LOCK_LIST_STORAGE.data();
+inline constexpr const EntityEntry *MEDIA_PLAYER_LIST = MEDIA_PLAYER_LIST_STORAGE.data();
+inline constexpr const EntityEntry *SENSOR_LIST = SENSOR_LIST_STORAGE.data();
+inline constexpr const EntityEntry *AUTOMATION_LIST = AUTOMATION_LIST_STORAGE.data();
+inline constexpr const EntityEntry *ALARM_LIST = ALARM_LIST_STORAGE.data();
+inline constexpr const EntityEntry *WEATHER_LIST = WEATHER_LIST_STORAGE.data();
+inline constexpr const char *INFO_ITEM_NAMES[] = {"Time & Date", "Wireless", "Network", "Device Name", "Battery", "Version"};
+inline constexpr const char *INFO_ITEM_ENTITIES[] = {
     "info.date", "info.wireless", "info.network", "info.device_name", "info.battery", "info.version"};
-static const int INFO_ITEM_COUNT = sizeof(INFO_ITEM_NAMES) / sizeof(INFO_ITEM_NAMES[0]);
+inline constexpr int INFO_ITEM_COUNT = sizeof(INFO_ITEM_NAMES) / sizeof(INFO_ITEM_NAMES[0]);
 
 #ifndef REMOTE_NOTIFICATION_FEED_MAX_ITEMS
 #define REMOTE_NOTIFICATION_FEED_MAX_ITEMS 16
 #endif
 
-static constexpr int NOTIFICATION_FEED_MAX_ITEMS = REMOTE_NOTIFICATION_FEED_MAX_ITEMS;
+inline constexpr int NOTIFICATION_FEED_MAX_ITEMS = REMOTE_NOTIFICATION_FEED_MAX_ITEMS;
 
 #ifndef NOTIFICATION_FEED_ENTITY
 #define NOTIFICATION_FEED_ENTITY ""
@@ -256,29 +256,70 @@ static constexpr int NOTIFICATION_FEED_MAX_ITEMS = REMOTE_NOTIFICATION_FEED_MAX_
 #define NOTIFICATION_FEED_SEPARATOR "||"
 #endif
 
-static inline int notification_mode_item_count();
-static inline std::string notification_mode_item_name(int idx);
-static inline std::string notification_mode_item_entity(int idx);
-static inline const std::string &notification_id_for_index(int idx);
-static inline bool notifications_mode_enabled();
-static inline const std::string &media_source_list_for_index(int idx);
-static inline const std::string &media_device_class_for_index(int idx);
+inline int notification_mode_item_count();
+inline std::string notification_mode_item_name(int idx);
+inline std::string notification_mode_item_entity(int idx);
+inline const std::string &notification_id_for_index(int idx);
+inline bool notifications_mode_enabled();
+inline const std::string &media_source_list_for_index(int idx);
+inline const std::string &media_device_class_for_index(int idx);
 
-static inline bool ha_state_missing(const std::string &value) {
-  return value.empty() || value == "unknown" || value == "unavailable" || value == "None";
+// HA attribute payloads above this size are ignored by the list parsers; option
+// lists this large would be unusable on the remote and parsing them risks
+// exhausting the heap.
+#ifndef REMOTE_HA_MAX_JSON_PAYLOAD_BYTES
+#define REMOTE_HA_MAX_JSON_PAYLOAD_BYTES 8192
+#endif
+
+inline bool ha_api_ready() {
+  return esphome::api::global_api_server != nullptr;
 }
 
-static inline std::string ha_state_or_unknown(esphome::StringRef state) {
-  std::string value = state.str();
-  return ha_state_missing(value) ? "unknown" : value;
+inline bool ha_state_missing(const char *data, size_t len) {
+  if (len == 0) {
+    return true;
+  }
+  return (len == 7 && memcmp(data, "unknown", 7) == 0) ||
+         (len == 11 && memcmp(data, "unavailable", 11) == 0) ||
+         (len == 4 && memcmp(data, "None", 4) == 0);
 }
 
-static inline float ha_parse_float(esphome::StringRef state) {
-  std::string value = state.str();
-  return ha_state_missing(value) ? NAN : strtof(value.c_str(), nullptr);
+inline bool ha_state_missing(const std::string &value) {
+  return ha_state_missing(value.data(), value.size());
 }
 
-static inline std::string trim_copy(const std::string &value) {
+inline bool ha_state_missing(esphome::StringRef state) {
+  return ha_state_missing(state.c_str(), state.size());
+}
+
+// Assigns into an existing string so its capacity is reused instead of
+// allocating a temporary on every state callback.
+inline void ha_assign(std::string &target, esphome::StringRef state) {
+  target.assign(state.c_str(), state.size());
+}
+
+inline void ha_assign_state_or_unknown(std::string &target, esphome::StringRef state) {
+  if (ha_state_missing(state)) {
+    target = "unknown";
+  } else {
+    target.assign(state.c_str(), state.size());
+  }
+}
+
+inline float ha_parse_float(esphome::StringRef state) {
+  if (ha_state_missing(state)) {
+    return NAN;
+  }
+  char buffer[32];
+  size_t len = state.size() < sizeof(buffer) - 1 ? state.size() : sizeof(buffer) - 1;
+  memcpy(buffer, state.c_str(), len);
+  buffer[len] = '\0';
+  char *end = nullptr;
+  float result = strtof(buffer, &end);
+  return end != buffer ? result : NAN;
+}
+
+inline std::string trim_copy(const std::string &value) {
   size_t start = value.find_first_not_of(" \t\r\n");
   if (start == std::string::npos) {
     return "";
@@ -287,36 +328,63 @@ static inline std::string trim_copy(const std::string &value) {
   return value.substr(start, end - start + 1);
 }
 
-static inline bool ha_payload_looks_like_json(const std::string &value) {
-  std::string trimmed = trim_copy(value);
-  if (trimmed.empty()) {
-    return false;
+inline bool ha_payload_looks_like_json(const char *data, size_t len) {
+  size_t i = 0;
+  while (i < len && (data[i] == ' ' || data[i] == '\t' || data[i] == '\r' || data[i] == '\n')) {
+    i++;
   }
-  char first = trimmed.front();
-  return first == '[' || first == '{';
+  return i < len && (data[i] == '[' || data[i] == '{');
 }
 
-static inline bool ha_deserialize_json_silently(const std::string &payload, JsonDocument &doc) {
-  DeserializationError error = deserializeJson(doc, payload);
-  return !error;
+inline bool ha_payload_looks_like_json(const std::string &value) {
+  return ha_payload_looks_like_json(value.data(), value.size());
 }
 
-static inline std::string remote_state_label(const std::string &raw, const char *fallback = "SYNCING") {
-  std::string label = raw;
-  for (auto &ch : label) {
-    if (ch >= 'a' && ch <= 'z') {
-      ch = ch - 'a' + 'A';
-    } else if (ch == '_') {
-      ch = ' ';
+inline bool ha_payload_looks_like_json(esphome::StringRef state) {
+  return ha_payload_looks_like_json(state.c_str(), state.size());
+}
+
+// Parses a JSON array attribute payload (e.g. effect_list, preset_modes) and
+// joins its trimmed items into target separated by '|'. Clears target when the
+// payload is missing, oversized, or not a JSON array.
+inline void ha_store_joined_list(std::string &target, esphome::StringRef state) {
+  target.clear();
+  if (ha_state_missing(state) || state.size() > REMOTE_HA_MAX_JSON_PAYLOAD_BYTES) {
+    return;
+  }
+  if (!ha_payload_looks_like_json(state)) {
+    return;
+  }
+
+  JsonDocument doc;
+  if (deserializeJson(doc, state.c_str(), state.size()) != DeserializationError::Ok || !doc.is<JsonArray>()) {
+    return;
+  }
+
+  for (JsonVariant value : doc.as<JsonArray>()) {
+    const char *item = value.as<const char *>();
+    if (item == nullptr) {
+      continue;
     }
+    size_t len = strlen(item);
+    while (len > 0 && (item[0] == ' ' || item[0] == '\t' || item[0] == '\r' || item[0] == '\n')) {
+      item++;
+      len--;
+    }
+    while (len > 0 && (item[len - 1] == ' ' || item[len - 1] == '\t' || item[len - 1] == '\r' || item[len - 1] == '\n')) {
+      len--;
+    }
+    if (len == 0) {
+      continue;
+    }
+    if (!target.empty()) {
+      target += '|';
+    }
+    target.append(item, len);
   }
-  if (label.empty() || label == "UNKNOWN") {
-    return std::string(fallback);
-  }
-  return label;
 }
 
-static inline void remote_state_label_to_buffer(
+inline void remote_state_label_to_buffer(
     const std::string &raw, char *buffer, size_t buffer_size, const char *fallback = "SYNCING") {
   if (buffer == nullptr || buffer_size == 0) {
     return;
@@ -342,18 +410,33 @@ static inline void remote_state_label_to_buffer(
   }
 }
 
-static inline int clamp_percent_value(float value, float scale = 1.0f, int min_value = 0) {
+// ASCII uppercase into a fixed buffer; avoids the temporary std::string that
+// str_upper_case() allocates when the result is only compared and discarded.
+inline void str_upper_to_buffer(const std::string &raw, char *buffer, size_t buffer_size) {
+  if (buffer == nullptr || buffer_size == 0) {
+    return;
+  }
+  size_t write_idx = 0;
+  for (char ch : raw) {
+    if (write_idx + 1 >= buffer_size) {
+      break;
+    }
+    buffer[write_idx++] = (ch >= 'a' && ch <= 'z') ? ch - 'a' + 'A' : ch;
+  }
+  buffer[write_idx] = '\0';
+}
+
+inline int clamp_percent_value(float value, float scale = 1.0f, int min_value = 0) {
+  if (std::isnan(value)) {
+    return min_value;
+  }
   int pct = (int) roundf(value * scale);
   if (pct < min_value) pct = min_value;
   if (pct > 100) pct = 100;
   return pct;
 }
 
-static inline bool lock_state_matches_expected(const std::string &state, const std::string &expected_state) {
-  return state == expected_state;
-}
-
-static inline std::string lock_operation_feedback_for_state(const std::string &state) {
+inline std::string lock_operation_feedback_for_state(const std::string &state) {
   if (state == "jammed") {
     return "JAMMED";
   }
@@ -366,13 +449,13 @@ static inline std::string lock_operation_feedback_for_state(const std::string &s
   return "";
 }
 
-static inline bool cover_state_matches_expected(const std::string &state, float position, const std::string &expected_state) {
+inline bool cover_state_matches_expected(const std::string &state, float position, const std::string &expected_state) {
   const bool reached_open = state == "open" || (!std::isnan(position) && position >= 99.0f);
   const bool reached_closed = state == "closed" || (!std::isnan(position) && position <= 1.0f);
   return (expected_state == "open" && reached_open) || (expected_state == "closed" && reached_closed);
 }
 
-static inline std::string cover_operation_feedback_for_state(const std::string &state, float position) {
+inline std::string cover_operation_feedback_for_state(const std::string &state, float position) {
   if (state == "opening") {
     return "OPENING...";
   }
@@ -387,11 +470,7 @@ static inline std::string cover_operation_feedback_for_state(const std::string &
   return "";
 }
 
-static inline bool alarm_state_matches_expected(const std::string &state, const std::string &expected_state) {
-  return state == expected_state;
-}
-
-static inline std::string alarm_operation_feedback_for_state(const std::string &state) {
+inline std::string alarm_operation_feedback_for_state(const std::string &state) {
   if (state == "arming" || state == "pending") {
     return "ARMING...";
   }
@@ -404,81 +483,116 @@ static inline std::string alarm_operation_feedback_for_state(const std::string &
   return "";
 }
 
-static inline int delimited_option_count(const std::string &source_list) {
-  int count = 0;
+// Visits each trimmed, non-empty '|'-separated item as (offset, length) into
+// source_list without allocating. The callback returns false to stop early.
+template <typename Fn>
+inline void for_each_delimited_option(const std::string &source_list, Fn fn) {
   size_t start = 0;
   while (start <= source_list.size()) {
     size_t end = source_list.find('|', start);
-    std::string item = trim_copy(source_list.substr(start, end == std::string::npos ? std::string::npos : end - start));
-    if (!item.empty()) {
-      count++;
+    size_t item_end = end == std::string::npos ? source_list.size() : end;
+    size_t begin = start;
+    while (begin < item_end && (source_list[begin] == ' ' || source_list[begin] == '\t' ||
+                                source_list[begin] == '\r' || source_list[begin] == '\n')) {
+      begin++;
+    }
+    while (item_end > begin && (source_list[item_end - 1] == ' ' || source_list[item_end - 1] == '\t' ||
+                                source_list[item_end - 1] == '\r' || source_list[item_end - 1] == '\n')) {
+      item_end--;
+    }
+    if (item_end > begin && !fn(begin, item_end - begin)) {
+      return;
     }
     if (end == std::string::npos) {
       break;
     }
     start = end + 1;
   }
+}
+
+inline int delimited_option_count(const std::string &source_list) {
+  int count = 0;
+  for_each_delimited_option(source_list, [&](size_t, size_t) {
+    count++;
+    return true;
+  });
   return count;
 }
 
-static inline std::string delimited_option_at(const std::string &source_list, int option_idx) {
+inline std::string delimited_option_at(const std::string &source_list, int option_idx) {
+  std::string result;
   if (option_idx < 0) {
-    return "";
+    return result;
   }
   int current_idx = 0;
-  size_t start = 0;
-  while (start <= source_list.size()) {
-    size_t end = source_list.find('|', start);
-    std::string item = trim_copy(source_list.substr(start, end == std::string::npos ? std::string::npos : end - start));
-    if (!item.empty()) {
-      if (current_idx == option_idx) {
-        return item;
+  for_each_delimited_option(source_list, [&](size_t offset, size_t len) {
+    if (current_idx++ == option_idx) {
+      result = source_list.substr(offset, len);
+      return false;
+    }
+    return true;
+  });
+  return result;
+}
+
+inline std::string previous_delimited_option(const std::string &source_list, const std::string &current_value) {
+  std::string current = trim_copy(current_value);
+  size_t prev_offset = 0, prev_len = 0, last_offset = 0, last_len = 0;
+  bool have_prev = false, matched_first = false, matched = false;
+  for_each_delimited_option(source_list, [&](size_t offset, size_t len) {
+    if (!matched && source_list.compare(offset, len, current) == 0) {
+      matched = true;
+      if (!have_prev) {
+        matched_first = true;  // wrap around: keep scanning for the last item
       }
-      current_idx++;
     }
-    if (end == std::string::npos) {
-      break;
+    if (!matched || matched_first) {
+      last_offset = offset;
+      last_len = len;
+      if (!matched) {
+        prev_offset = offset;
+        prev_len = len;
+        have_prev = true;
+      }
     }
-    start = end + 1;
+    return true;
+  });
+  if (matched && !matched_first && have_prev) {
+    return source_list.substr(prev_offset, prev_len);
   }
-  return "";
+  // Wrapped past the first item, or no match: fall back to the last item.
+  return last_len > 0 ? source_list.substr(last_offset, last_len) : "";
 }
 
-static inline std::string previous_delimited_option(const std::string &source_list, const std::string &current_value) {
-  int count = delimited_option_count(source_list);
-  if (count <= 0) {
-    return "";
-  }
-
+inline std::string next_delimited_option(const std::string &source_list, const std::string &current_value) {
   std::string current = trim_copy(current_value);
-  for (int i = 0; i < count; i++) {
-    if (delimited_option_at(source_list, i) == current) {
-      return delimited_option_at(source_list, (i + count - 1) % count);
+  std::string first, result;
+  bool matched = false;
+  for_each_delimited_option(source_list, [&](size_t offset, size_t len) {
+    if (first.empty()) {
+      first = source_list.substr(offset, len);
     }
+    if (matched) {
+      result = source_list.substr(offset, len);
+      return false;
+    }
+    if (source_list.compare(offset, len, current) == 0) {
+      matched = true;
+    }
+    return true;
+  });
+  if (!result.empty()) {
+    return result;
   }
-  return delimited_option_at(source_list, count - 1);
+  // Current item was last (wrap around) or not found: start from the first item.
+  return first;
 }
 
-static inline std::string next_delimited_option(const std::string &source_list, const std::string &current_value) {
-  int count = delimited_option_count(source_list);
-  if (count <= 0) {
-    return "";
-  }
-
-  std::string current = trim_copy(current_value);
-  for (int i = 0; i < count; i++) {
-    if (delimited_option_at(source_list, i) == current) {
-      return delimited_option_at(source_list, (i + 1) % count);
-    }
-  }
-  return delimited_option_at(source_list, 0);
-}
-
-static inline bool notifications_mode_enabled() {
+inline bool notifications_mode_enabled() {
   return NOTIFICATION_FEED_ENTITY[0] != '\0';
 }
 
-static inline std::string media_configured_source_list_for_index(int idx) {
+inline std::string media_configured_source_list_for_index(int idx) {
   if (idx < 0 || idx >= MEDIA_PLAYER_LIST_COUNT) {
     return "";
   }
@@ -486,7 +600,7 @@ static inline std::string media_configured_source_list_for_index(int idx) {
   return (sources == nullptr) ? "" : std::string(sources);
 }
 
-static inline std::string active_media_source_list_for_index(int idx) {
+inline std::string active_media_source_list_for_index(int idx) {
   std::string tracked_sources = media_source_list_for_index(idx);
   std::string device_class = media_device_class_for_index(idx);
   if ((device_class == "tv" || device_class == "receiver") && !tracked_sources.empty()) {
@@ -495,54 +609,34 @@ static inline std::string active_media_source_list_for_index(int idx) {
   return media_configured_source_list_for_index(idx);
 }
 
-static inline int media_source_option_count(int idx) {
+inline int media_source_option_count(int idx) {
   return delimited_option_count(active_media_source_list_for_index(idx));
 }
 
-static inline std::string media_source_option_at(int idx, int option_idx) {
+inline std::string media_source_option_at(int idx, int option_idx) {
   return delimited_option_at(active_media_source_list_for_index(idx), option_idx);
 }
 
-static inline std::string next_media_source_for_index(int idx, const std::string &current_source) {
-  int count = media_source_option_count(idx);
-  if (count <= 0) {
-    return "";
-  }
-
-  std::string current = trim_copy(current_source);
-  for (int i = 0; i < count; i++) {
-    if (media_source_option_at(idx, i) == current) {
-      return media_source_option_at(idx, (i + 1) % count);
-    }
-  }
-  return media_source_option_at(idx, 0);
+inline std::string next_media_source_for_index(int idx, const std::string &current_source) {
+  const std::string source_list = active_media_source_list_for_index(idx);
+  return next_delimited_option(source_list, current_source);
 }
 
-static inline std::string previous_media_source_for_index(int idx, const std::string &current_source) {
-  int count = media_source_option_count(idx);
-  if (count <= 0) {
-    return "";
-  }
-
-  std::string current = trim_copy(current_source);
-  for (int i = 0; i < count; i++) {
-    if (media_source_option_at(idx, i) == current) {
-      return media_source_option_at(idx, (i + count - 1) % count);
-    }
-  }
-  return media_source_option_at(idx, count - 1);
+inline std::string previous_media_source_for_index(int idx, const std::string &current_source) {
+  const std::string source_list = active_media_source_list_for_index(idx);
+  return previous_delimited_option(source_list, current_source);
 }
 
-static inline bool entity_id_matches_domain(const char *entity_id, const char *domain) {
+inline bool entity_id_matches_domain(const char *entity_id, const char *domain) {
   if (entity_id == nullptr || domain == nullptr) {
     return false;
   }
-  const std::string prefix = std::string(domain) + ".";
-  return std::string(entity_id).rfind(prefix, 0) == 0;
+  size_t domain_len = strlen(domain);
+  return strncmp(entity_id, domain, domain_len) == 0 && entity_id[domain_len] == '.';
 }
 
 template <typename Entity>
-static inline void validate_entity_list(
+inline void validate_entity_list(
     const char *label, const Entity *entities, int count, const char *primary_domain,
     const char *secondary_domain = nullptr, const char *tertiary_domain = nullptr) {
   for (int i = 0; i < count; i++) {
@@ -564,7 +658,7 @@ static inline void validate_entity_list(
   }
 }
 
-static inline void validate_notification_config() {
+inline void validate_notification_config() {
   if (!notifications_mode_enabled()) {
     return;
   }
@@ -573,7 +667,7 @@ static inline void validate_notification_config() {
   }
 }
 
-static inline void validate_remote_configuration() {
+inline void validate_remote_configuration() {
   validate_entity_list("LIGHT_LIST", LIGHT_LIST, LIGHT_LIST_COUNT, "light");
   validate_entity_list("SWITCH_LIST", SWITCH_LIST, SWITCH_LIST_COUNT, "switch");
   validate_entity_list("CLIMATE_LIST", CLIMATE_LIST, CLIMATE_LIST_COUNT, "climate");
@@ -590,7 +684,7 @@ static inline void validate_remote_configuration() {
 }
 
 template <typename Entity>
-static inline int find_entity_index(const Entity *entities, int count, const std::string &entity_id) {
+inline int find_entity_index(const Entity *entities, int count, const std::string &entity_id) {
   for (int i = 0; i < count; i++) {
     if (entity_id == entities[i].entity_id) {
       return i;
@@ -599,39 +693,18 @@ static inline int find_entity_index(const Entity *entities, int count, const std
   return -1;
 }
 
-template <typename RequestFn>
-static inline void request_all_states_by_count(int count, RequestFn request_fn) {
-  for (int i = 0; i < count; i++) {
-    request_fn(i);
-  }
-}
-
 template <typename Entity>
-static inline std::string indexed_entity_name(const Entity *entities, int count, int idx) {
+inline const char *indexed_entity_name_cstr(const Entity *entities, int count, int idx) {
   return (idx >= 0 && idx < count) ? entities[idx].name : "";
 }
 
 template <typename Entity>
-static inline std::string indexed_entity_id(const Entity *entities, int count, int idx) {
-  return (idx >= 0 && idx < count) ? entities[idx].entity_id : "";
-}
-
-static inline std::string indexed_value(const char *const *values, int count, int idx) {
-  return (idx >= 0 && idx < count) ? values[idx] : "";
-}
-
-template <typename Entity>
-static inline const char *indexed_entity_name_cstr(const Entity *entities, int count, int idx) {
-  return (idx >= 0 && idx < count) ? entities[idx].name : "";
-}
-
-template <typename Entity>
-static inline const char *indexed_entity_id_cstr(const Entity *entities, int count, int idx) {
+inline const char *indexed_entity_id_cstr(const Entity *entities, int count, int idx) {
   return (idx >= 0 && idx < count) ? entities[idx].entity_id : "";
 }
 
 template <typename Entity>
-static inline int index_of_entity_id(const Entity *entities, int count, const char *entity_id) {
+inline int index_of_entity_id(const Entity *entities, int count, const char *entity_id) {
   if (entity_id == nullptr || entity_id[0] == '\0') {
     return -1;
   }
@@ -643,7 +716,7 @@ static inline int index_of_entity_id(const Entity *entities, int count, const ch
   return -1;
 }
 
-static inline const char *indexed_value_cstr(const char *const *values, int count, int idx) {
+inline const char *indexed_value_cstr(const char *const *values, int count, int idx) {
   return (idx >= 0 && idx < count) ? values[idx] : "";
 }
 
@@ -698,7 +771,7 @@ enum RemoteSettingOption {
   REMOTE_SETTING_WATER_HEATER_AWAY,
 };
 
-static inline const char *remote_setting_option_label(RemoteSettingOption option) {
+inline const char *remote_setting_option_label(RemoteSettingOption option) {
   switch (option) {
     case REMOTE_SETTING_LIGHT_DIMMER:
       return "DIMMER";
@@ -800,7 +873,7 @@ static inline const char *remote_setting_option_label(RemoteSettingOption option
   }
 }
 
-static inline const char *remote_setting_left_icon(RemoteSettingOption option) {
+inline const char *remote_setting_left_icon(RemoteSettingOption option) {
   switch (option) {
     case REMOTE_SETTING_LIGHT_DIMMER:
     case REMOTE_SETTING_CLIMATE_HUMIDITY:
@@ -859,7 +932,7 @@ static inline const char *remote_setting_left_icon(RemoteSettingOption option) {
   }
 }
 
-static inline const char *remote_setting_right_icon(RemoteSettingOption option) {
+inline const char *remote_setting_right_icon(RemoteSettingOption option) {
   switch (option) {
     case REMOTE_SETTING_LIGHT_DIMMER:
     case REMOTE_SETTING_CLIMATE_HUMIDITY:
@@ -918,7 +991,7 @@ static inline const char *remote_setting_right_icon(RemoteSettingOption option) 
   }
 }
 
-static inline const char *mode_title(RemoteMode mode) {
+inline const char *mode_title(RemoteMode mode) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return "LIGHTS";
@@ -955,7 +1028,7 @@ static inline const char *mode_title(RemoteMode mode) {
   }
 }
 
-static inline const char *mode_icon(RemoteMode mode) {
+inline const char *mode_icon(RemoteMode mode) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return "\ue90f";
@@ -992,35 +1065,11 @@ static inline const char *mode_icon(RemoteMode mode) {
   }
 }
 
-static inline bool favorite_entity_matches_prefix(const char *entity_id, const char *prefix) {
-  size_t prefix_len = strlen(prefix);
-  return entity_id != nullptr && strncmp(entity_id, prefix, prefix_len) == 0;
+inline RemoteMode favorite_entity_mode(const char *entity_id) {
+  return favorite_entity_mode_constexpr(entity_id);
 }
 
-static inline RemoteMode favorite_entity_mode(const char *entity_id) {
-  if (favorite_entity_matches_prefix(entity_id, "light.")) return REMOTE_MODE_LIGHTS;
-  if (favorite_entity_matches_prefix(entity_id, "switch.")) return REMOTE_MODE_SWITCHES;
-  if (favorite_entity_matches_prefix(entity_id, "climate.")) return REMOTE_MODE_CLIMATE;
-  if (favorite_entity_matches_prefix(entity_id, "water_heater.")) return REMOTE_MODE_WATER_HEATERS;
-  if (favorite_entity_matches_prefix(entity_id, "humidifier.")) return REMOTE_MODE_HUMIDIFIERS;
-  if (favorite_entity_matches_prefix(entity_id, "fan.")) return REMOTE_MODE_FANS;
-  if (favorite_entity_matches_prefix(entity_id, "cover.")) return REMOTE_MODE_COVERS;
-  if (favorite_entity_matches_prefix(entity_id, "lock.")) return REMOTE_MODE_LOCKS;
-  if (favorite_entity_matches_prefix(entity_id, "media_player.")) return REMOTE_MODE_MEDIA;
-  if (favorite_entity_matches_prefix(entity_id, "sensor.") || favorite_entity_matches_prefix(entity_id, "binary_sensor.")) {
-    return REMOTE_MODE_SENSORS;
-  }
-  if (favorite_entity_matches_prefix(entity_id, "automation.") ||
-      favorite_entity_matches_prefix(entity_id, "script.") ||
-      favorite_entity_matches_prefix(entity_id, "scene.")) {
-    return REMOTE_MODE_AUTOMATION;
-  }
-  if (favorite_entity_matches_prefix(entity_id, "alarm_control_panel.")) return REMOTE_MODE_ALARMS;
-  if (favorite_entity_matches_prefix(entity_id, "weather.")) return REMOTE_MODE_WEATHER;
-  return REMOTE_MODE_INFO;
-}
-
-static inline int favorite_entity_mode_index(RemoteMode mode, const char *entity_id) {
+inline int favorite_entity_mode_index(RemoteMode mode, const char *entity_id) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return index_of_entity_id(LIGHT_LIST, LIGHT_LIST_COUNT, entity_id);
@@ -1053,19 +1102,19 @@ static inline int favorite_entity_mode_index(RemoteMode mode, const char *entity
   }
 }
 
-static inline int favorite_list_item_count(int list_index) {
+inline int favorite_list_item_count(int list_index) {
   return (list_index >= 0 && list_index < FAVORITE_LIST_COUNT_INT) ? static_cast<int>(FAVORITE_LISTS[list_index].count) : 0;
 }
 
-static inline bool favorite_list_is_available(int list_index) {
+inline bool favorite_list_is_available(int list_index) {
   return favorite_list_item_count(list_index) > 0;
 }
 
-static inline const char *favorite_list_title(int list_index) {
+inline const char *favorite_list_title(int list_index) {
   return (list_index >= 0 && list_index < FAVORITE_LIST_COUNT_INT) ? FAVORITE_LISTS[list_index].title : "FAVORITES";
 }
 
-static inline const FavoriteEntity *favorite_list_entry(int list_index, int item_index) {
+inline const FavoriteEntity *favorite_list_entry(int list_index, int item_index) {
   if (list_index < 0 || list_index >= FAVORITE_LIST_COUNT_INT) {
     return nullptr;
   }
@@ -1076,41 +1125,41 @@ static inline const FavoriteEntity *favorite_list_entry(int list_index, int item
   return &list.entries[item_index];
 }
 
-static inline std::array<int, FAVORITE_LIST_COUNT> &favorite_selection_indices() {
+inline std::array<int, FAVORITE_LIST_COUNT> &favorite_selection_indices() {
   static std::array<int, FAVORITE_LIST_COUNT> indices{};
   return indices;
 }
 
-static inline int &favorite_selected_index_ref(int list_index) {
+inline int &favorite_selected_index_ref(int list_index) {
   auto &indices = favorite_selection_indices();
   return indices[list_index];
 }
 
-static inline int menu_slot_count() {
+inline int menu_slot_count() {
   return FAVORITE_LIST_COUNT_INT + (notifications_mode_enabled() ? 1 : 0) + 1;
 }
 
-static inline int notifications_menu_index() {
+inline int notifications_menu_index() {
   return FAVORITE_LIST_COUNT_INT;
 }
 
-static inline int info_menu_index() {
+inline int info_menu_index() {
   return FAVORITE_LIST_COUNT_INT + (notifications_mode_enabled() ? 1 : 0);
 }
 
-static inline bool menu_index_is_favorite(int menu_index) {
+inline bool menu_index_is_favorite(int menu_index) {
   return menu_index >= 0 && menu_index < FAVORITE_LIST_COUNT_INT;
 }
 
-static inline bool menu_index_is_notifications(int menu_index) {
+inline bool menu_index_is_notifications(int menu_index) {
   return notifications_mode_enabled() && menu_index == notifications_menu_index();
 }
 
-static inline bool menu_index_is_info(int menu_index) {
+inline bool menu_index_is_info(int menu_index) {
   return menu_index == info_menu_index();
 }
 
-static inline int first_available_menu_index() {
+inline int first_available_menu_index() {
   for (int i = 0; i < FAVORITE_LIST_COUNT_INT; i++) {
     if (favorite_list_is_available(i)) {
       return i;
@@ -1122,7 +1171,7 @@ static inline int first_available_menu_index() {
   return info_menu_index();
 }
 
-static inline int clamp_menu_index(int menu_index) {
+inline int clamp_menu_index(int menu_index) {
   int count = menu_slot_count();
   if (count <= 0) {
     return 0;
@@ -1139,7 +1188,7 @@ static inline int clamp_menu_index(int menu_index) {
   return menu_index;
 }
 
-static inline int next_available_menu_index(int current, int step) {
+inline int next_available_menu_index(int current, int step) {
   int count = menu_slot_count();
   if (count <= 0) {
     return 0;
@@ -1159,7 +1208,7 @@ static inline int next_available_menu_index(int current, int step) {
   return first_available_menu_index();
 }
 
-static inline const char *menu_index_title(int menu_index) {
+inline const char *menu_index_title(int menu_index) {
   if (menu_index_is_favorite(menu_index)) {
     return favorite_list_title(menu_index);
   }
@@ -1174,7 +1223,7 @@ struct UiMenuHeader {
   const char *icon;
 };
 
-static inline UiMenuHeader ui_menu_header(int menu_index, RemoteMode current_mode) {
+inline UiMenuHeader ui_menu_header(int menu_index, RemoteMode current_mode) {
   UiMenuHeader header{};
   header.title = menu_index_title(menu_index);
   header.icon = menu_index_is_favorite(menu_index)
@@ -1183,7 +1232,7 @@ static inline UiMenuHeader ui_menu_header(int menu_index, RemoteMode current_mod
   return header;
 }
 
-static inline int mode_item_count(RemoteMode mode) {
+inline int mode_item_count(RemoteMode mode) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return LIGHT_LIST_COUNT;
@@ -1220,11 +1269,11 @@ static inline int mode_item_count(RemoteMode mode) {
   }
 }
 
-static inline bool mode_is_available(RemoteMode mode) {
+inline bool mode_is_available(RemoteMode mode) {
   return mode_item_count(mode) > 0;
 }
 
-static inline RemoteMode first_available_mode() {
+inline RemoteMode first_available_mode() {
   for (RemoteMode mode : MENU_MODE_ORDER) {
     if (mode_is_available(mode)) {
       return mode;
@@ -1233,7 +1282,7 @@ static inline RemoteMode first_available_mode() {
   return REMOTE_MODE_INFO;
 }
 
-static inline RemoteMode next_available_mode(RemoteMode current, int step) {
+inline RemoteMode next_available_mode(RemoteMode current, int step) {
   if (step == 0) {
     return mode_is_available(current) ? current : first_available_mode();
   }
@@ -1256,81 +1305,7 @@ static inline RemoteMode next_available_mode(RemoteMode current, int step) {
   return first_available_mode();
 }
 
-static inline std::string mode_item_name(RemoteMode mode, int idx) {
-  switch (mode) {
-    case REMOTE_MODE_LIGHTS:
-      return indexed_entity_name(LIGHT_LIST, LIGHT_LIST_COUNT, idx);
-    case REMOTE_MODE_SWITCHES:
-      return indexed_entity_name(SWITCH_LIST, SWITCH_LIST_COUNT, idx);
-    case REMOTE_MODE_CLIMATE:
-      return indexed_entity_name(CLIMATE_LIST, CLIMATE_LIST_COUNT, idx);
-    case REMOTE_MODE_WATER_HEATERS:
-      return indexed_entity_name(WATER_HEATER_LIST, WATER_HEATER_LIST_COUNT, idx);
-    case REMOTE_MODE_HUMIDIFIERS:
-      return indexed_entity_name(HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, idx);
-    case REMOTE_MODE_FANS:
-      return indexed_entity_name(FAN_LIST, FAN_LIST_COUNT, idx);
-    case REMOTE_MODE_COVERS:
-      return indexed_entity_name(COVER_LIST, COVER_LIST_COUNT, idx);
-    case REMOTE_MODE_LOCKS:
-      return indexed_entity_name(LOCK_LIST, LOCK_LIST_COUNT, idx);
-    case REMOTE_MODE_MEDIA:
-      return indexed_entity_name(MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, idx);
-    case REMOTE_MODE_SENSORS:
-      return indexed_entity_name(SENSOR_LIST, SENSOR_LIST_COUNT, idx);
-    case REMOTE_MODE_AUTOMATION:
-      return indexed_entity_name(AUTOMATION_LIST, AUTOMATION_LIST_COUNT, idx);
-    case REMOTE_MODE_ALARMS:
-      return indexed_entity_name(ALARM_LIST, ALARM_LIST_COUNT, idx);
-    case REMOTE_MODE_NOTIFICATIONS:
-      return notification_mode_item_name(idx);
-    case REMOTE_MODE_WEATHER:
-      return indexed_entity_name(WEATHER_LIST, WEATHER_LIST_COUNT, idx);
-    case REMOTE_MODE_INFO:
-      return indexed_value(INFO_ITEM_NAMES, INFO_ITEM_COUNT, idx);
-    default:
-      return "";
-  }
-}
-
-static inline std::string mode_item_entity(RemoteMode mode, int idx) {
-  switch (mode) {
-    case REMOTE_MODE_LIGHTS:
-      return indexed_entity_id(LIGHT_LIST, LIGHT_LIST_COUNT, idx);
-    case REMOTE_MODE_SWITCHES:
-      return indexed_entity_id(SWITCH_LIST, SWITCH_LIST_COUNT, idx);
-    case REMOTE_MODE_CLIMATE:
-      return indexed_entity_id(CLIMATE_LIST, CLIMATE_LIST_COUNT, idx);
-    case REMOTE_MODE_WATER_HEATERS:
-      return indexed_entity_id(WATER_HEATER_LIST, WATER_HEATER_LIST_COUNT, idx);
-    case REMOTE_MODE_HUMIDIFIERS:
-      return indexed_entity_id(HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, idx);
-    case REMOTE_MODE_FANS:
-      return indexed_entity_id(FAN_LIST, FAN_LIST_COUNT, idx);
-    case REMOTE_MODE_COVERS:
-      return indexed_entity_id(COVER_LIST, COVER_LIST_COUNT, idx);
-    case REMOTE_MODE_LOCKS:
-      return indexed_entity_id(LOCK_LIST, LOCK_LIST_COUNT, idx);
-    case REMOTE_MODE_MEDIA:
-      return indexed_entity_id(MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, idx);
-    case REMOTE_MODE_SENSORS:
-      return indexed_entity_id(SENSOR_LIST, SENSOR_LIST_COUNT, idx);
-    case REMOTE_MODE_AUTOMATION:
-      return indexed_entity_id(AUTOMATION_LIST, AUTOMATION_LIST_COUNT, idx);
-    case REMOTE_MODE_ALARMS:
-      return indexed_entity_id(ALARM_LIST, ALARM_LIST_COUNT, idx);
-    case REMOTE_MODE_NOTIFICATIONS:
-      return notification_mode_item_entity(idx);
-    case REMOTE_MODE_WEATHER:
-      return indexed_entity_id(WEATHER_LIST, WEATHER_LIST_COUNT, idx);
-    case REMOTE_MODE_INFO:
-      return indexed_value(INFO_ITEM_ENTITIES, INFO_ITEM_COUNT, idx);
-    default:
-      return "";
-  }
-}
-
-static inline const char *mode_item_name_cstr(RemoteMode mode, int idx) {
+inline const char *mode_item_name_cstr(RemoteMode mode, int idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return indexed_entity_name_cstr(LIGHT_LIST, LIGHT_LIST_COUNT, idx);
@@ -1366,7 +1341,7 @@ static inline const char *mode_item_name_cstr(RemoteMode mode, int idx) {
   }
 }
 
-static inline const char *mode_item_entity_cstr(RemoteMode mode, int idx) {
+inline const char *mode_item_entity_cstr(RemoteMode mode, int idx) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return indexed_entity_id_cstr(LIGHT_LIST, LIGHT_LIST_COUNT, idx);
@@ -1402,6 +1377,22 @@ static inline const char *mode_item_entity_cstr(RemoteMode mode, int idx) {
   }
 }
 
+inline std::string mode_item_name(RemoteMode mode, int idx) {
+  if (mode == REMOTE_MODE_NOTIFICATIONS) {
+    return notification_mode_item_name(idx);
+  }
+  const char *name = mode_item_name_cstr(mode, idx);
+  return name != nullptr ? std::string(name) : std::string();
+}
+
+inline std::string mode_item_entity(RemoteMode mode, int idx) {
+  if (mode == REMOTE_MODE_NOTIFICATIONS) {
+    return notification_mode_item_entity(idx);
+  }
+  const char *entity = mode_item_entity_cstr(mode, idx);
+  return entity != nullptr ? std::string(entity) : std::string();
+}
+
 enum AutomationKind {
   AUTOMATION_KIND_AUTOMATION = 0,
   AUTOMATION_KIND_SCRIPT = 1,
@@ -1415,21 +1406,21 @@ enum AlarmArmMode {
   ALARM_ARM_MODE_VACATION = 3,
 };
 
-static constexpr int ALARM_ARM_MODE_COUNT = 4;
+inline constexpr int ALARM_ARM_MODE_COUNT = 4;
 
-static inline AlarmArmMode clamp_alarm_arm_mode(int value) {
+inline AlarmArmMode clamp_alarm_arm_mode(int value) {
   if (value < 0 || value >= ALARM_ARM_MODE_COUNT) {
     return ALARM_ARM_MODE_AWAY;
   }
   return static_cast<AlarmArmMode>(value);
 }
 
-static inline AlarmArmMode next_alarm_arm_mode(AlarmArmMode mode, int step = 1) {
+inline AlarmArmMode next_alarm_arm_mode(AlarmArmMode mode, int step = 1) {
   int next = (static_cast<int>(mode) + (step % ALARM_ARM_MODE_COUNT) + ALARM_ARM_MODE_COUNT) % ALARM_ARM_MODE_COUNT;
   return static_cast<AlarmArmMode>(next);
 }
 
-static inline const char *alarm_arm_mode_selection_label(AlarmArmMode mode) {
+inline const char *alarm_arm_mode_selection_label(AlarmArmMode mode) {
   switch (mode) {
     case ALARM_ARM_MODE_HOME:
       return "ARM HOME";
@@ -1443,7 +1434,7 @@ static inline const char *alarm_arm_mode_selection_label(AlarmArmMode mode) {
   }
 }
 
-static inline const char *alarm_arm_mode_hold_label(AlarmArmMode mode) {
+inline const char *alarm_arm_mode_hold_label(AlarmArmMode mode) {
   switch (mode) {
     case ALARM_ARM_MODE_HOME:
       return "HOLD TO ARM HOME";
@@ -1457,7 +1448,7 @@ static inline const char *alarm_arm_mode_hold_label(AlarmArmMode mode) {
   }
 }
 
-static inline const char *alarm_expected_armed_state(AlarmArmMode mode) {
+inline const char *alarm_expected_armed_state(AlarmArmMode mode) {
   switch (mode) {
     case ALARM_ARM_MODE_HOME: return "armed_home";
     case ALARM_ARM_MODE_NIGHT: return "armed_night";
@@ -1467,7 +1458,7 @@ static inline const char *alarm_expected_armed_state(AlarmArmMode mode) {
   }
 }
 
-static inline bool alarm_action_is_arm(const std::string &state, AlarmArmMode arm_mode) {
+inline bool alarm_action_is_arm(const std::string &state, AlarmArmMode arm_mode) {
   if (state == "unknown") return false;
   return state != alarm_expected_armed_state(arm_mode);
 }
@@ -1508,7 +1499,7 @@ struct CurrentUiSelectionContext {
   bool is_favorite;
 };
 
-static inline ModeSelectionStateRefs make_mode_selection_state_refs(
+inline ModeSelectionStateRefs make_mode_selection_state_refs(
     int &light_idx, int &switch_idx, int &climate_idx, int &water_heater_idx, int &lock_idx, int &cover_idx, int &media_idx,
     int &automation_idx, int &weather_idx, int &fan_idx, int &humidifier_idx, int &sensor_idx, int &alarm_idx,
     int &notification_idx, int &info_idx) {
@@ -1516,7 +1507,7 @@ static inline ModeSelectionStateRefs make_mode_selection_state_refs(
           weather_idx, fan_idx, humidifier_idx, sensor_idx, alarm_idx, notification_idx, info_idx};
 }
 
-static inline AutomationKind automation_kind(int idx) {
+inline AutomationKind automation_kind(int idx) {
   if (idx < 0 || idx >= AUTOMATION_LIST_COUNT) {
     return AUTOMATION_KIND_SCRIPT;
   }
@@ -1534,11 +1525,11 @@ static inline AutomationKind automation_kind(int idx) {
   return AUTOMATION_KIND_SCRIPT;
 }
 
-static inline bool automation_supports_enabled_state(int idx) {
+inline bool automation_supports_enabled_state(int idx) {
   return automation_kind(idx) == AUTOMATION_KIND_AUTOMATION;
 }
 
-static inline const char *automation_kind_label(int idx) {
+inline const char *automation_kind_label(int idx) {
   switch (automation_kind(idx)) {
     case AUTOMATION_KIND_AUTOMATION:
       return "AUTOMATION";
@@ -1550,7 +1541,7 @@ static inline const char *automation_kind_label(int idx) {
   }
 }
 
-static inline int &selected_mode_index_ref(RemoteMode mode, ModeSelectionStateRefs refs) {
+inline int &selected_mode_index_ref(RemoteMode mode, ModeSelectionStateRefs refs) {
   switch (mode) {
     case REMOTE_MODE_LIGHTS:
       return refs.light_idx;
@@ -1586,14 +1577,14 @@ static inline int &selected_mode_index_ref(RemoteMode mode, ModeSelectionStateRe
   }
 }
 
-static inline int clamp_mode_index(int idx, int count) {
+inline int clamp_mode_index(int idx, int count) {
   if (count <= 0) {
     return 0;
   }
   return (idx >= 0 && idx < count) ? idx : 0;
 }
 
-static inline CurrentModeSelectionContext resolve_current_mode_selection_context(
+inline CurrentModeSelectionContext resolve_current_mode_selection_context(
     int &current_mode_value, ModeSelectionStateRefs refs, bool ensure_available = true) {
   RemoteMode mode = static_cast<RemoteMode>(current_mode_value);
   if (ensure_available && !mode_is_available(mode)) {
@@ -1608,7 +1599,7 @@ static inline CurrentModeSelectionContext resolve_current_mode_selection_context
   return {mode, count, selected_index, &selected_index};
 }
 
-static inline CurrentUiSelectionContext resolve_current_ui_selection_context(
+inline CurrentUiSelectionContext resolve_current_ui_selection_context(
     int &current_mode_value, int &current_menu_index, ModeSelectionStateRefs refs) {
   current_menu_index = clamp_menu_index(current_menu_index);
 
@@ -1645,7 +1636,7 @@ static inline CurrentUiSelectionContext resolve_current_ui_selection_context(
   return {mode, count, selected_index, selected_index, &selected_index, current_menu_index, -1, false};
 }
 
-static inline const char *ui_selection_item_name_cstr(const CurrentUiSelectionContext &selection) {
+inline const char *ui_selection_item_name_cstr(const CurrentUiSelectionContext &selection) {
   if (selection.is_favorite) {
     const FavoriteEntity *entry = favorite_list_entry(selection.favorite_list_index, selection.index);
     return entry != nullptr ? entry->name : "";
@@ -1653,7 +1644,7 @@ static inline const char *ui_selection_item_name_cstr(const CurrentUiSelectionCo
   return mode_item_name_cstr(selection.mode, selection.resolved_index);
 }
 
-static inline const char *ui_selection_item_entity_cstr(const CurrentUiSelectionContext &selection) {
+inline const char *ui_selection_item_entity_cstr(const CurrentUiSelectionContext &selection) {
   if (selection.is_favorite) {
     const FavoriteEntity *entry = favorite_list_entry(selection.favorite_list_index, selection.index);
     return entry != nullptr ? entry->entity_id : "";
@@ -1661,7 +1652,7 @@ static inline const char *ui_selection_item_entity_cstr(const CurrentUiSelection
   return mode_item_entity_cstr(selection.mode, selection.resolved_index);
 }
 
-static inline std::string ui_selection_item_name(const CurrentUiSelectionContext &selection) {
+inline std::string ui_selection_item_name(const CurrentUiSelectionContext &selection) {
   if (selection.is_favorite) {
     const FavoriteEntity *entry = favorite_list_entry(selection.favorite_list_index, selection.index);
     return entry != nullptr ? entry->name : "";
@@ -1669,7 +1660,7 @@ static inline std::string ui_selection_item_name(const CurrentUiSelectionContext
   return mode_item_name(selection.mode, selection.resolved_index);
 }
 
-static inline std::string ui_selection_item_entity(const CurrentUiSelectionContext &selection) {
+inline std::string ui_selection_item_entity(const CurrentUiSelectionContext &selection) {
   if (selection.is_favorite) {
     const FavoriteEntity *entry = favorite_list_entry(selection.favorite_list_index, selection.index);
     return entry != nullptr ? entry->entity_id : "";
@@ -1677,7 +1668,7 @@ static inline std::string ui_selection_item_entity(const CurrentUiSelectionConte
   return mode_item_entity(selection.mode, selection.resolved_index);
 }
 
-static inline int wrapped_mode_index(int idx, int count, int step) {
+inline int wrapped_mode_index(int idx, int count, int step) {
   if (count <= 0) {
     return 0;
   }
@@ -1686,18 +1677,18 @@ static inline int wrapped_mode_index(int idx, int count, int step) {
   return idx;
 }
 
-static inline const std::string &unknown_string() {
+inline const std::string &unknown_string() {
   static const std::string unknown = "unknown";
   return unknown;
 }
 
-static inline const std::string &empty_string() {
+inline const std::string &empty_string() {
   static const std::string empty;
   return empty;
 }
 
 template <typename T, size_t Count>
-static inline std::array<T, Count> filled_array(const T &value) {
+inline std::array<T, Count> filled_array(const T &value) {
   std::array<T, Count> result{};
   result.fill(value);
   return result;

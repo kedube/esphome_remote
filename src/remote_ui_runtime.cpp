@@ -70,55 +70,58 @@ void reset_remote_ui_state(RemoteUiResetState &state) {
   *state.updated_ui = true;
 }
 
-static inline bool timeout_window_hit(uint32_t now, uint32_t last_interaction, uint32_t start_ms, uint32_t end_ms) {
-  if (last_interaction == 0) {
+// Fire-once latch: returns true exactly once after the timeout elapses and
+// zeroes the timestamp. Unlike a fixed sampling window, a delayed poll tick
+// cannot skip past it and leave stale feedback on screen.
+static inline bool timeout_expired_once(uint32_t now, uint32_t *last_interaction, uint32_t timeout_ms) {
+  if (last_interaction == nullptr || *last_interaction == 0) {
     return false;
   }
-  uint32_t elapsed = now - last_interaction;
-  return elapsed > start_ms && elapsed < end_ms;
+  if (now - *last_interaction < timeout_ms) {
+    return false;
+  }
+  *last_interaction = 0;
+  return true;
 }
 
 void apply_remote_ui_timeout_updates(uint32_t now, RemoteUiTimeoutState &state) {
   struct TimeoutRefreshWindow {
-    uint32_t last_interaction;
-    uint32_t start_ms;
-    uint32_t end_ms;
+    uint32_t *last_interaction;
+    uint32_t timeout_ms;
   };
   const TimeoutRefreshWindow refresh_windows[] = {
-      {state.last_brightness_interaction, 3000, 3500},
-      {state.last_switch_interaction, 5000, 5500},
-      {state.last_fan_speed_interaction, 3000, 3500},
-      {state.last_humidifier_interaction, 5000, 5500},
-      {state.last_humidifier_mode_interaction, 5000, 5500},
-      {state.last_climate_interaction, 3000, 3500},
-      {state.last_lock_interaction, 5000, 5500},
-      {state.last_cover_interaction, 5000, 5500},
-      {state.last_cover_position_interaction, 3000, 3500},
-      {state.last_media_volume_interaction, 3000, 3500},
-      {state.last_media_source_interaction, 5000, 5500},
-      {state.last_media_power_interaction, 5000, 5500},
-      {state.last_automation_interaction, 5000, 5500},
-      {state.last_alarm_interaction, 5000, 5500},
-      {state.last_contrast_interaction, 5000, 5500},
+      {state.last_brightness_interaction, 3000},
+      {state.last_switch_interaction, 5000},
+      {state.last_fan_speed_interaction, 3000},
+      {state.last_humidifier_interaction, 5000},
+      {state.last_humidifier_mode_interaction, 5000},
+      {state.last_climate_interaction, 3000},
+      {state.last_lock_interaction, 5000},
+      {state.last_cover_interaction, 5000},
+      {state.last_cover_position_interaction, 3000},
+      {state.last_media_volume_interaction, 3000},
+      {state.last_media_source_interaction, 5000},
+      {state.last_media_power_interaction, 5000},
+      {state.last_automation_interaction, 5000},
+      {state.last_alarm_interaction, 5000},
+      {state.last_contrast_interaction, 5000},
   };
   for (const auto &window : refresh_windows) {
-    if (timeout_window_hit(now, window.last_interaction, window.start_ms, window.end_ms)) {
-      state.updated_ui = true;
+    if (timeout_expired_once(now, window.last_interaction, window.timeout_ms)) {
+      *state.updated_ui = true;
     }
   }
-  if (timeout_window_hit(now, state.last_setting_interaction, 5000, 5500)) {
+  if (timeout_expired_once(now, state.last_setting_interaction, 5000)) {
     if (!state.preserve_selected_setting_detail && state.selected_setting_detail != nullptr) {
       state.selected_setting_detail->clear();
-      state.updated_ui = true;
+      *state.updated_ui = true;
     }
-    state.last_setting_interaction = 0;
   }
 
-  if (timeout_window_hit(now, state.last_climate_target_focus_interaction, 5000, 5500)) {
-    state.climate_target_focus = 0;
-    state.climate_target_focus_value = NAN;
-    state.last_climate_target_focus_interaction = 0;
-    state.updated_ui = true;
+  if (timeout_expired_once(now, state.last_climate_target_focus_interaction, 5000)) {
+    *state.climate_target_focus = 0;
+    *state.climate_target_focus_value = NAN;
+    *state.updated_ui = true;
   }
 }
 

@@ -34,7 +34,7 @@ void apply_remote_feedback(
 RemoteVerificationResult evaluate_lock_verification(
     const std::string &state, const std::string &expected_state, const std::string &success_feedback) {
   RemoteVerificationResult result;
-  if (lock_state_matches_expected(state, expected_state)) {
+  if (state == expected_state) {
     result.feedback = success_feedback;
     result.complete = true;
     return result;
@@ -62,7 +62,7 @@ RemoteVerificationResult evaluate_alarm_verification(
     const std::string &state, const std::string &expected_state, const std::string &success_feedback,
     const std::string &failure_feedback, bool use_failure_fallback) {
   RemoteVerificationResult result;
-  if (alarm_state_matches_expected(state, expected_state)) {
+  if (state == expected_state) {
     result.feedback = success_feedback;
     result.complete = true;
     return result;
