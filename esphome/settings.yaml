@@ -36,7 +36,7 @@ packages:
     #file: packages/pcb_rev2.yaml
     file: packages/pcb_rev31.yaml
 
-# Uncomment to enable framebuffer web debugging on port 80. Make sure to also set REMOTE_FRAMEBUFFER_WEB_DEBUG to 1 in the substitutions section above.
+# Uncomment to enable framebuffer web debugging on port 80. Make sure to also set FRAMEBUFFER_WEB_DEBUG to "1" in the substitutions section above.
 # The web server is unauthenticated unless auth: is set. Without it, anyone on the
 # network can view the live screen (alarm/lock state, notification text) and toggle
 # exposed entities. Keep this commented out except while actively debugging.

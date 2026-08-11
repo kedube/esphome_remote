@@ -5,6 +5,15 @@ Notable changes for each tagged release. Versions correspond to git tags and to 
 screen. Add entries under **Unreleased** as part of each change; the release workflow
 rotates that section into a version heading and publishes it as the release's Highlights.
 
+## Unreleased
+- Documented the optional media-player `sources` field on favorite entries, the ESP32
+  `minimum_chip_revision` setting and the OTA failure it causes when mismatched, the
+  water heater's target temperature range, and the requirement to select the alarm-state
+  view before `Plus` / `Minus` change the arm mode.
+- Corrected the `settings.yaml` comment that referred to a `REMOTE_FRAMEBUFFER_WEB_DEBUG`
+  substitution; the substitution is named `FRAMEBUFFER_WEB_DEBUG`.
+- Added a troubleshooting entry for an OTA update that reaches 100% and then fails.
+
 ## 3.2 — 2026-08-11
 - Fixed a stack buffer overflow that could crash or reboot-loop the remote when opening
   the Weather settings view: the option list was built in an 8-slot array that a weather

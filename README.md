@@ -57,6 +57,22 @@ This configuration is built around:
 
 Board-specific wiring is selected through the PCB package include in [`esphome/settings.yaml`](esphome/settings.yaml).
 
+### ESP32 chip revision
+
+[`esphome/remote_control.yaml`](esphome/remote_control.yaml) sets
+`minimum_chip_revision: "3.0"`. ESP32 boards ship with different silicon revisions, and
+the bootloader refuses any firmware built for a revision newer than the chip it is
+running on. That check happens when an update is *finalized*, so a mismatch shows up as
+an OTA that transfers to 100% and then fails, rather than as a build error.
+
+If you flash a board older than rev 3.0, lower this value to match. The revision is
+printed at boot:
+
+```bash
+esphome logs esphome/remote_control.yaml
+# [I][app]: ESP32 Chip: ESP32 rev3.0, 2 core(s)
+```
+
 `esphome/remote_control.yaml` includes that shared settings file, while [`esphome/settings.yaml`](esphome/settings.yaml) contains the common substitutions, PCB package selection, and optional `web_server` block.
 
 Please refer to the [Quick Start Guide](https://tech.lugowski.dev/smart-remote-kit/) for more details:
@@ -72,12 +88,31 @@ Please refer to the [Quick Start Guide](https://tech.lugowski.dev/smart-remote-k
 
 ```text
 esphome_remote/
+├── .github/
+│   ├── ISSUE_TEMPLATE/
+│   │   ├── bug_report.yml
+│   │   ├── config.yml
+│   │   └── feature_request.yml
+│   ├── scripts/
+│   │   ├── bump_version.py
+│   │   ├── generate_release_notes.py
+│   │   ├── prepare_ci_config.py
+│   │   ├── read_version.py
+│   │   └── update_changelog.py
+│   ├── workflows/
+│   │   ├── ci.yml
+│   │   └── release.yml
+│   └── release.yml
 ├── .vscode/
 │   ├── c_cpp_properties.json
 │   ├── extensions.json
-│   └── launch.json
+│   ├── launch.json
+│   └── settings.json          # gitignored; yours is local-only
+├── .yamllint.yml
+├── CHANGELOG.md
 ├── LICENSE
 ├── README.md
+├── requirements.txt
 ├── assets/
 │   └── fonts/
 │       └── arial-bold.ttf
@@ -289,6 +324,30 @@ inline constexpr FavoriteList FAVORITE_LISTS[] = {
 };
 ```
 
+### Media player sources (optional third field)
+
+A favorite entry accepts an optional third field listing selectable sources, separated
+by `|`:
+
+```cpp
+inline constexpr FavoriteEntity LIVING_ROOM_FAVORITES[] = {
+  {"Speaker", "media_player.living_room_speaker", "Spotify|Radio|Line In"},
+};
+```
+
+The remote resolves a media player's source list like this:
+
+- **TVs and receivers** (Home Assistant `device_class` of `tv` or `receiver`) use the
+  live `source_list` reported by Home Assistant, and ignore this field.
+- **Every other media player** uses the sources you list here. Home Assistant does not
+  reliably expose a usable `source_list` for those, so without this field the remote has
+  nothing to cycle and the `SOURCE` setting does not appear.
+
+Source names must not contain a `|`, since that is the separator. A name written here
+that contains one is silently split into two entries, so pick names without it. (Source
+names arriving from Home Assistant for a TV or receiver are checked and skipped with a
+warning instead.)
+
 Notifications are configured in the same file with optional feed defines:
 
 ```cpp
@@ -354,7 +413,7 @@ packages:
 | `PRESSURE_UNIT` | Pressure unit label (`"hPa"` or `"kPa"`) shown in the weather pressure view. |
 | `PRECIPITATION_UNIT` | Precipitation unit label (`"in"` or `"mm"`) shown in the weather precipitation view. |
 | `SLEEP_DURATION` | Idle time before the remote sleeps. |
-| `DEEP_SLEEP_DURATION` | Maximum awake time before the remote enters deep sleep. |
+| `DEEP_SLEEP_DURATION` | Maximum awake time before the remote enters deep sleep. **Do not set this to `0`.** ESPHome reads `0` as "sleep immediately after boot", which makes the remote unusable and OTA updates nearly impossible to land. To disable forced deep sleep, comment out the `deep_sleep:` block in `esphome/remote_control.yaml`, or use a long duration such as `"1440min"`. |
 | `LONG_PRESS_DURATION_MS` | Hold time for protected actions. |
 | `EXTENDED_HOLD_DURATION_MS` | Shared hold time for long protected actions that use the extended timer, including the Settings button alarm trigger and wake-button reboot. |
 | `WAKE_BUTTON_DEBOUNCE_MS` | Debounce time for the wake/power button press and release handling. |
@@ -491,7 +550,8 @@ Common usage pattern:
 
 Long-press protection:
 
-- Locks, covers, and automations require holding the action button for `LONG_PRESS_DURATION_MS`.
+- Locks and covers require holding either action button for `LONG_PRESS_DURATION_MS`.
+- Automations require holding `Circle` for `LONG_PRESS_DURATION_MS`. `Square` has no action in automation mode.
 - Alarm arming and disarming also use long-press protection.
 - Alarm trigger on the Settings button and wake-button reboot both use `EXTENDED_HOLD_DURATION_MS`.
 
@@ -507,10 +567,10 @@ Long-press protection:
 | Favorites: Covers | `Circle` open, `Square` close. |
 | Favorites: Locks | `Circle` lock, `Square` unlock. |
 | Favorites: Media | `Circle` play/pause, `Square` stop, `Settings` cycles volume/source/shuffle/repeat/sound/state views. |
-| Favorites: Water Heaters | `Circle` on, `Square` off, `Settings` cycles target/mode/away views. |
+| Favorites: Water Heaters | `Circle` on, `Square` off, `Settings` cycles target/mode/away views. `Plus` / `Minus` adjust the target within 90–175 °F (30–80 °C). |
 | Favorites: Automation / Script / Scene | `Circle` run. |
 | Notifications | `Circle` dismiss selected notification. |
-| Alarms | `Circle` arm, `Square` disarm, `Plus` / `Minus` change arm mode. |
+| Alarms | `Circle` arm, `Square` disarm. Press `Settings` to select the alarm-state view, then `Plus` / `Minus` change the arm mode. |
 | Weather | `Settings`, `Plus`, and `Minus` browse weather detail views. |
 | Info | Read-only status screens for time/date, wireless, network, device name, battery, and version. |
 
@@ -533,13 +593,13 @@ Mode-specific action examples:
 - The remote restores the previously selected menu, item, contrast, and lightweight detail-selection state after wake or reboot.
 - Empty favorite lists are skipped automatically.
 - Holding the wake/power button for `EXTENDED_HOLD_DURATION_MS` reboots the remote. The screen shows `HOLD TO REBOOT` while held, then `REBOOTING...` briefly before restart.
-- Lock, cover, and automation actions use long-press protection.
+- Lock, cover, and automation actions use long-press protection. In automation mode only `Circle` runs the automation; `Square` does nothing.
 - When a favorite entry resolves to a lock, circle locks and square unlocks. The remote shows temporary detail-line feedback such as `LOCKING...`, `UNLOCKING...`, `LOCKED`, `UNLOCKED`, `JAMMED`, `ALREADY LOCKED`, and `ALREADY UNLOCKED`.
 - When a favorite entry resolves to a cover, circle opens and square closes. The remote shows temporary detail-line feedback such as `OPENING...`, `CLOSING...`, `OPENED`, `CLOSED`, and `OPEN xx%`.
 - When a favorite entry resolves to an automation, script, or scene, the remote shows temporary feedback such as `TRIGGERING...`, `ACTIVATING...`, `RUNNING...`, `TRIGGERED`, `ACTIVATED`, `STARTED`, and `COMPLETED`.
 - When a favorite entry resolves to an alarm, circle long-press arms using the currently selected arm mode when the panel is disarmed.
 - When a favorite entry resolves to an alarm, square long-press disarms the panel.
-- When a favorite entry resolves to an alarm, `Plus` and `Minus` cycle `away`, `home`, `night`, and `vacation` arm modes in the details line for 5 seconds.
+- When a favorite entry resolves to an alarm, `Plus` and `Minus` cycle `away`, `home`, `night`, and `vacation` arm modes in the details line for 5 seconds. This requires the alarm-state view to be selected first with `Settings`; after a mode change no setting view is selected, so `Plus` / `Minus` do nothing until you press `Settings` once.
 - When a favorite entry resolves to an alarm, the Settings button must be held for `EXTENDED_HOLD_DURATION_MS` to call `alarm_trigger`. The details line shows `HOLD TO TRIGGER` while held.
 - Alarm actions use temporary details-line feedback such as `ARMING...`, `DISARMING...`, `TRIGGERING...`, `ARMED HOME`, `DISARMED`, `TRIGGERED`, and `FAILED`-style responses when Home Assistant reports an error.
 - Info mode includes Time & Date, Wireless, Network, Device Name, Battery, and Version screens.
@@ -624,6 +684,29 @@ If validation succeeds, retry with:
 ```bash
 esphome run esphome/remote_control.yaml
 ```
+
+### An OTA update reaches 100% and then fails
+
+If the upload transfers fully and then reports `ERROR receiving update end result:
+Finishing update failed`, the device rejected the image at the final verification step.
+The running firmware is untouched, so the remote is safe — but the same upload will keep
+failing until the cause is fixed. Watch the device while retrying to see why:
+
+```bash
+esphome logs esphome/remote_control.yaml
+```
+
+Common causes:
+
+- **`chip revision check failed. Required >= vX.Y, found vX.Z`** — `minimum_chip_revision`
+  in `esphome/remote_control.yaml` is higher than the ESP32 on this board. Lower it to
+  match the revision the log reports. ESP32 boards ship with varying revisions, so a
+  value that works for one remote can reject another.
+- **The remote fell asleep mid-update.** It sleeps after `SLEEP_DURATION` seconds of
+  inactivity (120 by default), and a rebuild can outlast that window. Press a button to
+  wake it immediately before starting the upload.
+- **mDNS did not resolve** (`Error resolving IP address`). Upload to the address
+  directly: `esphome upload esphome/remote_control.yaml --device 192.168.1.50`.
 
 ## Continuous Integration And Releases
 
