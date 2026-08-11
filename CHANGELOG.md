@@ -5,7 +5,7 @@ Notable changes for each tagged release. Versions correspond to git tags and to 
 screen. Add entries under **Unreleased** as part of each change; the release workflow
 rotates that section into a version heading and publishes it as the release's Highlights.
 
-## Unreleased
+## 3.3 — 2026-08-11
 - Documented the optional media-player `sources` field on favorite entries, the ESP32
   `minimum_chip_revision` setting and the OTA failure it causes when mismatched, the
   water heater's target temperature range, and the requirement to select the alarm-state
