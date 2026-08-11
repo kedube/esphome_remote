@@ -540,6 +540,7 @@ script:
           }
           int next = int(current + 10.0f);
           if (next > 100) next = 100;
+          id(pending_cover_tilt_pct) = next;
           id(last_setting_interaction) = millis();
           char buffer[24];
           snprintf(buffer, sizeof(buffer), "%d%%", next);
@@ -549,14 +550,7 @@ script:
           service: cover.set_cover_tilt_position
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
-            tilt_position: !lambda |-
-              float current = selected_cover_tilt(id(selected_cover_index));
-              if (isnan(current)) {
-                current = 0.0f;
-              }
-              int next = int(current + 10.0f);
-              if (next > 100) next = 100;
-              return next;
+            tilt_position: !lambda 'return id(pending_cover_tilt_pct);'
       - script.execute: update_display
 
   - id: decrease_cover_tilt
@@ -569,6 +563,7 @@ script:
           }
           int next = int(current - 10.0f);
           if (next < 0) next = 0;
+          id(pending_cover_tilt_pct) = next;
           id(last_setting_interaction) = millis();
           char buffer[24];
           snprintf(buffer, sizeof(buffer), "%d%%", next);
@@ -578,12 +573,5 @@ script:
           service: cover.set_cover_tilt_position
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
-            tilt_position: !lambda |-
-              float current = selected_cover_tilt(id(selected_cover_index));
-              if (isnan(current)) {
-                current = 100.0f;
-              }
-              int next = int(current - 10.0f);
-              if (next < 0) next = 0;
-              return next;
+            tilt_position: !lambda 'return id(pending_cover_tilt_pct);'
       - script.execute: update_display

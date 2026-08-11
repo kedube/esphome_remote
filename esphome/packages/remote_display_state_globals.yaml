@@ -40,6 +40,12 @@ globals:
     type: int
     initial_value: '0'
 
+  # Tilt value staged by increase/decrease_cover_tilt so the percentage shown on
+  # screen and the one sent to Home Assistant come from a single computation.
+  - id: pending_cover_tilt_pct
+    type: int
+    initial_value: '0'
+
   - id: selected_climate_target_temp
     type: float
     initial_value: 'NAN'

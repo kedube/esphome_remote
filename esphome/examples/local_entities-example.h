@@ -4,7 +4,10 @@ inline constexpr FavoriteEntity LIVING_ROOM_FAVORITES[] = {
     {"Lamp", "light.living_room_lamp"},
     {"Thermostat", "climate.main_thermostat"},
     {"Front Door", "lock.front_door"},
-    {"Speaker", "media_player.living_room_speaker"},
+    // TVs and receivers pick up their source list from Home Assistant. For other
+    // media players, list the sources yourself with an optional third field to
+    // get a SOURCE setting on the remote; omit it and no SOURCE setting appears.
+    {"Speaker", "media_player.living_room_speaker", "Spotify|Radio|Line In"},
     {"Home Alarm", "alarm_control_panel.home"},
 };
 

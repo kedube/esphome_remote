@@ -8,7 +8,11 @@ interval:
               if (id(wake_button_press_started_at) != 0) {
                 return false;
               }
-              return (millis() / 1000) - id(last_active) >= ${SLEEP_DURATION};
+              // Modular subtraction on uint32_t so the ~49.7 day millis()
+              // rollover cannot underflow into an immediate power-off.
+              uint32_t now_s = millis() / 1000;
+              uint32_t since = now_s - static_cast<uint32_t>(id(last_active));
+              return since >= ${SLEEP_DURATION};
           then:
             - script.execute: turn_off
           else:

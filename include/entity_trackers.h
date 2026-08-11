@@ -1478,12 +1478,37 @@ class NotificationFeedTracker : public esphome::api::CustomAPIDevice {
     return count;
   }
 
+  // Bounds the payload before it is copied. Parsing works on a full copy plus a
+  // copy per slot, so an oversized attribute would cost several times its size
+  // in heap; the JSON list parsers apply the same cap.
+  static bool payload_too_large_(esphome::StringRef state, const char *attribute) {
+    if (state.size() <= REMOTE_HA_MAX_JSON_PAYLOAD_BYTES) {
+      return false;
+    }
+    ESP_LOGW("remote_config", "Ignoring oversized notification %s payload (%u bytes)", attribute,
+             static_cast<unsigned>(state.size()));
+    return true;
+  }
+
   void on_payload_(esphome::StringRef state) {
+    if (payload_too_large_(state, notification_feed_attribute_())) {
+      this->count_ = 0;
+      for (int i = 0; i < NOTIFICATION_FEED_MAX_ITEMS; i++) {
+        this->messages_[i].clear();
+      }
+      return;
+    }
     std::string payload = trim_copy(state.str());
     this->count_ = parse_delimited_slots_(payload, this->messages_);
   }
 
   void on_ids_payload_(esphome::StringRef state) {
+    if (payload_too_large_(state, notification_feed_ids_attribute_())) {
+      for (int i = 0; i < NOTIFICATION_FEED_MAX_ITEMS; i++) {
+        this->ids_[i].clear();
+      }
+      return;
+    }
     std::string payload = trim_copy(state.str());
     parse_delimited_slots_(payload, this->ids_);
   }

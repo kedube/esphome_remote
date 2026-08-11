@@ -9,6 +9,19 @@ script:
           id: cycle_setting_option
           step: 1
 
+  # Settings button held for EXTENDED_HOLD_DURATION_MS. Only alarm mode arms a
+  # long-press action ("HOLD TO TRIGGER"); every other mode keeps the short-press
+  # behaviour so the hold is never a no-op.
+  - id: secondary_mode_long_press_action
+    then:
+      - if:
+          condition:
+            lambda: 'return id(current_mode) == REMOTE_MODE_ALARMS;'
+          then:
+            - script.execute: trigger_selected_alarm
+          else:
+            - script.execute: secondary_mode_action
+
   - id: play_pause_mode_action
     then:
       - script.execute: execute_circle_button_action

@@ -97,6 +97,11 @@ static inline NotificationLines split_notification_lines(const std::string &mess
     size_t begin = std::min(breaks[i], limit);
     size_t end = std::min(breaks[i + 1], limit);
     size_t len = end - begin;
+    // Malformed UTF-8 (a run of continuation bytes) collapses the break points,
+    // so clamp to the row buffer instead of trusting them to stay in range.
+    if (len > sizeof(lines.line[i]) - 1) {
+      len = sizeof(lines.line[i]) - 1;
+    }
     size_t out = 0;
     for (size_t j = 0; j < len; j++) {
       char ch = data[begin + j];
@@ -461,7 +466,7 @@ void render_remote_ui(
       bool show_media_source_feedback = ui_recent_interaction(ctx.now, ctx.last_media_source_interaction, 5000);
       bool show_media_power_feedback = ui_recent_interaction(ctx.now, ctx.last_media_power_interaction, 5000);
       bool is_tv = selected_media_device_class == "tv" || selected_media_device_class == "receiver";
-      bool media_is_on = selected_item_state != "off" && selected_item_state != "unknown";
+      bool media_is_on = selected_item_state != "off" && !ha_state_missing(selected_item_state);
       if (is_tv) {
         snprintf(status_line, sizeof(status_line), "%s", media_is_on ? "ON" : "OFF");
         draw_centered_state(status_line, 35);

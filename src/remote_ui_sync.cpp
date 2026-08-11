@@ -60,8 +60,10 @@ static inline void sync_toggle_percent_mode(
 
   if (state == "on") {
     next_state = "on";
-    if (has_value && !std::isnan(value) && value > 0) {
-      next_pct = clamp_percent_value(value, scale, 1);
+    // A reported value of 0 is a real reading, not a missing one: only fall back
+    // to the assumed-100 path when the value is genuinely unavailable.
+    if (has_value && !std::isnan(value)) {
+      next_pct = clamp_percent_value(value, scale, value > 0 ? 1 : 0);
     } else if (zero_when_missing) {
       if (!has_value) {
         next_pct = 0;

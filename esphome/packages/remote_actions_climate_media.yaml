@@ -442,11 +442,21 @@ script:
     mode: queued
     then:
       - lambda: |-
+          // Bound the setpoint so repeated presses cannot walk it off to a value
+          // Home Assistant will reject while the remote keeps showing it.
+          const bool celsius = std::string("${TEMPERATURE_UNIT}") == "C";
+          const float min_target = celsius ? 30.0f : 90.0f;
+          const float max_target = celsius ? 80.0f : 175.0f;
           float next = id(selected_water_heater_target_temp);
           if (isnan(next)) {
-            next = 120.0f;
+            next = celsius ? 49.0f : 120.0f;
           }
           next += delta;
+          if (next < min_target) {
+            next = min_target;
+          } else if (next > max_target) {
+            next = max_target;
+          }
           id(selected_water_heater_target_temp) = next;
           id(last_setting_interaction) = millis();
           char buffer[24];

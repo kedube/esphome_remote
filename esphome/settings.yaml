@@ -11,7 +11,11 @@ substitutions:
   PRESSURE_UNIT: "hPa" # Set to "kPa" when Home Assistant pressure values are in kilopascals
   PRECIPITATION_UNIT: "in" # Set to "mm" when Home Assistant precipitation values are in millimeters
   SLEEP_DURATION: "120" # seconds until auto-sleep
-  DEEP_SLEEP_DURATION: "15min" # max awake time before forcing deep sleep (set to 0 to disable)
+  DEEP_SLEEP_DURATION: "15min" # max awake time before forcing deep sleep. Do NOT set to 0 — ESPHome
+                               # treats run_duration: 0 as "sleep immediately after boot", which makes
+                               # the remote unusable and OTA nearly impossible. To disable forced deep
+                               # sleep, comment out the deep_sleep: block in remote_control.yaml instead,
+                               # or set a very long duration such as "1440min".
   LONG_PRESS_DURATION_MS: "2000" # hold time for lock/cover/automation actions
   EXTENDED_HOLD_DURATION_MS: "5000" # shared hold time for alarm trigger and wake-button reboot
   WAKE_BUTTON_DEBOUNCE_MS: "30" # debounce time for wake/power button press and release
@@ -33,5 +37,11 @@ packages:
     file: packages/pcb_rev31.yaml
 
 # Uncomment to enable framebuffer web debugging on port 80. Make sure to also set REMOTE_FRAMEBUFFER_WEB_DEBUG to 1 in the substitutions section above.
+# The web server is unauthenticated unless auth: is set. Without it, anyone on the
+# network can view the live screen (alarm/lock state, notification text) and toggle
+# exposed entities. Keep this commented out except while actively debugging.
 #web_server:
 #  port: 80
+#  auth:
+#    username: !secret web_server_username
+#    password: !secret web_server_password

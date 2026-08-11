@@ -29,7 +29,7 @@ template:
                 | replace('\r', ' ')
                 | replace('\n', ' ')
                 | replace('\t', ' ')
-                | replace('||', '|')
+                | replace('|', '/')
                 | trim %}
             {% set filtered = items | rejectattr('id', 'eq', notification_id) | list %}
             {{ (filtered + ([{
@@ -58,7 +58,7 @@ template:
                   | replace('\r', ' ')
                   | replace('\n', ' ')
                   | replace('\t', ' ')
-                  | replace('||', '|')
+                  | replace('|', '/')
                   | trim %}
               {% set filtered = items | rejectattr('id', 'eq', notification_id) | list %}
               {% if notification_id and text %}
@@ -78,7 +78,10 @@ template:
               {{ items }}
             {% endif %}
           messages: >-
-            {# Flatten the canonical list into the `msg1||msg2` format used by the remote. #}
+            {# Flatten the canonical list into the `msg1||msg2` format used by the remote.
+               Message text has every '|' rewritten to '/' above: a message that keeps a
+               literal '|' can split into more slots than `ids` has, which would make the
+               remote dismiss the wrong notification. #}
             {% set items = this.attributes.get('notifications', []) %}
             {% if trigger.id == 'start' %}
               {% set current = [] %}
@@ -90,7 +93,7 @@ template:
                   | replace('\r', ' ')
                   | replace('\n', ' ')
                   | replace('\t', ' ')
-                  | replace('||', '|')
+                  | replace('|', '/')
                   | trim %}
               {% set filtered = items | rejectattr('id', 'eq', notification_id) | list %}
               {% set current = filtered + ([{
@@ -123,7 +126,7 @@ template:
                   | replace('\r', ' ')
                   | replace('\n', ' ')
                   | replace('\t', ' ')
-                  | replace('||', '|')
+                  | replace('|', '/')
                   | trim %}
               {% set filtered = items | rejectattr('id', 'eq', notification_id) | list %}
               {% set current = filtered + ([{

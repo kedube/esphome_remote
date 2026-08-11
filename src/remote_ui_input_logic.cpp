@@ -15,15 +15,18 @@ RemoteButtonPrompt describe_remote_button_prompt(
       }
       break;
     case REMOTE_MODE_COVERS:
+      // Square (action 0) closes and circle (action 2) opens, matching the
+      // off/on split every other mode uses.
       if (action == 0 || action == 2) {
         prompt.requires_long_press = true;
         prompt.hold_duration_ms = default_hold_ms;
         prompt.feedback_target = REMOTE_INPUT_FEEDBACK_COVER;
-        prompt.feedback = action == 2 ? "HOLD TO CLOSE" : "HOLD TO OPEN";
+        prompt.feedback = action == 2 ? "HOLD TO OPEN" : "HOLD TO CLOSE";
       }
       break;
     case REMOTE_MODE_AUTOMATION:
-      if (action == 0 || action == 2) {
+      // Only circle (action 2) runs the automation.
+      if (action == 2) {
         prompt.requires_long_press = true;
         prompt.hold_duration_ms = default_hold_ms;
         prompt.feedback_target = REMOTE_INPUT_FEEDBACK_AUTOMATION;

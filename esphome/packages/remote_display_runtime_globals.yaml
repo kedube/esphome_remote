@@ -5,7 +5,7 @@ globals:
     initial_value: '5'
 
   - id: last_active
-    type: int
+    type: uint32_t
     restore_value: no
     initial_value: '0'
 
@@ -172,10 +172,6 @@ globals:
   - id: wake_button_long_press_fired
     type: bool
     initial_value: 'false'
-
-  - id: last_mode_action_command
-    type: int
-    initial_value: '0'
 
   - id: selected_setting_option
     type: int

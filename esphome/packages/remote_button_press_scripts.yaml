@@ -98,7 +98,7 @@ script:
           }
 
           id(settings_button_long_press_fired) = true;
-          id(secondary_mode_action).execute();
+          id(secondary_mode_long_press_action).execute();
 
   - id: handle_primary_button_press
     then:
@@ -214,6 +214,13 @@ script:
           id(settings_button_long_press_fired) = false;
 
           if (!long_press_fired) {
+            // Released before the trigger hold completed: fall back to the
+            // normal short-press behaviour so cycling settings still works in
+            // modes that arm a long press.
+            if (pressed_mode == id(current_mode)) {
+              id(secondary_mode_action).execute();
+              return;
+            }
             id(updated_ui) = true;
             id(update_display).execute();
           }

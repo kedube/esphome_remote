@@ -431,11 +431,17 @@ substitutions:
   FRAMEBUFFER_WEB_DEBUG: "1"
 ```
 
-Then, uncomment the web server section in the same file:
+Then, uncomment the web server section in the same file. The web server has no
+authentication unless you add it, so include credentials — without them, anyone
+on your network can read the live screen (which can show alarm state, lock
+state, and notification text) and toggle any entity the device exposes:
 
 ```yaml
 web_server:
   port: 80
+  auth:
+    username: !secret web_server_username
+    password: !secret web_server_password
 ```
 
 You can also use a CLI substitution override:
@@ -454,11 +460,13 @@ Notes:
 - The framebuffer download endpoint is off by default.
 - If `FRAMEBUFFER_WEB_DEBUG` is enabled but `web_server:` remains commented out, the URL will not be reachable.
 - The PBM image is generated from the live OLED framebuffer.
-- This is mainly intended for debugging and README screenshots.
+- This is mainly intended for debugging and README screenshots. Re-comment the
+  `web_server:` block and set `FRAMEBUFFER_WEB_DEBUG` back to `"0"` when you are
+  finished, so the remote is not left serving its screen on your network.
 
 ## Button Guide
 
-The remote is designed around nine physical inputs:
+The remote is designed around ten physical inputs:
 
 | Button | Default behavior |
 | --- | --- |
@@ -466,7 +474,8 @@ The remote is designed around nine physical inputs:
 | Mode | Cycles to the next top-level mode or favorite list. |
 | Previous | Selects the previous item in the current mode. |
 | Next | Selects the next item in the current mode. |
-| Settings | Cycles through the available detail/settings views for the current item. In alarm mode, hold for `EXTENDED_HOLD_DURATION_MS` to trigger the alarm action. |
+| Dimmer | Cycles the OLED contrast level. |
+| Settings | Cycles through the available detail/settings views for the current item. In alarm mode, hold for `EXTENDED_HOLD_DURATION_MS` to trigger the alarm; release earlier to cycle views as usual. |
 | Minus | Decreases the current adjustable setting. In Weather mode, it cycles backward through detail views. |
 | Plus | Increases the current adjustable setting. In Weather mode, it cycles forward through detail views. |
 | Circle | Positive or activate action in most modes: turn on, open, lock, play/pause, run, arm, or dismiss. |
@@ -530,7 +539,7 @@ Mode-specific action examples:
 - When a favorite entry resolves to an automation, script, or scene, the remote shows temporary feedback such as `TRIGGERING...`, `ACTIVATING...`, `RUNNING...`, `TRIGGERED`, `ACTIVATED`, `STARTED`, and `COMPLETED`.
 - When a favorite entry resolves to an alarm, circle long-press arms using the currently selected arm mode when the panel is disarmed.
 - When a favorite entry resolves to an alarm, square long-press disarms the panel.
-- When a favorite entry resolves to an alarm, dimmer up and dimmer down cycle `away`, `home`, `night`, and `vacation` arm modes in the details line for 5 seconds.
+- When a favorite entry resolves to an alarm, `Plus` and `Minus` cycle `away`, `home`, `night`, and `vacation` arm modes in the details line for 5 seconds.
 - When a favorite entry resolves to an alarm, the Settings button must be held for `EXTENDED_HOLD_DURATION_MS` to call `alarm_trigger`. The details line shows `HOLD TO TRIGGER` while held.
 - Alarm actions use temporary details-line feedback such as `ARMING...`, `DISARMING...`, `TRIGGERING...`, `ARMED HOME`, `DISARMED`, `TRIGGERED`, and `FAILED`-style responses when Home Assistant reports an error.
 - Info mode includes Time & Date, Wireless, Network, Device Name, Battery, and Version screens.

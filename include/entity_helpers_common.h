@@ -62,6 +62,9 @@ struct EntityEntry {
 struct FavoriteEntity {
     const char *name;
     const char *entity_id;
+    // Optional '|'-separated source list for media players whose device_class is
+    // not tv/receiver (HA does not report a usable source_list for those).
+    const char *sources = nullptr;
 };
 
 struct FavoriteList {
@@ -181,7 +184,7 @@ inline constexpr std::array<EntityEntry, Count> make_mode_entity_array(RemoteMod
         continue;
       }
       if (out < Count) {
-        entities[out++] = {entry.name, entry.entity_id, nullptr};
+        entities[out++] = {entry.name, entry.entity_id, entry.sources};
       }
     }
   }
@@ -347,6 +350,11 @@ inline bool ha_payload_looks_like_json(esphome::StringRef state) {
 // Parses a JSON array attribute payload (e.g. effect_list, preset_modes) and
 // joins its trimmed items into target separated by '|'. Clears target when the
 // payload is missing, oversized, or not a JSON array.
+//
+// An item containing '|' cannot survive the round trip through
+// for_each_delimited_option, so it is skipped rather than stored: splitting it
+// would surface two bogus options and send a truncated name back to Home
+// Assistant in the resulting service call.
 inline void ha_store_joined_list(std::string &target, esphome::StringRef state) {
   target.clear();
   if (ha_state_missing(state) || state.size() > REMOTE_HA_MAX_JSON_PAYLOAD_BYTES) {
@@ -375,6 +383,10 @@ inline void ha_store_joined_list(std::string &target, esphome::StringRef state) 
       len--;
     }
     if (len == 0) {
+      continue;
+    }
+    if (memchr(item, '|', len) != nullptr) {
+      ESP_LOGW("remote_config", "Skipping option containing '|': %.*s", static_cast<int>(len), item);
       continue;
     }
     if (!target.empty()) {
@@ -430,10 +442,16 @@ inline int clamp_percent_value(float value, float scale = 1.0f, int min_value = 
   if (std::isnan(value)) {
     return min_value;
   }
-  int pct = (int) roundf(value * scale);
-  if (pct < min_value) pct = min_value;
-  if (pct > 100) pct = 100;
-  return pct;
+  // Clamp as a float first: casting an out-of-range float to int is undefined
+  // behaviour, and HA attribute values are not range-validated.
+  float scaled = roundf(value * scale);
+  if (!(scaled > (float) min_value)) {
+    return min_value;
+  }
+  if (scaled >= 100.0f) {
+    return 100;
+  }
+  return (int) scaled;
 }
 
 inline std::string lock_operation_feedback_for_state(const std::string &state) {
@@ -592,17 +610,25 @@ inline bool notifications_mode_enabled() {
   return NOTIFICATION_FEED_ENTITY[0] != '\0';
 }
 
-inline std::string media_configured_source_list_for_index(int idx) {
+// Returns a reference into either the tracker's stored list or a cached copy of
+// the configured one. Called from per-frame condition lambdas, so it must not
+// copy the list (a TV source_list can run to several KB).
+inline const std::string &media_configured_source_list_for_index(int idx) {
+  static std::string configured;
+  configured.clear();
   if (idx < 0 || idx >= MEDIA_PLAYER_LIST_COUNT) {
-    return "";
+    return configured;
   }
   const char *sources = MEDIA_PLAYER_LIST[idx].sources;
-  return (sources == nullptr) ? "" : std::string(sources);
+  if (sources != nullptr) {
+    configured.assign(sources);
+  }
+  return configured;
 }
 
-inline std::string active_media_source_list_for_index(int idx) {
-  std::string tracked_sources = media_source_list_for_index(idx);
-  std::string device_class = media_device_class_for_index(idx);
+inline const std::string &active_media_source_list_for_index(int idx) {
+  const std::string &tracked_sources = media_source_list_for_index(idx);
+  const std::string &device_class = media_device_class_for_index(idx);
   if ((device_class == "tv" || device_class == "receiver") && !tracked_sources.empty()) {
     return tracked_sources;
   }
@@ -618,12 +644,12 @@ inline std::string media_source_option_at(int idx, int option_idx) {
 }
 
 inline std::string next_media_source_for_index(int idx, const std::string &current_source) {
-  const std::string source_list = active_media_source_list_for_index(idx);
+  const std::string &source_list = active_media_source_list_for_index(idx);
   return next_delimited_option(source_list, current_source);
 }
 
 inline std::string previous_media_source_for_index(int idx, const std::string &current_source) {
-  const std::string source_list = active_media_source_list_for_index(idx);
+  const std::string &source_list = active_media_source_list_for_index(idx);
   return previous_delimited_option(source_list, current_source);
 }
 
@@ -1512,14 +1538,14 @@ inline AutomationKind automation_kind(int idx) {
     return AUTOMATION_KIND_SCRIPT;
   }
 
-  std::string entity_id = AUTOMATION_LIST[idx].entity_id;
-  size_t separator = entity_id.find('.');
-  std::string domain = separator == std::string::npos ? entity_id : entity_id.substr(0, separator);
-
-  if (domain == "automation") {
+  // Compared in place: this runs on every automation-mode redraw and on every
+  // sync tick, so the temporary strings a substr-based split allocates are pure
+  // heap churn.
+  const char *entity_id = AUTOMATION_LIST[idx].entity_id;
+  if (entity_id_matches_domain(entity_id, "automation")) {
     return AUTOMATION_KIND_AUTOMATION;
   }
-  if (domain == "scene") {
+  if (entity_id_matches_domain(entity_id, "scene")) {
     return AUTOMATION_KIND_SCENE;
   }
   return AUTOMATION_KIND_SCRIPT;
