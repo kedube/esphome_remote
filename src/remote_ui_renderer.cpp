@@ -529,11 +529,13 @@ void render_remote_ui(
       write_state_label(selected_item_state, label_primary, sizeof(label_primary), "READY");
       write_state_label(last_automation_feedback, label_secondary, sizeof(label_secondary), "");
       const char *automation_type = automation_kind_label(ctx.automation_index);
-      snprintf(status_line, sizeof(status_line), "%s",
-               (show_automation_feedback && label_secondary[0] != '\0') ? label_secondary : label_primary);
+      // Point at the chosen label rather than copying it into the shorter
+      // status_line buffer, which the label could not fit in full anyway.
+      const char *automation_status =
+          (show_automation_feedback && label_secondary[0] != '\0') ? label_secondary : label_primary;
       it->print(64, 35, small_font, display::COLOR_ON, display::TextAlign::CENTER, automation_type);
       if (!draw_setting_detail_if_needed()) {
-        draw_detail_text(status_line);
+        draw_detail_text(automation_status);
       }
       draw_blank_or_contrast_footer();
       break;

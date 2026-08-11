@@ -1401,8 +1401,12 @@ class NotificationFeedTracker : public esphome::api::CustomAPIDevice {
       buffer[0] = '\0';  // NO ALERTS HEADER
       return;
     }
-    idx = clamp_mode_index(idx, this->count_);
-    snprintf(buffer, buffer_size, "%d OF %d", idx + 1, this->count_);
+    // Both values are bounded by NOTIFICATION_FEED_MAX_ITEMS, so the longest
+    // possible label is "16 OF 16". Clamping again here is redundant at runtime
+    // but lets the compiler see the range and drop its truncation warning.
+    const int count = this->count_ > NOTIFICATION_FEED_MAX_ITEMS ? NOTIFICATION_FEED_MAX_ITEMS : this->count_;
+    idx = clamp_mode_index(idx, count);
+    snprintf(buffer, buffer_size, "%d OF %d", idx + 1, count);
   }
 
   std::string label(int idx) const {

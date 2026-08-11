@@ -44,8 +44,11 @@ void populate_remote_info_text(
     if (hour == 0) {
       hour = 12;
     }
-    char time_buffer[9];
-    char date_buffer[11];
+    // "12:59 PM" and "08/11/2026" fit these exactly; the slack is so a stray
+    // out-of-range field from the time source truncates instead of surprising
+    // the reader with a buffer sized to the byte.
+    char time_buffer[16];
+    char date_buffer[16];
     snprintf(time_buffer, sizeof(time_buffer), "%d:%02d %s", hour, time_now.minute, time_now.hour >= 12 ? "PM" : "AM");
     snprintf(date_buffer, sizeof(date_buffer), "%02d/%02d/%04d", time_now.month, time_now.day_of_month, time_now.year);
     primary_text = time_buffer;

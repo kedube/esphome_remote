@@ -36,11 +36,10 @@ esphome:
   friendly_name: ${FRIENDLY_NAME}
   min_version: 2026.1.0
   name_add_mac_suffix: false
-  platformio_options:
-    build_flags:
-      - -DREMOTE_FRAMEBUFFER_WEB_DEBUG=${FRAMEBUFFER_WEB_DEBUG}
-      - -DREMOTE_NOTIFICATION_FEED_MAX_ITEMS=${NOTIFICATION_FEED_MAX_ITEMS}
-      - -DREMOTE_MAX_PERSISTED_FAVORITE_LISTS=${MAX_PERSISTED_FAVORITE_LISTS}
+  build_flags:
+    - -DREMOTE_FRAMEBUFFER_WEB_DEBUG=${FRAMEBUFFER_WEB_DEBUG}
+    - -DREMOTE_NOTIFICATION_FEED_MAX_ITEMS=${NOTIFICATION_FEED_MAX_ITEMS}
+    - -DREMOTE_MAX_PERSISTED_FAVORITE_LISTS=${MAX_PERSISTED_FAVORITE_LISTS}
   includes:
     - ../include/entity_helpers.h
     - ../include/entity_trackers.h
@@ -107,7 +106,10 @@ esp32:
   framework:
     type: arduino
     advanced:
-      minimum_chip_revision: "3.1"
+      # Must not exceed the chip revision of the board being flashed. The
+      # bootloader verifies this when finishing an OTA, so a value that is too
+      # high fails the update after the image has fully transferred.
+      minimum_chip_revision: "3.0"
 
 wifi:
   ssid: !secret wifi_ssid
