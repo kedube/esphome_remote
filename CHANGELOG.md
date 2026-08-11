@@ -5,7 +5,7 @@ Notable changes for each tagged release. Versions correspond to git tags and to 
 screen. Add entries under **Unreleased** as part of each change; the release workflow
 rotates that section into a version heading and publishes it as the release's Highlights.
 
-## Unreleased
+## 3.2 — 2026-08-11
 - Fixed a stack buffer overflow that could crash or reboot-loop the remote when opening
   the Weather settings view: the option list was built in an 8-slot array that a weather
   entity reporting 8 or more attributes overflowed.
