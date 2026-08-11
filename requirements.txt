@@ -1,0 +1,5 @@
+# Pinned so a new ESPHome release cannot turn a green build red without a
+# deliberate bump. The scheduled weekly CI run is the early warning for
+# upstream breakage; raise this pin when it goes red or when adopting new
+# ESPHome features.
+esphome==2026.7.3

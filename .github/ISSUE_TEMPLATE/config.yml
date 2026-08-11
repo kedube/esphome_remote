@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: ESPHome documentation
+    url: https://esphome.io/
+    about: Reference for the ESPHome components and YAML this project is built on.
+  - name: Home Assistant Community
+    url: https://community.home-assistant.io/
+    about: Ask usage questions or get general Home Assistant help.

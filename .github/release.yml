@@ -1,0 +1,23 @@
+# Categories for GitHub's auto-generated release notes (the PR-based section appended after
+# the commit-log body built in workflows/release.yml). Label PRs to sort them; unlabeled
+# PRs land in Maintenance.
+changelog:
+  categories:
+    - title: New features
+      labels:
+        - feature
+        - enhancement
+    - title: Bug fixes
+      labels:
+        - bug
+        - fix
+    - title: Hardware
+      labels:
+        - hardware
+        - pcb
+    - title: Maintenance
+      labels:
+        - "*"
+  exclude:
+    labels:
+      - skip-changelog

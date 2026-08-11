@@ -625,6 +625,47 @@ If validation succeeds, retry with:
 esphome run esphome/remote_control.yaml
 ```
 
+## Continuous Integration And Releases
+
+### CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push to `main`, on
+pull requests, weekly on a schedule, and on demand. It lints the YAML and then validates
+and compiles the firmware for **all three PCB revisions** (`pcb_rev1`, `pcb_rev2`,
+`pcb_rev31`) in parallel, so a pin or config change that breaks a board you are not
+currently using still fails the build. Each revision uploads its `.factory.bin` and
+`.ota.bin` as a downloadable artifact.
+
+`esphome/secrets.yaml` and `esphome/local_entities.h` are gitignored, so
+[`.github/scripts/prepare_ci_config.py`](.github/scripts/prepare_ci_config.py) generates
+throwaway versions from the committed examples before each build. The ESPHome version is
+pinned in [`requirements.txt`](requirements.txt); the weekly scheduled run is the early
+warning that a new ESPHome release has broken something.
+
+### Releases
+
+[`.github/workflows/release.yml`](.github/workflows/release.yml) publishes a release
+after CI passes on `main`, and can also be run manually from the Actions tab:
+
+| Dispatch input | Result |
+| --- | --- |
+| `none` | Re-release the current `VERSION` without bumping (useful to retry a failed publish). |
+| `minor` | `3.1` → `3.2`. The automatic on-green path always bumps minor. |
+| `major` | `3.1` → `4.0`, for deliberate breaking changes. |
+
+A release bumps `VERSION` in [`esphome/settings.yaml`](esphome/settings.yaml) (the value
+shown on the remote's Info screen), rotates the `Unreleased` section of
+[`CHANGELOG.md`](CHANGELOG.md) into a dated version heading, commits that as
+`chore(release): <version> [skip ci]`, tags it, builds firmware for every PCB revision,
+and attaches those binaries to the GitHub release.
+
+**Write your changelog entries under `## Unreleased` as you work.** That section becomes
+the release's Highlights; without it the notes fall back to the raw commit list.
+
+The published binaries are built with placeholder credentials and are useful for trying
+the project or verifying a build. For a remote you actually use, build from source with
+your own secrets and favorite lists.
+
 ## Related Links
 
 - [ESPHome OLED remote control project article](https://tech.lugowski.dev/guides/smart-oled-remote-esphome/)

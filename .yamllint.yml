@@ -1,0 +1,33 @@
+# Lint for YAML that would actually break a build, not for house style.
+#
+# ESPHome configs use conventions yamllint's defaults dislike but that are
+# correct and idiomatic here: 2-space list indentation, `yes`/`no`/`True` for
+# booleans, and long lines holding embedded C++ lambdas. Those rules are off so
+# that a CI failure means something is genuinely wrong (unparseable YAML,
+# duplicate keys, tabs) instead of being noise the next person learns to ignore.
+extends: default
+
+ignore: |
+  .esphome/
+  .pio/
+  esphome/.esphome/
+  esphome/secrets.yaml
+  esphome/local_entities.h
+  src/.esphome/
+
+rules:
+  # Style rules that fight ESPHome's conventions.
+  line-length: disable
+  indentation: disable
+  truthy: disable
+  comments: disable
+  comments-indentation: disable
+  document-start: disable
+  empty-lines: disable
+  trailing-spaces: disable
+  new-line-at-end-of-file: disable
+  # Real problems worth failing a build for.
+  key-duplicates: enable
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: false

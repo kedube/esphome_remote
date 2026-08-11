@@ -1,0 +1,69 @@
+name: Bug report
+description: Report incorrect behaviour on the remote
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not paste your `secrets.yaml`, Wi-Fi password, API encryption key,
+        or alarm code into this issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What did the remote do, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the Weather mode
+        2. Press Settings
+        3. The screen goes blank and the remote reboots
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Firmware version
+      description: The VERSION shown on the remote's Info screen, or the release tag.
+      placeholder: "3.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: pcb
+    attributes:
+      label: PCB revision
+      options:
+        - pcb_rev1
+        - pcb_rev2
+        - pcb_rev31
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: esphome
+    attributes:
+      label: ESPHome version
+      placeholder: "2026.7.3"
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >-
+        Output from `esphome logs esphome/remote_control.yaml`. This is rendered as
+        code, so no backticks are needed.
+      render: text
+    validations:
+      required: false
