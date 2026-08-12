@@ -118,31 +118,24 @@ jobs:
         if: steps.head_check.outputs.release_action == 'bump'
         run: git push origin HEAD:main
 
-      - name: Install ESPHome
+      # No firmware binaries are published. WiFi credentials and the API encryption
+      # key are baked in at compile time from each owner's secrets.yaml, so a
+      # pre-built image can't be adopted by anyone else — everyone compiles their
+      # own. CI still builds every PCB revision on each push to prove the config
+      # compiles. Ship the source instead, archived from the release commit so the
+      # version string in settings.yaml matches the tag.
+      - name: Package release source
         if: steps.head_check.outputs.release_action != 'skip'
-        run: pip install -r requirements.txt
-
-      # Built here rather than pulled from the CI run's artifacts so the binaries
-      # match the release commit, which carries the bumped version string shown
-      # on the remote's Info screen.
-      - name: Build release firmware
-        if: steps.head_check.outputs.release_action != 'skip'
+        id: source_archive
+        env:
+          NEW_VERSION: ${{ steps.bump.outputs.new_version || steps.current_version.outputs.new_version }}
+          RELEASE_TARGET: ${{ steps.commit_release.outputs.release_target || steps.head_check.outputs.release_target }}
         run: |
           set -euo pipefail
           mkdir -p release_artifacts
-          for pcb in pcb_rev1 pcb_rev2 pcb_rev31; do
-            python .github/scripts/prepare_ci_config.py --pcb "$pcb"
-            esphome compile esphome/remote_control.yaml
-            for image in esphome/.esphome/build/*/build/*.factory.bin; do
-              cp "$image" "release_artifacts/${pcb}-factory.bin"
-            done
-            for image in esphome/.esphome/build/*/build/*.ota.bin; do
-              cp "$image" "release_artifacts/${pcb}-ota.bin"
-            done
-          done
-          # Keep the generated throwaway config out of the release commit.
-          git checkout -- esphome/settings.yaml
-          rm -f esphome/secrets.yaml esphome/local_entities.h
+          name="esphome-remote-${NEW_VERSION}"
+          git archive --format=zip --prefix="${name}/" \
+            -o "release_artifacts/${name}-source.zip" "$RELEASE_TARGET"
           ls -l release_artifacts
 
       # GitHub's auto-generated notes only list merged PRs, so direct-to-main releases came
