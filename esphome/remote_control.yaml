@@ -110,6 +110,10 @@ esp32:
       # bootloader verifies this when finishing an OTA, so a value that is too
       # high fails the update after the image has fully transferred.
       minimum_chip_revision: "3.0"
+      # Maps SRAM1 as IRAM (+40KB of code space) at the cost of an equivalent
+      # amount of heap. Requires the rev 3 bootloader, which the pinned chip
+      # revision above already guarantees.
+      sram1_as_iram: true
 
 wifi:
   ssid: !secret wifi_ssid
