@@ -6,6 +6,20 @@ substitutions:
 
 esphome:
   on_boot:
+    # Deep sleep leaves GPIO pads latched. ESPHome's deep_sleep component calls
+    # gpio_deep_sleep_hold_en() on the way into sleep (a GLOBAL latch covering
+    # every hold-capable pad) and never releases it on wake. Because turn_off
+    # drives PIN_OLED_EN low just before sleeping, the OLED enable pin stays
+    # frozen low through boot: switch.turn_on below updates the GPIO register,
+    # but the pad ignores it and the display never powers up.
+    #
+    # Release the latch before anything tries to drive a pin. Must out-prioritize
+    # the oled_power turn_on beneath it.
+    - priority: 900
+      then:
+        - lambda: |-
+            gpio_deep_sleep_hold_dis();
+            gpio_hold_dis(static_cast<gpio_num_t>(${PIN_OLED_EN}));
     - priority: 700
       then:
         - switch.turn_on: oled_power

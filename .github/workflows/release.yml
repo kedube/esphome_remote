@@ -122,21 +122,9 @@ jobs:
       # key are baked in at compile time from each owner's secrets.yaml, so a
       # pre-built image can't be adopted by anyone else — everyone compiles their
       # own. CI still builds every PCB revision on each push to prove the config
-      # compiles. Ship the source instead, archived from the release commit so the
-      # version string in settings.yaml matches the tag.
-      - name: Package release source
-        if: steps.head_check.outputs.release_action != 'skip'
-        id: source_archive
-        env:
-          NEW_VERSION: ${{ steps.bump.outputs.new_version || steps.current_version.outputs.new_version }}
-          RELEASE_TARGET: ${{ steps.commit_release.outputs.release_target || steps.head_check.outputs.release_target }}
-        run: |
-          set -euo pipefail
-          mkdir -p release_artifacts
-          name="esphome-remote-${NEW_VERSION}"
-          git archive --format=zip --prefix="${name}/" \
-            -o "release_artifacts/${name}-source.zip" "$RELEASE_TARGET"
-          ls -l release_artifacts
+      # compiles. No source archive is packaged either: GitHub automatically
+      # attaches "Source code (zip)" and "(tar.gz)" for the release tag, which is
+      # the same content.
 
       # GitHub's auto-generated notes only list merged PRs, so direct-to-main releases came
       # out empty. Build the body ourselves: Highlights from CHANGELOG.md (rotated from its
@@ -156,46 +144,31 @@ jobs:
         with:
           script: |
             const fs = require('fs')
-            const path = require('path')
             const tag = process.env.NEW_VERSION
             const target = process.env.RELEASE_TARGET
             const body = fs.readFileSync('release_notes.md', 'utf8')
             const { owner, repo } = context.repo
 
-            let release
             try {
-              release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data
-              core.info(`Release ${tag} already exists; reusing it for asset upload.`)
+              const release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data
+              core.info(`Release ${tag} already exists; updating its notes.`)
+              await github.rest.repos.updateRelease({
+                owner,
+                repo,
+                release_id: release.id,
+                body,
+              })
             } catch (error) {
               if (error.status !== 404) {
                 throw error
               }
-              release = (await github.rest.repos.createRelease({
+              await github.rest.repos.createRelease({
                 owner,
                 repo,
                 tag_name: tag,
                 target_commitish: target,
                 name: tag,
                 body,
-              })).data
-            }
-
-            const dir = 'release_artifacts'
-            for (const name of fs.readdirSync(dir)) {
-              const existing = release.assets?.find((asset) => asset.name === name)
-              if (existing) {
-                await github.rest.repos.deleteReleaseAsset({
-                  owner,
-                  repo,
-                  asset_id: existing.id,
-                })
-              }
-              await github.rest.repos.uploadReleaseAsset({
-                owner,
-                repo,
-                release_id: release.id,
-                name,
-                data: fs.readFileSync(path.join(dir, name)),
               })
-              core.info(`Uploaded ${name}`)
+              core.info(`Created release ${tag}.`)
             }
