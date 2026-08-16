@@ -17,9 +17,9 @@ esphome:
     # the oled_power turn_on beneath it.
     - priority: 900
       then:
-        - lambda: |-
-            gpio_deep_sleep_hold_dis();
-            gpio_hold_dis(static_cast<gpio_num_t>(${PIN_OLED_EN}));
+        # See oled_hold_release.h. Must run before the oled_power GPIOSwitch
+        # sets up (HARDWARE = 800) and before the turn_on at 700.
+        - lambda: 'oled_release_deep_sleep_hold(${PIN_OLED_EN});'
     # TEMPORARY debug capture — remove with packages/debug_wake.yaml.
     - priority: 960
       then:

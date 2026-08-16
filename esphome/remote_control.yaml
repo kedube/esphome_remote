@@ -44,6 +44,9 @@ esphome:
     - -DREMOTE_NOTIFICATION_FEED_MAX_ITEMS=${NOTIFICATION_FEED_MAX_ITEMS}
     - -DREMOTE_MAX_PERSISTED_FAVORITE_LISTS=${MAX_PERSISTED_FAVORITE_LISTS}
   includes:
+    # Releases the deep-sleep GPIO hold on the OLED enable pin. This is a fix,
+    # not instrumentation — keep it when removing debug code.
+    - oled_hold_release.h
     - ../include/entity_helpers.h
     - ../include/entity_trackers.h
     - ../include/entity_helpers_common.h
