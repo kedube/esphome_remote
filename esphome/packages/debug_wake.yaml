@@ -1,0 +1,65 @@
+# =============================================================================
+# TEMPORARY DISPLAY-INIT DEBUGGING — remove when the wake/display issue is
+# resolved.
+#
+# To enable:  add `debug_wake: !include packages/debug_wake.yaml` to the
+#             `packages:` block in remote_control.yaml.
+# To remove:  delete that one line, delete this file and debug_wake.h, and
+#             remove the priority-960 block from pcb_rev31.yaml.
+#
+# Measures how long the SH1106 takes to ACK on I2C after its power rail comes
+# up, and whether the display component ended up FAILED. See debug_wake.h for
+# the reasoning.
+# =============================================================================
+
+esphome:
+  includes:
+    - debug_wake.h
+
+sensor:
+  # How many milliseconds after power-on the panel first answered on I2C.
+  # This is the number that determines the required settle delay.
+  # -1 means it never answered within the timeout.
+  - platform: template
+    id: debug_panel_ack_ms
+    name: "DEBUG Panel ACK ms"
+    accuracy_decimals: 0
+    update_interval: never
+    entity_category: diagnostic
+    lambda: 'return (float) debug_ack_ms;'
+
+text_sensor:
+  - platform: template
+    id: debug_report
+    name: "DEBUG Display Report"
+    update_interval: never
+    entity_category: diagnostic
+    lambda: 'return {debug_report_string()};'
+
+  # Direct readout of the display component's own state. is_failed() true means
+  # ssd1306_i2c::setup() called mark_failed() — the terminal state with no retry.
+  - platform: template
+    id: debug_display_state
+    name: "DEBUG Display Component State"
+    update_interval: never
+    entity_category: diagnostic
+    lambda: |-
+      if (id(oled_display).is_failed()) {
+        return {"FAILED (mark_failed - no retry until reboot)"};
+      }
+      return {"OK"};
+
+script:
+  - id: debug_publish
+    mode: single
+    then:
+      - delay: 5s
+      - lambda: |-
+          debug_record_boot();
+          debug_record_display_failed(id(oled_display).is_failed());
+      - component.update: debug_panel_ack_ms
+      - component.update: debug_report
+      - component.update: debug_display_state
+      - lambda: |-
+          ESP_LOGW("debug", "%s failed=%d", debug_report_string().c_str(),
+                   id(oled_display).is_failed());

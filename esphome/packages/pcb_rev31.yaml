@@ -20,13 +20,35 @@ esphome:
         - lambda: |-
             gpio_deep_sleep_hold_dis();
             gpio_hold_dis(static_cast<gpio_num_t>(${PIN_OLED_EN}));
+    # TEMPORARY debug capture — remove with packages/debug_wake.yaml.
+    - priority: 960
+      then:
+        - lambda: |-
+            debug_capture_boot_pad(${PIN_OLED_EN});
     - priority: 700
       then:
         - switch.turn_on: oled_power
-        - delay: 10ms
+        # The SH1106 needs its VCC rail to rise and its internal charge pump to
+        # stabilize before it will ACK on I2C. ssd1306_i2c::setup() probes the
+        # panel exactly once and calls mark_failed() on no-ACK — a terminal
+        # state with no retry for the rest of the boot — so losing this race
+        # means a dead display until the next reboot. No reset_pin is wired, so
+        # init_reset_() is a no-op and this delay is the panel's ONLY settle
+        # time. 10ms was marginal; the margin shrinks as the battery drains.
+        - delay: ${OLED_POWER_ON_SETTLE_MS}ms
+    # TEMPORARY debug measurement — remove with packages/debug_wake.yaml.
+    # Runs after the rail is powered but before the display component sets up
+    # (PROCESSOR = 400), so it measures the real panel wake-up time.
+    - priority: 600
+      then:
+        - lambda: |-
+            debug_measure_panel_ack(0x3C, 2000);
     - priority: 400
       then:
         - script.execute: update_battery
+    - priority: 200
+      then:
+        - script.execute: debug_publish
 
 switch:
   - platform: gpio

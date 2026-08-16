@@ -30,6 +30,9 @@ packages:
   remote_button_press_scripts: !include packages/remote_button_press_scripts.yaml
   remote_button_action_scripts: !include packages/remote_button_action_scripts.yaml
   remote_display_scripts: !include packages/remote_display_scripts.yaml
+  # TEMPORARY display-init debugging — delete this line, packages/debug_wake.yaml,
+  # debug_wake.h, and the debug blocks in pcb_rev31.yaml when resolved.
+  debug_wake: !include packages/debug_wake.yaml
 
 esphome:
   name: ${DEVICE_NAME}
