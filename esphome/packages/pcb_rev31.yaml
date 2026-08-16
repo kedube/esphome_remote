@@ -36,13 +36,6 @@ esphome:
         # init_reset_() is a no-op and this delay is the panel's ONLY settle
         # time. 10ms was marginal; the margin shrinks as the battery drains.
         - delay: ${OLED_POWER_ON_SETTLE_MS}ms
-    # TEMPORARY debug measurement — remove with packages/debug_wake.yaml.
-    # Runs after the rail is powered but before the display component sets up
-    # (PROCESSOR = 400), so it measures the real panel wake-up time.
-    - priority: 600
-      then:
-        - lambda: |-
-            debug_measure_panel_ack(0x3C, 2000);
     - priority: 400
       then:
         - script.execute: update_battery

@@ -16,18 +16,6 @@ esphome:
   includes:
     - debug_wake.h
 
-sensor:
-  # How many milliseconds after power-on the panel first answered on I2C.
-  # This is the number that determines the required settle delay.
-  # -1 means it never answered within the timeout.
-  - platform: template
-    id: debug_panel_ack_ms
-    name: "DEBUG Panel ACK ms"
-    accuracy_decimals: 0
-    update_interval: never
-    entity_category: diagnostic
-    lambda: 'return (float) debug_ack_ms;'
-
 text_sensor:
   - platform: template
     id: debug_report
@@ -57,7 +45,6 @@ script:
       - lambda: |-
           debug_record_boot();
           debug_record_display_failed(id(oled_display).is_failed());
-      - component.update: debug_panel_ack_ms
       - component.update: debug_report
       - component.update: debug_display_state
       - lambda: |-
