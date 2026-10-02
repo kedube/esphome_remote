@@ -9,7 +9,10 @@ esphome/.esphome/
 # Local configuration and secrets — never commit these
 esphome/secrets.yaml
 esphome/local_entities.h
+esphome/settings.yaml
 .vscode/settings.json
+# Your own fonts, such as trial or commercial fonts that can't be redistributed
+assets/fonts/local/
 
 # Release workflow scratch output
 release_artifacts/

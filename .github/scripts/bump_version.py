@@ -1,5 +1,5 @@
 """Pick the next release version and write it to the VERSION substitution in
-esphome/settings.yaml.
+esphome/remote_control.yaml.
 
 Mirrors the release tags already used by this repository (2.5, 2.9, 3.0, ...):
 a major.minor pair where the minor rolls over into the major at 99.
@@ -10,7 +10,7 @@ a major.minor pair where the minor rolls over into the major at 99.
   with --bump major), so a release never reuses a version that already has a
   tag, even after main was rewritten.
 
-Usage: bump_version.py [settings_path] [--bump minor|major]
+Usage: bump_version.py [config_path] [--bump minor|major]
 Prints the new version.
 """
 
@@ -71,15 +71,15 @@ def _bump_major(version: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "settings", nargs="?", type=Path, default=Path("esphome/settings.yaml")
+        "config", nargs="?", type=Path, default=Path("esphome/remote_control.yaml")
     )
     parser.add_argument("--bump", choices=("minor", "major"), default="minor")
     args = parser.parse_args()
 
-    text = args.settings.read_text(encoding="utf-8")
+    text = args.config.read_text(encoding="utf-8")
     match = VERSION_RE.search(text)
     if match is None:
-        raise SystemExit(f"Could not find a VERSION: \"...\" line in {args.settings}")
+        raise SystemExit(f"Could not find a VERSION: \"...\" line in {args.config}")
 
     current = match.group(2)
     latest = _latest_release_tag()
@@ -95,7 +95,7 @@ def main() -> int:
     if replacements != 1:
         raise SystemExit("Could not update the VERSION line")
 
-    args.settings.write_text(updated, encoding="utf-8")
+    args.config.write_text(updated, encoding="utf-8")
     print(next_version)
     return 0
 

@@ -18,7 +18,9 @@ class Font;
 struct RemoteUiFonts {
   font::Font *tiny = nullptr;   // Arial Bold 9: header, chips, footer text
   font::Font *small = nullptr;  // Arial Bold 10: secondary lines, notification text
-  font::Font *title = nullptr;  // Roboto Condensed Bold 14: entity names and state words
+  font::Font *name = nullptr;   // Arial Bold 13: entity names
+  font::Font *name_small = nullptr;  // Arial Bold 12: names too wide for `name`
+  font::Font *title = nullptr;  // Roboto Condensed Bold 14: state words, setpoints, headlines
   font::Font *large = nullptr;  // Roboto Condensed Bold 28 (digits, ON/OFF): hero values
   font::Font *hero = nullptr;   // Material Symbols 24: hero badges and weather
 };

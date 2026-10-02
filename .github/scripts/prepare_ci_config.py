@@ -1,8 +1,9 @@
 """Create the gitignored config files a CI build needs.
 
-esphome/secrets.yaml and esphome/local_entities.h are per-owner files kept out of
-the repository, but the config will not validate without them. This writes
-throwaway versions from the committed examples and selects a PCB revision.
+esphome/secrets.yaml, esphome/local_entities.h and esphome/settings.yaml are
+per-owner files kept out of the repository, but the config will not validate
+without them. This writes throwaway versions from the committed examples and
+selects a PCB revision in the settings.
 
 Outside CI it refuses to replace existing copies of those files, because git
 cannot restore them. Run it on a scratch copy of the repository (--root), or
@@ -71,9 +72,9 @@ def _refuse_to_overwrite(paths: list[Path]) -> None:
     existing = [str(path) for path in paths if path.exists()]
     if existing:
         raise SystemExit(
-            f"Refusing to overwrite {' and '.join(existing)}: outside CI these hold "
-            "your own credentials and entities, and git cannot restore them. Run this "
-            "on a scratch copy of the repository (--root), or pass --force."
+            f"Refusing to overwrite {', '.join(existing)}: outside CI these hold "
+            "your own credentials, entities and settings, and git cannot restore them. "
+            "Run this on a scratch copy of the repository (--root), or pass --force."
         )
 
 
@@ -84,7 +85,7 @@ def main() -> int:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="replace existing secrets.yaml and local_entities.h even outside CI",
+        help="replace existing secrets.yaml, local_entities.h and settings.yaml even outside CI",
     )
     args = parser.parse_args()
 
@@ -92,19 +93,25 @@ def main() -> int:
     examples_dir = esphome_dir / "examples"
 
     entities_example = examples_dir / "local_entities-example.h"
-    if not entities_example.is_file():
-        raise SystemExit(f"Missing {entities_example}")
+    settings_example = examples_dir / "settings-example.yaml"
+    for example in (entities_example, settings_example):
+        if not example.is_file():
+            raise SystemExit(f"Missing {example}")
 
     secrets_path = esphome_dir / "secrets.yaml"
     entities_path = esphome_dir / "local_entities.h"
+    settings_path = esphome_dir / "settings.yaml"
     if not args.force:
-        _refuse_to_overwrite([secrets_path, entities_path])
+        _refuse_to_overwrite([secrets_path, entities_path, settings_path])
 
     secrets_path.write_text(CI_SECRETS, encoding="utf-8")
     entities_path.write_text(
         entities_example.read_text(encoding="utf-8"), encoding="utf-8"
     )
-    _select_pcb(esphome_dir / "settings.yaml", args.pcb)
+    settings_path.write_text(
+        settings_example.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    _select_pcb(settings_path, args.pcb)
 
     print(f"Prepared CI configuration for {args.pcb}", file=sys.stderr)
     return 0

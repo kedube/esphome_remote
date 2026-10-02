@@ -1,4 +1,7 @@
 substitutions:
+  # Firmware version shown on the boot and Info screens. The release workflow
+  # bumps it; set it by hand only to choose the next release's number.
+  VERSION: "4.1"
   ALARM_CODE: !secret alarm_code
   PIN_WAKE: "0"
   PIN_I2C_SDA: "27"
@@ -12,8 +15,10 @@ substitutions:
   PIN_BTN_PLUS: "18"
 
 packages:
-  settings: !include settings.yaml
+  # Fonts first: packages listed later win on substitutions, so settings.yaml
+  # can override the name-font defaults in remote_fonts.yaml.
   remote_fonts: !include packages/remote_fonts.yaml
+  settings: !include settings.yaml
   remote_display_runtime_globals: !include packages/remote_display_runtime_globals.yaml
   remote_display_selection_globals: !include packages/remote_display_selection_globals.yaml
   remote_display_state_globals: !include packages/remote_display_state_globals.yaml
@@ -146,6 +151,8 @@ esphome:
             remote_ui_fonts.tiny = id(tiny_font);
             remote_ui_fonts.small = id(small_font);
             remote_ui_fonts.title = id(title_font);
+            remote_ui_fonts.name = id(name_font);
+            remote_ui_fonts.name_small = id(name_small_font);
             remote_ui_fonts.large = id(large_font);
             remote_ui_fonts.hero = id(hero_icons);
     - priority: 250

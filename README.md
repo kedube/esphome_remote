@@ -38,7 +38,7 @@ If you just want to get the remote running:
 1. Install ESPHome.
 2. Copy [`esphome/examples/secrets-example.yaml`](esphome/examples/secrets-example.yaml) to [`esphome/secrets.yaml`](esphome/secrets.yaml) and fill in your Wi-Fi details and an API encryption key.
 3. Copy [`esphome/examples/local_entities-example.h`](esphome/examples/local_entities-example.h) to [`esphome/local_entities.h`](esphome/local_entities.h) and define your favorite lists.
-4. Open [`esphome/settings.yaml`](esphome/settings.yaml) and choose the correct PCB package.
+4. Copy [`esphome/examples/settings-example.yaml`](esphome/examples/settings-example.yaml) to `esphome/settings.yaml` and choose the correct PCB package.
 5. Connect the remote over USB and run `esphome run esphome/remote_control.yaml` (the first flash must be over USB).
 6. Add the remote to Home Assistant and allow it to perform Home Assistant actions (see [step 8](#8-add-the-remote-to-home-assistant)).
 
@@ -57,7 +57,7 @@ Every screen uses the same four bands, so the remote reads the same way whatever
 | Band | What it shows |
 | --- | --- |
 | Header (top row) | The list name in an inverted chip, followed by dots for your position in the list (or `3/12` for long lists). On the right: the clock, once Home Assistant has sent the time and when the list name leaves room for it, and the battery level on boards with battery monitoring. |
-| Title | The entity name. Long names switch to a smaller font before they are shortened. |
+| Title | The entity name, in Arial Bold unless you [choose another font](#choosing-the-name-font). Long names step down a size, then to a smaller font, before they are shortened. |
 | Hero | A round badge with the entity's icon on the left, and the main value in large digits beside it. A **lit badge** (icon cut out of a filled circle) means the device is on or active; an outlined badge means off. Thermostats, humidifiers and water heaters add a status chip at the top right (`HEATING`, `IDLE`, the heater's mode), filled while the device is actively working. Thermostats and humidifiers show their target as `SET 71°`; a water heater's target is its large value. Some types draw a picture instead: a toggle switch for switches, a window with its shade for covers, a weather icon for weather. |
 | Footer (bottom row) | Whatever `Settings`, `Plus` and `Minus` (or the action buttons) control right now. |
 
@@ -85,7 +85,7 @@ This configuration is built around:
 - Physical navigation and action buttons
 - 3D Printed Case and Buttons
 
-Board-specific wiring is selected through the PCB package include in [`esphome/settings.yaml`](esphome/settings.yaml).
+Board-specific wiring is selected through the PCB package include in your `esphome/settings.yaml`.
 
 ### ESP32 chip revision
 
@@ -107,7 +107,7 @@ esphome logs esphome/remote_control.yaml
 On a board that isn't running this firmware yet, the first USB flash prints
 `Chip type: ... (revision vX.Y)`.
 
-`esphome/remote_control.yaml` includes that shared settings file, while [`esphome/settings.yaml`](esphome/settings.yaml) contains the common substitutions, PCB package selection, and optional `web_server` block.
+`esphome/remote_control.yaml` includes your `esphome/settings.yaml`, which holds the common substitutions, the PCB package selection, and the optional `web_server` block. It starts as a copy of [`esphome/examples/settings-example.yaml`](esphome/examples/settings-example.yaml) and is kept out of git, like `secrets.yaml`.
 
 Please refer to the [Quick Start Guide](https://tech.lugowski.dev/smart-remote-kit/) for more details:
 
@@ -150,12 +150,14 @@ esphome_remote/
 ├── requirements.txt
 ├── assets/
 │   └── fonts/
-│       └── arial-bold.ttf
+│       ├── arial-bold.ttf
+│       └── local/             # your own fonts; gitignored
 ├── esphome/
 │   ├── .gitignore
 │   ├── examples/
 │   │   ├── local_entities-example.h
-│   │   └── secrets-example.yaml
+│   │   ├── secrets-example.yaml
+│   │   └── settings-example.yaml
 │   ├── packages/
 │   │   ├── pcb_rev1.yaml
 │   │   ├── pcb_rev2.yaml
@@ -181,7 +183,7 @@ esphome_remote/
 │   ├── oled_hold_release.h
 │   ├── remote_control.yaml
 │   ├── secrets.yaml           # your copy of the example; local-only
-│   └── settings.yaml
+│   └── settings.yaml          # your copy of the example; local-only
 ├── home_assistant/
 │   └── remote_notifications.yaml
 ├── include/
@@ -224,9 +226,9 @@ esphome_remote/
 ## Important Files
 
 - `esphome/remote_control.yaml`
-  Main ESPHome entrypoint that pulls together shared packages, secrets, local entity definitions, fonts, and runtime logic.
+  Main ESPHome entrypoint that pulls together shared packages, secrets, local entity definitions, fonts, and runtime logic. It also holds the firmware `VERSION`, which the release workflow bumps.
 - `esphome/settings.yaml`
-  Shared configuration file for common substitutions, PCB selection, and optional web server settings.
+  Your settings: common substitutions, PCB selection, and optional web server settings. This file is ignored by Git; start it from `esphome/examples/settings-example.yaml`.
 - `esphome/oled_hold_release.h`
   Releases the deep-sleep hold on the rev 3.1 OLED power pin at boot, so the display can power up.
 - `include/entity_helpers.h`
@@ -290,7 +292,7 @@ The `esphome/packages/` folder is split by responsibility:
 - `remote_display_*.yaml`
   UI globals and the `update_display` script that fills the render context and calls the renderer.
 - `remote_fonts.yaml`
-  Fonts: Arial Bold for labels, Roboto Condensed Bold for names and large values, and Material Symbols for icons. Every icon the renderer draws must be listed here.
+  Fonts: Arial Bold for labels and, by default, entity names (`NAME_FONT` in `settings.yaml` changes it), Roboto Condensed Bold for state words and large values, and Material Symbols for icons. Every icon the renderer draws must be listed here.
 - `remote_ui_*.yaml`
   UI setup, selection, and navigation scripts.
 - `remote_inputs.yaml` and `remote_runtime.yaml`
@@ -442,7 +444,13 @@ In Notifications mode, pressing the circle or play/pause action button dismisses
 
 ## 5. Configure `settings.yaml`
 
-Open `esphome/settings.yaml` and update the shared settings for your remote. This is the main file for device-level customization.
+Copy the example settings file, then edit the copy:
+
+```bash
+cp esphome/examples/settings-example.yaml esphome/settings.yaml
+```
+
+This is the main file for device-level customization. Like `secrets.yaml`, it is kept out of git, so pulling updates never overwrites your settings. After an update, compare it with the example for new settings: a setting your copy lacks stops the build with a warning that it `is undefined`.
 
 Use this file for three things:
 
@@ -467,13 +475,15 @@ packages:
 | `BOARD` | ESPHome board definition, currently `esp32dev`. |
 | `DEVICE_NAME` | Network name used by ESPHome and OTA. |
 | `FRIENDLY_NAME` | Human-readable device name shown in Home Assistant. |
-| `VERSION` | Firmware version label shown on the boot screen and the Info version screen. |
 | `NOTIFICATION_FEED_MAX_ITEMS` | Maximum number of notification messages cached and exposed in Notifications mode. |
 | `MAX_PERSISTED_FAVORITE_LISTS` | Compile-time capacity limit for configured favorite lists. This must be at least as large as your configured favorite list count. |
 | `TEMPERATURE_UNIT` | Set to `"F"` or `"C"` to match your Home Assistant climate values. |
 | `SPEED_UNIT` | Wind speed unit label (`"MPH"` or `"KPH"`) shown in the weather wind and gust views. |
 | `PRESSURE_UNIT` | Pressure unit label (`"hPa"` or `"kPa"`) shown in the weather pressure view. |
 | `PRECIPITATION_UNIT` | Precipitation unit label (`"in"` or `"mm"`) shown in the weather precipitation view. |
+| `NAME_FONT` | Font for entity names: a `.ttf`, `.otf` or `.bdf` file (path relative to `esphome/`), or `"gfonts://Family@700"` for a Google Font. Defaults to Arial Bold; see [Choosing the name font](#choosing-the-name-font). |
+| `NAME_FONT_SIZE` | Entity-name height in pixels; for a `.bdf` bitmap font, its point size. Default `"13"`. |
+| `NAME_FONT_SMALL_SIZE` | Size for names too wide for `NAME_FONT_SIZE`. Names too wide for this too use the small text font, then are shortened. Default `"12"`. |
 | `SLEEP_DURATION` | Idle time before the remote sleeps, in seconds, written as a plain number (`"90"`, not `"90s"`). |
 | `DEEP_SLEEP_DURATION` | Maximum awake time before the remote enters deep sleep. **Do not set this to `0`.** ESPHome reads `0` as "sleep immediately after boot", which makes the remote unusable and OTA updates nearly impossible to land. To disable forced deep sleep, delete the `run_duration:` line from the `deep_sleep:` block in `esphome/remote_control.yaml` (keep the block: powering off uses it), or use a long duration such as `"1440min"`. |
 | `LONG_PRESS_DURATION_MS` | Hold time for protected actions. |
@@ -499,7 +509,23 @@ Notes:
 - Safe starting points:
   `NOTIFICATION_FEED_MAX_ITEMS: "16"`, `MAX_PERSISTED_FAVORITE_LISTS: "16"`, `WAKE_BUTTON_DEBOUNCE_MS: "30"`, `BUTTON_DEBOUNCE_MS: "30"`, `NAVIGATION_SYNC_DELAY_MS: "250"`, `REBOOT_MESSAGE_DURATION_MS: "2000"`, `SAFE_MODE_BOOT_IS_GOOD_AFTER: "10s"`.
 
-`esphome/remote_control.yaml` includes this shared settings file. The pins shared by every board are in `esphome/remote_control.yaml`; the selected PCB package adds the dimmer, circle, battery and OLED-power pins.
+### Choosing the name font
+
+The display lights each pixel fully or not at all, so text can't be smoothed. A font looks clean on it when its hinting places every stroke on whole pixels, which suits fonts made for screens. These render well for entity names:
+
+| Font | `NAME_FONT_SIZE` / `NAME_FONT_SMALL_SIZE` | Where to get it |
+| --- | --- | --- |
+| Arial Bold (default) | `13` / `12` | `assets/fonts/arial-bold.ttf` |
+| Arial Narrow Bold | `15` / `14` | Included with macOS and Windows; condensed, so names can be larger |
+| Trebuchet MS Bold | `13` / `12` | Included with macOS and Windows |
+| DejaVu Sans Condensed Bold | `13` / `12` | Free, from [dejavu-fonts.github.io](https://dejavu-fonts.github.io/); wider, so long names step down sooner |
+| Helvetica Bold bitmaps (`helvB14.bdf` / `helvB12.bdf`) | `14` / `12` | Free, in X.Org's [`font-adobe-75dpi`](https://www.x.org/releases/individual/font/); wide |
+
+To use one, put its file in `assets/fonts/local/`, which git ignores, and point `NAME_FONT` at it, for example `"../assets/fonts/local/Arial Narrow Bold.ttf"`. Fonts that come with your computer, and trial or commercial fonts, usually can't be redistributed, so keep them out of the rest of the repository. Sizes from 12 to 15 fit the name line.
+
+The font must include every character the remote uses (Latin-1 plus ‘ ’ “ ” – — • € …); if any are missing, the build stops and lists them. Run `python3 tools/ui_preview/preview.py` to see every screen with your font before flashing.
+
+`esphome/remote_control.yaml` includes this settings file. The pins shared by every board are in `esphome/remote_control.yaml`; the selected PCB package adds the dimmer, circle, battery and OLED-power pins.
 
 If your alarm integration requires a code, add it to `esphome/secrets.yaml`:
 
@@ -558,7 +584,7 @@ The remote has to be awake while you add it: press a button first.
 
 ## Previewing the UI
 
-`tools/ui_preview/preview.py` draws every screen on your computer, pixel for pixel as the remote shows it, so you can check a UI change without flashing. It compiles the real renderer (`src/remote_ui_renderer.cpp`) together with ESPHome's own display and font code, using the fonts from `esphome/packages/remote_fonts.yaml`, and renders the sample states in `tools/ui_preview/scenarios.cpp`.
+`tools/ui_preview/preview.py` draws every screen on your computer, pixel for pixel as the remote shows it, so you can check a UI change without flashing. It compiles the real renderer (`src/remote_ui_renderer.cpp`) together with ESPHome's own display and font code, using the fonts from `esphome/packages/remote_fonts.yaml` and the entity-name font from your `esphome/settings.yaml`, and renders the sample states in `tools/ui_preview/scenarios.cpp`. `--readme` always uses the default fonts, so the screenshots don't depend on your settings.
 
 ```bash
 python3 tools/ui_preview/preview.py              # writes tools/ui_preview/.cache/ui_preview.png
@@ -575,7 +601,7 @@ It needs ESPHome, a C++ compiler (`clang++` or `g++`), and network access the fi
 
 If you want clean screenshots of the OLED UI, the project can expose the current framebuffer as a downloadable PBM image.
 
-Enable the framebuffer debug flag in [`esphome/settings.yaml`](esphome/settings.yaml):
+Enable the framebuffer debug flag in your `esphome/settings.yaml`:
 
 ```yaml
 substitutions:
@@ -739,6 +765,34 @@ Create it from the example file:
 cp esphome/examples/secrets-example.yaml esphome/secrets.yaml
 ```
 
+### `settings.yaml` is missing
+
+Create it from the example file, then choose your PCB package in it (see [step 5](#5-configure-settingsyaml)):
+
+```bash
+cp esphome/examples/settings-example.yaml esphome/settings.yaml
+```
+
+### The build stops with "'SOME_SETTING' is undefined"
+
+Your `esphome/settings.yaml` is older than a setting the firmware now uses. Copy that setting's line from [`esphome/examples/settings-example.yaml`](esphome/examples/settings-example.yaml) into the `substitutions:` block of your copy.
+
+### `git pull` stops at `esphome/settings.yaml`, or the file is gone after updating
+
+`esphome/settings.yaml` used to be part of the repository and is now yours alone, like `secrets.yaml`. Updating from a version that still had it removes git's copy:
+
+- If you had changed the file, `git pull` stops with "Your local changes to the following files would be overwritten". Move your copy aside, pull, and put it back:
+
+  ```bash
+  mv esphome/settings.yaml ~/settings.yaml.bak
+  git pull
+  mv ~/settings.yaml.bak esphome/settings.yaml
+  ```
+
+- If you hadn't changed it, the pull deletes it. Create it again from the example (see [step 5](#5-configure-settingsyaml)).
+
+The `VERSION` line in an older copy is no longer used and can be deleted: the version now lives in `esphome/remote_control.yaml`.
+
 ### A favorite list does not appear in the menu
 
 That usually means the corresponding favorite list is empty. Empty favorite lists are intentionally hidden.
@@ -843,12 +897,13 @@ UndefinedBehaviorSanitizer, and fails on any report. The contact sheet of every 
 attached to the run as the `ui-preview` artifact, so a pull request shows what its
 screens look like.
 
-`esphome/secrets.yaml` and `esphome/local_entities.h` are gitignored, so
-[`.github/scripts/prepare_ci_config.py`](.github/scripts/prepare_ci_config.py) writes
-placeholder secrets, copies the example `local_entities.h`, and selects the job's PCB
-revision in `settings.yaml` before each build. Outside CI it refuses
-to replace existing copies, since those are your real credentials and entities; run it on
-a scratch copy of the repository (`--root`) or pass `--force`.
+`esphome/secrets.yaml`, `esphome/local_entities.h` and `esphome/settings.yaml` are
+gitignored, so [`.github/scripts/prepare_ci_config.py`](.github/scripts/prepare_ci_config.py)
+writes placeholder secrets, copies the example `local_entities.h` and
+`settings-example.yaml`, and selects the job's PCB revision in the copied settings before
+each build. Outside CI it refuses to replace existing copies, since those are your real
+credentials, entities and settings; run it on a scratch copy of the repository (`--root`)
+or pass `--force`.
 
 The ESPHome version is pinned in [`requirements.txt`](requirements.txt).
 [Dependabot](.github/dependabot.yml) checks weekly for a new ESPHome release and for
@@ -869,8 +924,8 @@ after CI passes on `main`, and can also be run manually from the Actions tab:
 | `major` | `3.1` → `4.0`, for deliberate breaking changes. |
 
 A release picks its version from `VERSION` in
-[`esphome/settings.yaml`](esphome/settings.yaml) (the value shown on the remote's Info
-screen). If `VERSION` is newer than every release, it was set by hand and is published as
+[`esphome/remote_control.yaml`](esphome/remote_control.yaml) (the value shown on the
+remote's Info screen). If `VERSION` is newer than every release, it was set by hand and is published as
 is; otherwise it is bumped past the latest release (minor, or major from the Actions
 tab). The release then rotates the `Unreleased` section of
 [`CHANGELOG.md`](CHANGELOG.md) into a dated version heading (leaving a fresh, empty

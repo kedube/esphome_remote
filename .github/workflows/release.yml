@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: "Version bump (none = re-release current settings.yaml version)"
+        description: "Version bump (none = re-release the current VERSION in remote_control.yaml)"
         required: true
         default: "none"
         type: choice
@@ -113,7 +113,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add esphome/settings.yaml CHANGELOG.md
+          git add esphome/remote_control.yaml CHANGELOG.md
           # A VERSION set by hand, released with an empty Unreleased section,
           # leaves nothing to commit.
           if ! git diff --cached --quiet; then

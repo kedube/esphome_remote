@@ -175,6 +175,8 @@ int main() {
   RemoteUiFonts fonts;
   fonts.tiny = sim_font("tiny_font");
   fonts.small = sim_font("small_font");
+  fonts.name = sim_font("name_font");
+  fonts.name_small = sim_font("name_small_font");
   fonts.title = sim_font("title_font");
   fonts.large = sim_font("large_font");
   fonts.hero = sim_font("hero_icons");

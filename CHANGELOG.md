@@ -1,11 +1,25 @@
 # Changelog
 
 Notable changes for each tagged release. Versions correspond to git tags and to the
-`VERSION` substitution in `esphome/settings.yaml`, which the remote shows on its Info
-screen. Add entries under **Unreleased** as part of each change; the release workflow
+`VERSION` substitution in `esphome/remote_control.yaml`, which the remote shows on its
+Info screen. Add entries under **Unreleased** as part of each change; the release workflow
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+- Entity names are drawn in Arial Bold (13 px, or 12 px for long names) instead of
+  Roboto Condensed, whose strokes came out uneven on the panel. The rest of the screen
+  is unchanged.
+- The entity-name font is a setting: `NAME_FONT`, `NAME_FONT_SIZE` and
+  `NAME_FONT_SMALL_SIZE` in `settings.yaml` take a font file or a Google Font (see
+  "Choosing the name font" in the README). Fonts you keep in `assets/fonts/local/` stay
+  out of git, and the UI preview draws your choice.
+- `esphome/settings.yaml` is no longer part of the repository, so updates never
+  overwrite your settings. New setups copy `esphome/examples/settings-example.yaml` to
+  `esphome/settings.yaml`. **Updating from an earlier version:** if you changed
+  `settings.yaml`, `git pull` stops; move the file aside, pull, then move it back. If you
+  hadn't changed it, the pull deletes it; copy the example again and choose your PCB.
+- `VERSION` moved from `settings.yaml` to `esphome/remote_control.yaml`, where the
+  release workflow bumps it. A `VERSION` left in your `settings.yaml` is ignored.
 
 ## 4.1 — 2026-10-02
 - Fixed CI's firmware builds failing whenever the build cache already matched the

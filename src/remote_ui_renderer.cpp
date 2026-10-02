@@ -389,12 +389,15 @@ void draw_header(Display *it, const RemoteUiFonts &f, const RemoteRenderContext 
 }
 
 void draw_name(Display *it, const RemoteUiFonts &f, const char *name) {
-  // Long names drop to the smaller font before they are shortened.
-  if (text_width(f.title, name) <= SCREEN_W) {
-    text(it, f.title, 0, NAME_BASELINE, TextAlign::BASELINE_LEFT, name);
-  } else {
-    text_fit(it, f.small, 0, NAME_BASELINE - 1, TextAlign::BASELINE_LEFT, name, SCREEN_W);
+  // Long names step down to the smaller name font, then to the small font,
+  // before they are shortened.
+  for (font::Font *font : {f.name, f.name_small}) {
+    if (font != nullptr && text_width(font, name) <= SCREEN_W) {
+      text(it, font, 0, NAME_BASELINE, TextAlign::BASELINE_LEFT, name);
+      return;
+    }
   }
+  text_fit(it, f.small, 0, NAME_BASELINE - 1, TextAlign::BASELINE_LEFT, name, SCREEN_W);
 }
 
 // ---- Footer ------------------------------------------------------------------------

@@ -1,5 +1,14 @@
 # Fonts used by the renderer (src/remote_ui_renderer.cpp). Every icon the
 # renderer draws must be listed under hero_icons.
+
+# Defaults for the entity-name font. Set NAME_FONT, NAME_FONT_SIZE and
+# NAME_FONT_SMALL_SIZE in settings.yaml to change it: remote_control.yaml lists
+# settings.yaml after this package, so its values win.
+substitutions:
+  NAME_FONT: "../assets/fonts/arial-bold.ttf"
+  NAME_FONT_SIZE: "13"
+  NAME_FONT_SMALL_SIZE: "12"
+
 font:
   # The text fonts carry printable ASCII, Latin-1 (accented letters, ² ³ µ °)
   # and typographic quotes, dashes, • € and …, so Home Assistant names, units
@@ -11,6 +20,18 @@ font:
   - file: "../assets/fonts/arial-bold.ttf"
     id: small_font
     size: 10
+    glyphs: *text_glyphs
+  # Entity names. The panel lights a pixel fully or not at all, so a font
+  # looks clean here when its hinting places each stroke on whole pixels, as
+  # Arial Bold's does. Names too wide for name_font use name_small_font, then
+  # small_font.
+  - file: "${NAME_FONT}"
+    id: name_font
+    size: ${NAME_FONT_SIZE}
+    glyphs: *text_glyphs
+  - file: "${NAME_FONT}"
+    id: name_small_font
+    size: ${NAME_FONT_SMALL_SIZE}
     glyphs: *text_glyphs
   - file:
       type: gfonts

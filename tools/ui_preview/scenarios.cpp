@@ -52,6 +52,8 @@ int main(int argc, char **argv) {
   RemoteUiFonts f;
   f.tiny = sim_font("tiny_font");
   f.small = sim_font("small_font");
+  f.name = sim_font("name_font");
+  f.name_small = sim_font("name_small_font");
   f.title = sim_font("title_font");
   f.large = sim_font("large_font");
   f.hero = sim_font("hero_icons");

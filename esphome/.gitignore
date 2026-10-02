@@ -4,3 +4,4 @@
 /.esphome/
 /secrets.yaml
 /local_entities.h
+/settings.yaml
