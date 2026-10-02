@@ -41,10 +41,18 @@ script:
   - id: debug_publish
     mode: single
     then:
-      - delay: 5s
+      # Count the boot and log IMMEDIATELY, before any delay. Earlier versions
+      # waited 5s before doing this, so a boot that failed or slept early never
+      # incremented the counter — which made a stale report look like a fresh
+      # one (boot=2 repeating across attempts). Record first, publish later.
       - lambda: |-
           debug_record_boot();
           debug_record_display_failed(id(oled_display).is_failed());
+          ESP_LOGW("debug", "BOOT %s display_failed=%d",
+                   debug_report_string().c_str(),
+                   id(oled_display).is_failed());
+      # The API needs a moment before published states will reach HA.
+      - delay: 5s
       - component.update: debug_report
       - component.update: debug_display_state
       - lambda: |-
