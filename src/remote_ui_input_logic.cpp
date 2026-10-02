@@ -42,8 +42,8 @@ RemoteButtonPrompt describe_remote_button_prompt(
           prompt.feedback = "HOLD TO TRIGGER";
         } else if (action == 2) {
           prompt.feedback = alarm_arm_mode_hold_label(clamp_alarm_arm_mode(selected_alarm_arm_mode));
-        } else if (selected_item_state == "unknown") {
-          prompt.feedback = "SYNCING";
+        } else if (ha_state_missing(selected_item_state)) {
+          prompt.feedback = selected_item_state == "unavailable" ? "UNAVAILABLE" : "SYNCING";
         } else {
           prompt.feedback = "HOLD TO DISARM";
         }
@@ -54,4 +54,26 @@ RemoteButtonPrompt describe_remote_button_prompt(
   }
 
   return prompt;
+}
+
+bool describe_active_hold(
+    RemoteMode mode, uint32_t now, const RemoteHoldButton (&buttons)[3], const std::string &selected_item_state,
+    int selected_alarm_arm_mode, uint32_t default_hold_ms, uint32_t extended_hold_ms, std::string &label,
+    int &progress) {
+  for (int action = 0; action < 3; action++) {
+    const RemoteHoldButton &button = buttons[action];
+    if (button.started_at == 0 || button.fired || button.mode != static_cast<int>(mode)) {
+      continue;
+    }
+    RemoteButtonPrompt prompt = describe_remote_button_prompt(
+        mode, action, selected_item_state, selected_alarm_arm_mode, default_hold_ms, extended_hold_ms);
+    if (!prompt.requires_long_press || prompt.hold_duration_ms == 0) {
+      continue;
+    }
+    uint32_t held = now - button.started_at;
+    progress = held >= prompt.hold_duration_ms ? 100 : static_cast<int>(held * 100 / prompt.hold_duration_ms);
+    label = prompt.feedback;
+    return true;
+  }
+  return false;
 }

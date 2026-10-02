@@ -1,9 +1,10 @@
 """Rotate the CHANGELOG.md "Unreleased" section into a released version section.
 
 Used by .github/workflows/release.yml. If CHANGELOG.md has a non-empty
-"## Unreleased" section, its heading is renamed to "## <version> — <date>".
-If there is no Unreleased content, the changelog is left untouched (the
-release notes fall back to the commit list). Prints "rotated" or "skipped".
+"## Unreleased" section, its heading is renamed to "## <version> — <date>" and
+a fresh, empty "## Unreleased" heading goes above it for the next changes. If
+there is no Unreleased content, the changelog is left untouched (the release
+notes fall back to the commit list). Prints "rotated" or "skipped".
 """
 
 from __future__ import annotations
@@ -33,7 +34,14 @@ def main() -> int:
         return 0
 
     today = datetime.date.today().isoformat()
-    updated = text.replace("## Unreleased", f"## {version} — {today}", 1)
+    # Rename the heading that matched, not the first "## Unreleased" text in the
+    # file (the preamble may mention it).
+    heading_end = text.index("\n", match.start())
+    updated = (
+        text[: match.start()]
+        + f"## Unreleased\n\n## {version} — {today}"
+        + text[heading_end:]
+    )
     changelog_path.write_text(updated, encoding="utf-8")
     print("rotated")
     return 0

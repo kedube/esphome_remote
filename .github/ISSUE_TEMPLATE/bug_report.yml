@@ -53,7 +53,7 @@ body:
     id: esphome
     attributes:
       label: ESPHome version
-      placeholder: "2026.7.3"
+      placeholder: "2026.9.1"
     validations:
       required: false
 

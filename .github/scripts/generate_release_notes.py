@@ -29,8 +29,10 @@ def _git(*args: str) -> str:
 
 
 def _previous_tag(version: str) -> str | None:
-    """Latest release-style tag other than the version being published."""
-    tags = _git("tag", "--sort=-v:refname").splitlines()
+    """Latest release-style tag on this branch other than the version being
+    published. Tags left behind on rewritten history don't count: their
+    commits aren't on main, so the commit list would be wrong."""
+    tags = _git("tag", "--merged", "HEAD", "--sort=-v:refname").splitlines()
     for tag in tags:
         if RELEASE_TAG_RE.match(tag) and tag != version:
             return tag
@@ -80,11 +82,10 @@ def main() -> int:
 
     sections.append(
         "## Flashing\n\n"
-        "Prebuilt firmware for each PCB revision is attached below. Use the "
-        "`.factory.bin` for a first flash over USB and the `.ota.bin` for an "
-        "over-the-air update. These are built with placeholder Wi-Fi, API, and "
-        "OTA credentials, so for a device you actually use, build from source "
-        "with your own `esphome/secrets.yaml` and `esphome/local_entities.h`."
+        "No firmware is attached. Your Wi-Fi credentials and API encryption key "
+        "are compiled into the image from your own `esphome/secrets.yaml`, so "
+        "build this release from source with your `secrets.yaml` and "
+        "`local_entities.h`, then flash it over USB or OTA."
     )
 
     if previous_tag:

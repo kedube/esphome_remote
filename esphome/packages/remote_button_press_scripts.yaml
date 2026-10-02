@@ -21,16 +21,34 @@ script:
                 id(wake_button_press_started_at) = 0;
                 id(wake_button_long_press_fired) = false;
             - script.stop: handle_wake_button_release
+      # The hold bar is full at EXTENDED_HOLD_DURATION_MS, but the reboot check
+      # only runs on the 500 ms runtime tick: a release after the bar filled
+      # still reboots instead of powering off.
+      - if:
+          condition:
+            lambda: 'return millis() - id(wake_button_press_started_at) >= ${EXTENDED_HOLD_DURATION_MS};'
+          then:
+            - lambda: |-
+                id(wake_button_long_press_fired) = true;
+                id(wake_button_press_started_at) = 0;
+            - script.execute: reboot_device
+            - script.stop: handle_wake_button_release
       - lambda: |-
           id(wake_button_press_started_at) = 0;
           id(wake_button_long_press_fired) = false;
       - script.execute: turn_off
 
+  # The footer's hold bar shows the prompt while the button is down. Square and
+  # circle also leave it as feedback, so a too-short tap explains itself; the
+  # settings button does not, because a tap there cycles settings.
   - id: show_sensitive_action_prompt
     parameters:
       action: int
     then:
       - lambda: |-
+          if (action == 1) {
+            return;
+          }
           auto prompt = describe_remote_button_prompt(
               static_cast<RemoteMode>(id(current_mode)), action, id(selected_item_state), id(selected_alarm_arm_mode),
               ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS});
@@ -51,6 +69,7 @@ script:
             default:
               break;
           }
+      - script.execute: animate_hold_progress
 
   - id: await_primary_long_press
     mode: restart

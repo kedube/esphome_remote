@@ -23,3 +23,18 @@ struct RemoteButtonPrompt {
 RemoteButtonPrompt describe_remote_button_prompt(
     RemoteMode mode, int action, const std::string &selected_item_state, int selected_alarm_arm_mode,
     uint32_t default_hold_ms, uint32_t extended_hold_ms);
+
+// Press state of one of the three action buttons, indexed by action:
+// 0 square (primary), 1 settings, 2 circle (play/pause).
+struct RemoteHoldButton {
+  uint32_t started_at{0};
+  int mode{-1};
+  bool fired{false};
+};
+
+// True while a protected action is being held in the current mode: label is
+// its prompt ("HOLD TO LOCK") and progress how far through the hold it is.
+bool describe_active_hold(
+    RemoteMode mode, uint32_t now, const RemoteHoldButton (&buttons)[3], const std::string &selected_item_state,
+    int selected_alarm_arm_mode, uint32_t default_hold_ms, uint32_t extended_hold_ms, std::string &label,
+    int &progress);

@@ -106,6 +106,7 @@ void apply_remote_ui_timeout_updates(uint32_t now, RemoteUiTimeoutState &state) 
       {state.last_automation_interaction, 5000},
       {state.last_alarm_interaction, 5000},
       {state.last_contrast_interaction, 5000},
+      {state.ui_toast_at, 3000},
   };
   for (const auto &window : refresh_windows) {
     if (timeout_expired_once(now, window.last_interaction, window.timeout_ms)) {

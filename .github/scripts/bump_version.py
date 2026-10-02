@@ -1,7 +1,14 @@
-"""Increment the VERSION substitution in esphome/settings.yaml.
+"""Pick the next release version and write it to the VERSION substitution in
+esphome/settings.yaml.
 
 Mirrors the release tags already used by this repository (2.5, 2.9, 3.0, ...):
 a major.minor pair where the minor rolls over into the major at 99.
+
+- A VERSION newer than every release tag was set by hand for this release, so
+  it is used as is.
+- Otherwise the newer of VERSION and the latest tag is bumped (minor, or major
+  with --bump major), so a release never reuses a version that already has a
+  tag, even after main was rewritten.
 
 Usage: bump_version.py [settings_path] [--bump minor|major]
 Prints the new version.
@@ -12,8 +19,26 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import re
+import subprocess
 
 VERSION_RE = re.compile(r'^(\s*VERSION:\s*")([^"]+)(".*)$', re.MULTILINE)
+RELEASE_TAG_RE = re.compile(r"^\d+\.\d+(\.\d+)?$")
+
+
+def _parse(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.split("."))
+
+
+def _latest_release_tag() -> str | None:
+    """The highest release-style tag in the repository, if any."""
+    try:
+        tags = subprocess.run(
+            ["git", "tag", "--list"], check=True, capture_output=True, text=True
+        ).stdout.split()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    releases = [tag for tag in tags if RELEASE_TAG_RE.match(tag)]
+    return max(releases, key=_parse) if releases else None
 
 
 def _bump_minor(version: str) -> str:
@@ -56,8 +81,13 @@ def main() -> int:
     if match is None:
         raise SystemExit(f"Could not find a VERSION: \"...\" line in {args.settings}")
 
-    bump = _bump_major if args.bump == "major" else _bump_minor
-    next_version = bump(match.group(2))
+    current = match.group(2)
+    latest = _latest_release_tag()
+    if latest is None or _parse(current) > _parse(latest):
+        next_version = current
+    else:
+        bump = _bump_major if args.bump == "major" else _bump_minor
+        next_version = bump(latest if _parse(latest) > _parse(current) else current)
 
     updated, replacements = VERSION_RE.subn(
         rf"\g<1>{next_version}\g<3>", text, count=1

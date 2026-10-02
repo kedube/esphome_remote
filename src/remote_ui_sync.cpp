@@ -79,7 +79,34 @@ static inline void sync_toggle_percent_mode(
   }
 }
 
+// Whether Home Assistant reports the entity behind this screen as unavailable.
+static bool tracked_entity_unavailable(RemoteMode mode, int idx) {
+  switch (mode) {
+    case REMOTE_MODE_LIGHTS: return selected_light_state(idx) == "unavailable";
+    case REMOTE_MODE_FANS: return selected_fan_state(idx) == "unavailable";
+    case REMOTE_MODE_HUMIDIFIERS: return selected_humidifier_state(idx) == "unavailable";
+    case REMOTE_MODE_SWITCHES: return selected_switch_state(idx) == "unavailable";
+    case REMOTE_MODE_CLIMATE: return selected_climate_state(idx) == "unavailable";
+    case REMOTE_MODE_WATER_HEATERS: return selected_water_heater_state(idx) == "unavailable";
+    case REMOTE_MODE_LOCKS: return selected_lock_state(idx) == "unavailable";
+    case REMOTE_MODE_COVERS: return selected_cover_state(idx) == "unavailable";
+    case REMOTE_MODE_MEDIA: return selected_media_state(idx) == "unavailable";
+    case REMOTE_MODE_SENSORS: return sensor_state_for_index(idx) == "unavailable";
+    case REMOTE_MODE_AUTOMATION: return automation_state_for_index(idx) == "unavailable";
+    case REMOTE_MODE_ALARMS: return alarm_state_for_index(idx) == "unavailable";
+    case REMOTE_MODE_WEATHER: return weather_state_for_index(idx) == "unavailable";
+    default: return false;
+  }
+}
+
 void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
+  // An unavailable entity says so, rather than SYNCING (no state is on its way)
+  // or the last state it reported (which no longer holds).
+  if (tracked_entity_unavailable(mode, idx)) {
+    *ui.updated_ui = assign_cstr_if_changed(ui.selected_item_state, "unavailable") || *ui.updated_ui;
+    return;
+  }
+
   if (mode == REMOTE_MODE_LIGHTS) {
     sync_toggle_percent_mode(ui, selected_light_state(idx), selected_light_has_brightness(idx),
                              selected_light_brightness(idx), 100.0f / 255.0f, ui.selected_brightness_pct, false);
@@ -210,9 +237,10 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
       } else {
         changed = assign_string_if_changed(ui.selected_media_source, source) || changed;
       }
-      if (!std::isnan(volume)) {
-        changed = assign_int_if_changed(ui.selected_media_volume_pct, clamp_percent_value(volume, 100.0f)) || changed;
-      }
+      // -1 while the player reports no volume, so the remote never steps from
+      // another player's level.
+      int volume_pct = std::isnan(volume) ? -1 : clamp_percent_value(volume, 100.0f);
+      changed = assign_int_if_changed(ui.selected_media_volume_pct, volume_pct) || changed;
       if (changed) *ui.updated_ui = true;
     }
     return;
@@ -232,7 +260,9 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
 
   if (mode == REMOTE_MODE_AUTOMATION) {
     const std::string &state = automation_state_for_index(idx);
-    std::string next_state = automation_supports_enabled_state(idx) ? state : "ready";
+    // Automations report on/off for enabled/disabled and scripts for
+    // running/idle; a scene's state is only the time it last ran.
+    std::string next_state = automation_kind(idx) == AUTOMATION_KIND_SCENE ? "ready" : state;
     bool changed = false;
     changed = assign_string_if_changed(ui.selected_item_state, next_state) || changed;
     if (changed) *ui.updated_ui = true;

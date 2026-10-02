@@ -1,0 +1,22 @@
+# Opens a pull request when a new ESPHome release or GitHub Action version comes
+# out, so CI builds every PCB revision against it before it is merged. The
+# weekly scheduled CI run can't catch these on its own, because it installs the
+# pinned versions.
+version: 2
+updates:
+  # esphome in requirements.txt.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+
+  # The actions used by .github/workflows/, in one pull request rather than one
+  # per action.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"

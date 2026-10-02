@@ -35,6 +35,7 @@ interval:
                 state.last_media_power_interaction = &id(last_media_power_interaction);
                 state.last_automation_interaction = &id(last_automation_interaction);
                 state.last_alarm_interaction = &id(last_alarm_interaction);
+                state.ui_toast_at = &id(ui_toast_at);
                 state.climate_target_focus = &id(climate_target_focus);
                 state.climate_target_focus_value = &id(climate_target_focus_value);
                 state.selected_setting_detail = &id(selected_setting_detail);
@@ -57,6 +58,14 @@ interval:
                       id(wake_button_long_press_fired) = true;
                       id(wake_button_press_started_at) = 0;
                   - script.execute: reboot_device
+            # Warn about a low battery as soon as it is measured, connected or not:
+            # a battery that low is a likely reason Wi-Fi or Home Assistant won't
+            # connect.
+            - if:
+                condition:
+                  lambda: 'return id(show_boot_screen) && !id(low_battery_popup_shown) && id(battery_monitoring_available) && !isnan(id(battery_voltage)) && id(battery_voltage) <= ${LOW_BATTERY_VOLTAGE};'
+                then:
+                  - script.execute: show_low_battery_popup
             - if:
                 condition:
                   wifi.connected:
@@ -70,18 +79,14 @@ interval:
                             condition:
                               lambda: 'return id(show_boot_screen) && !id(low_battery_popup_active);'
                             then:
-                              - if:
-                                  condition:
-                                    lambda: 'return id(battery_monitoring_available) && !id(low_battery_popup_shown) && !isnan(id(battery_voltage)) && id(battery_voltage) <= ${LOW_BATTERY_VOLTAGE};'
-                                  then:
-                                    - script.execute: show_low_battery_popup
-                                  else:
-                                    - lambda: |-
-                                        id(show_boot_screen) = false;
-                                        id(updated_ui) = true;
+                              - lambda: |-
+                                  id(show_boot_screen) = false;
+                                  id(updated_ui) = true;
+            # A popup, a system page (powering off, rebooting) or the reboot hold
+            # owns the panel: don't draw the boot or offline screens over it.
             - if:
                 condition:
-                  lambda: 'return id(low_battery_popup_active);'
+                  lambda: 'return id(low_battery_popup_active) || id(system_screen_active) || id(wake_button_press_started_at) != 0;'
                 then:
                   - lambda: 'return;'
                 else:

@@ -30,7 +30,8 @@ inline void ha_subscribe(const char *entity_id, const char *attribute, HaStateCa
   esphome::api::global_api_server->subscribe_home_assistant_state(entity_id, attribute, std::move(callback));
 }
 
-// Stores the value, mapping empty/unknown/unavailable to "unknown".
+// Stores the value. "unavailable" is kept, so the remote can say so; anything
+// else missing becomes "unknown".
 inline void ha_track_state(const char *entity_id, const char *attribute, std::string &slot) {
   std::string *target = &slot;
   ha_subscribe(entity_id, attribute, [target](esphome::StringRef state) { ha_assign_state_or_unknown(*target, state); });
@@ -128,6 +129,7 @@ class FanStatusTracker : public EntityTracker<FAN_LIST_COUNT> {
     const char *entity_id = this->entity_id(idx);
     ha_track_state(entity_id, nullptr, this->state_[idx]);
     ha_track_float(entity_id, "percentage", this->percentage_[idx]);
+    ha_track_float(entity_id, "percentage_step", this->percentage_step_[idx]);
     ha_track_text(entity_id, "preset_mode", this->preset_mode_[idx]);
     ha_track_list(entity_id, "preset_modes", this->preset_modes_[idx]);
     ha_track_text(entity_id, "oscillating", this->oscillating_[idx]);
@@ -137,6 +139,7 @@ class FanStatusTracker : public EntityTracker<FAN_LIST_COUNT> {
   const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
   float percentage(int idx) const { return at_(this->percentage_, idx); }
   bool has_percentage(int idx) const { return !std::isnan(this->percentage(idx)); }
+  float percentage_step(int idx) const { return at_(this->percentage_step_, idx); }
   const std::string &preset_mode(int idx) const { return at_(this->preset_mode_, idx); }
   const std::string &preset_modes(int idx) const { return at_(this->preset_modes_, idx); }
   const std::string &oscillating(int idx) const { return at_(this->oscillating_, idx); }
@@ -149,6 +152,7 @@ class FanStatusTracker : public EntityTracker<FAN_LIST_COUNT> {
   std::array<std::string, FAN_LIST_COUNT> oscillating_{};
   std::array<std::string, FAN_LIST_COUNT> direction_{};
   std::array<float, FAN_LIST_COUNT> percentage_ = filled_array<float, FAN_LIST_COUNT>(NAN);
+  std::array<float, FAN_LIST_COUNT> percentage_step_ = filled_array<float, FAN_LIST_COUNT>(NAN);
 };
 
 class HumidifierStatusTracker : public EntityTracker<HUMIDIFIER_LIST_COUNT> {
@@ -196,7 +200,7 @@ class ClimateStatusTracker : public EntityTracker<CLIMATE_LIST_COUNT> {
     std::string *hvac_action = &this->hvac_action_[idx];
     ha_subscribe(entity_id, "hvac_action", [hvac_action](esphome::StringRef state) {
       ha_assign_state_or_unknown(*hvac_action, state);
-      if (*hvac_action != "unknown") {
+      if (!ha_state_missing(*hvac_action)) {
         for (auto &c : *hvac_action) {
           if (c >= 'a' && c <= 'z') c = c - 'a' + 'A';
         }
@@ -230,7 +234,7 @@ class ClimateStatusTracker : public EntityTracker<CLIMATE_LIST_COUNT> {
   void store_state_(int idx, esphome::StringRef state) {
     std::string &value = this->state_[idx];
     ha_assign_state_or_unknown(value, state);
-    if (value != "unknown" && value != "off") {
+    if (!ha_state_missing(value) && value != "off") {
       this->last_active_mode_[idx] = value;
     }
   }
@@ -324,7 +328,7 @@ class MediaStatusTracker : public EntityTracker<MEDIA_PLAYER_LIST_COUNT> {
 
   void subscribe(int idx) {
     const char *entity_id = this->entity_id(idx);
-    ha_track_state(entity_id, nullptr, this->state_[idx]);
+    ha_subscribe(entity_id, nullptr, [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
     ha_track_text(entity_id, "device_class", this->device_class_[idx]);
     ha_track_list(entity_id, "source_list", this->source_list_[idx]);
     ha_track_float(entity_id, "volume_level", this->volume_[idx]);
@@ -350,6 +354,22 @@ class MediaStatusTracker : public EntityTracker<MEDIA_PLAYER_LIST_COUNT> {
   const std::string &sound_mode_list(int idx) const { return at_(this->sound_mode_list_, idx); }
 
  protected:
+  // Home Assistant drops a player's media attributes when it stops or turns
+  // off, and sends nothing for a dropped attribute, so clear them here or the
+  // last track and volume stay on screen. They come back with new values once
+  // the player has something to report.
+  void store_state_(int idx, esphome::StringRef state) {
+    ha_assign_state_or_unknown(this->state_[idx], state);
+    const std::string &current = this->state_[idx];
+    if (current != "playing" && current != "paused" && current != "buffering" && current != "on") {
+      this->title_[idx].clear();
+      this->artist_[idx].clear();
+    }
+    if (current == "off" || ha_state_missing(current)) {
+      this->volume_[idx] = NAN;
+    }
+  }
+
   void store_source_(int idx, esphome::StringRef state) {
     const std::string &device_class = this->device_class_[idx];
     if (device_class == "tv" || device_class == "receiver") {
@@ -386,6 +406,10 @@ class WaterHeaterStatusTracker : public EntityTracker<WATER_HEATER_LIST_COUNT> {
     const char *entity_id = this->entity_id(idx);
     ha_track_state(entity_id, nullptr, this->state_[idx]);
     ha_track_float(entity_id, "temperature", this->target_temperature_[idx]);
+    // Home Assistant doesn't range-check water_heater.set_temperature, so the
+    // remote clamps to the heater's own limits.
+    ha_track_float(entity_id, "min_temp", this->min_temperature_[idx]);
+    ha_track_float(entity_id, "max_temp", this->max_temperature_[idx]);
     ha_track_text(entity_id, "operation_mode", this->operation_mode_[idx]);
     ha_track_list(entity_id, "operation_list", this->operation_list_[idx]);
     ha_track_text(entity_id, "away_mode", this->away_mode_[idx]);
@@ -393,6 +417,8 @@ class WaterHeaterStatusTracker : public EntityTracker<WATER_HEATER_LIST_COUNT> {
 
   const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
   float target_temperature(int idx) const { return at_(this->target_temperature_, idx); }
+  float min_temperature(int idx) const { return at_(this->min_temperature_, idx); }
+  float max_temperature(int idx) const { return at_(this->max_temperature_, idx); }
   const std::string &operation_mode(int idx) const { return at_(this->operation_mode_, idx); }
   const std::string &operation_list(int idx) const { return at_(this->operation_list_, idx); }
   const std::string &away_mode(int idx) const { return at_(this->away_mode_, idx); }
@@ -403,6 +429,8 @@ class WaterHeaterStatusTracker : public EntityTracker<WATER_HEATER_LIST_COUNT> {
   std::array<std::string, WATER_HEATER_LIST_COUNT> operation_list_{};
   std::array<std::string, WATER_HEATER_LIST_COUNT> away_mode_{};
   std::array<float, WATER_HEATER_LIST_COUNT> target_temperature_ = filled_array<float, WATER_HEATER_LIST_COUNT>(NAN);
+  std::array<float, WATER_HEATER_LIST_COUNT> min_temperature_ = filled_array<float, WATER_HEATER_LIST_COUNT>(NAN);
+  std::array<float, WATER_HEATER_LIST_COUNT> max_temperature_ = filled_array<float, WATER_HEATER_LIST_COUNT>(NAN);
 };
 
 using AutomationStatusTracker = SingleStateTracker<AUTOMATION_LIST_COUNT>;
@@ -417,7 +445,6 @@ class WeatherStatusTracker : public EntityTracker<WEATHER_LIST_COUNT> {
     ha_track_state(entity_id, nullptr, this->state_[idx]);
     ha_track_float(entity_id, "temperature", this->temperature_[idx]);
     ha_track_float(entity_id, "humidity", this->humidity_[idx]);
-    ha_subscribe(entity_id, "forecast", [this, idx](esphome::StringRef state) { this->store_forecast_(idx, state); });
     ha_track_float(entity_id, "wind_speed", this->wind_speed_[idx]);
     ha_track_float(entity_id, "wind_bearing", this->wind_bearing_[idx]);
     ha_track_float(entity_id, "wind_gust_speed", this->wind_gust_speed_[idx]);
@@ -443,89 +470,25 @@ class WeatherStatusTracker : public EntityTracker<WEATHER_LIST_COUNT> {
   float apparent_temperature(int idx) const { return at_(this->apparent_temperature_, idx); }
   float precipitation(int idx) const { return at_(this->precipitation_, idx); }
 
- protected:
-  void store_forecast_(int idx, esphome::StringRef state) {
-    this->high_temperature_[idx] = NAN;
-    this->low_temperature_[idx] = NAN;
-    this->precipitation_[idx] = NAN;
-
-    if (ha_state_missing(state) || !ha_payload_looks_like_json(state)) {
-      return;
+  // Today's high, low and precipitation come from weather.get_forecasts
+  // (fetch_weather_forecast): Home Assistant dropped the forecast attribute
+  // from weather entities in 2024.3. Asked for once per wake.
+  bool forecast_requested(int idx) const { return in_range_(idx) && this->forecast_requested_[idx]; }
+  void mark_forecast_requested(int idx) {
+    if (in_range_(idx)) {
+      this->forecast_requested_[idx] = true;
     }
-
-    // The forecast attribute is routinely 5-30 KB; a filter keeps only the few
-    // keys read below so the parsed document stays small, and parsing directly
-    // from the StringRef avoids copying the payload. The payload is either a
-    // bare array or {"forecast": [...]} — the filter must match that shape.
-    size_t first = 0;
-    while (first < state.size() && (state[first] == ' ' || state[first] == '\t' ||
-                                    state[first] == '\r' || state[first] == '\n')) {
-      first++;
+  }
+  void store_forecast(int idx, float high, float low, float precipitation) {
+    if (in_range_(idx)) {
+      this->high_temperature_[idx] = high;
+      this->low_temperature_[idx] = low;
+      this->precipitation_[idx] = precipitation;
     }
-    JsonDocument filter;
-    JsonObject entry =
-        state[first] == '[' ? filter[0].to<JsonObject>() : filter["forecast"][0].to<JsonObject>();
-    for (const char *key : {"temperature", "temperature_high", "native_temperature", "native_temperature_high",
-                            "templow", "temperature_low", "native_templow", "native_temperature_low",
-                            "precipitation", "native_precipitation"}) {
-      entry[key] = true;
-    }
-
-    JsonDocument doc;
-    if (deserializeJson(doc, state.c_str(), state.size(), DeserializationOption::Filter(filter)) !=
-        DeserializationError::Ok) {
-      return;
-    }
-    JsonArray forecast;
-    if (doc.is<JsonArray>()) {
-      forecast = doc.as<JsonArray>();
-    } else if (doc.is<JsonObject>()) {
-      JsonObject root = doc.as<JsonObject>();
-      forecast = root["forecast"].as<JsonArray>();
-    } else {
-      return;
-    }
-
-    if (forecast.isNull() || forecast.size() == 0) {
-      return;
-    }
-
-    JsonObject today = forecast[0].as<JsonObject>();
-    if (today.isNull()) {
-      return;
-    }
-
-    auto read_number = [&](JsonObject obj, const char *key) -> float {
-      if (obj[key].is<float>() || obj[key].is<int>()) {
-        return obj[key].as<float>();
-      }
-      if (obj[key].is<const char *>()) {
-        const char *value = obj[key].as<const char *>();
-        if (value != nullptr && value[0] != '\0') {
-          return strtof(value, nullptr);
-        }
-      }
-      return NAN;
-    };
-
-    float high = read_number(today, "temperature");
-    if (std::isnan(high)) high = read_number(today, "temperature_high");
-    if (std::isnan(high)) high = read_number(today, "native_temperature");
-    if (std::isnan(high)) high = read_number(today, "native_temperature_high");
-
-    float low = read_number(today, "templow");
-    if (std::isnan(low)) low = read_number(today, "temperature_low");
-    if (std::isnan(low)) low = read_number(today, "native_templow");
-    if (std::isnan(low)) low = read_number(today, "native_temperature_low");
-
-    float precip = read_number(today, "precipitation");
-    if (std::isnan(precip)) precip = read_number(today, "native_precipitation");
-
-    this->high_temperature_[idx] = high;
-    this->low_temperature_[idx] = low;
-    this->precipitation_[idx] = precip;
   }
 
+ protected:
+  std::array<bool, WEATHER_LIST_COUNT> forecast_requested_{};
   std::array<std::string, WEATHER_LIST_COUNT> state_{};
   std::array<float, WEATHER_LIST_COUNT> temperature_ = filled_array<float, WEATHER_LIST_COUNT>(NAN);
   std::array<float, WEATHER_LIST_COUNT> humidity_ = filled_array<float, WEATHER_LIST_COUNT>(NAN);

@@ -152,6 +152,13 @@ inline bool selected_fan_has_percentage(int idx) {
   return fan_status_tracker_storage.has_percentage(idx);
 }
 
+// The fan's speed increment (33.3 for a 3-speed fan); 10 until it has synced.
+inline float selected_fan_percentage_step(int idx) {
+  ensure_remote_status_trackers();
+  float step = fan_status_tracker_storage.percentage_step(idx);
+  return std::isnan(step) || step < 1.0f ? 10.0f : step;
+}
+
 inline float selected_fan_percentage(int idx) {
   ensure_remote_status_trackers();
   return fan_status_tracker_storage.percentage(idx);
@@ -312,6 +319,16 @@ inline const std::string &selected_water_heater_state(int idx) {
 inline float selected_water_heater_target_temperature(int idx) {
   ensure_remote_status_trackers();
   return water_heater_status_tracker_storage.target_temperature(idx);
+}
+
+inline float selected_water_heater_min_temperature(int idx) {
+  ensure_remote_status_trackers();
+  return water_heater_status_tracker_storage.min_temperature(idx);
+}
+
+inline float selected_water_heater_max_temperature(int idx) {
+  ensure_remote_status_trackers();
+  return water_heater_status_tracker_storage.max_temperature(idx);
 }
 
 inline const std::string &selected_water_heater_operation_mode(int idx) {
@@ -490,6 +507,33 @@ inline const std::string &notification_id_for_index(int idx) {
   }
   ensure_remote_status_trackers();
   return notification_feed_tracker_storage.notification_id(idx);
+}
+
+inline const char *weather_entity_id_for_index(int idx) {
+  return idx >= 0 && idx < WEATHER_LIST_COUNT ? WEATHER_LIST[idx].entity_id : "";
+}
+
+inline bool weather_forecast_requested(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.forecast_requested(idx);
+}
+
+inline void mark_weather_forecast_requested(int idx) {
+  ensure_remote_status_trackers();
+  weather_status_tracker_storage.mark_forecast_requested(idx);
+}
+
+// The reply fetch_weather_forecast's response_template shapes:
+// {"response": {"high": 72, "low": 55, "precipitation": 0.1}}. A value the
+// forecast doesn't have arrives as null and is stored as NaN.
+inline void store_weather_forecast(int idx, JsonObjectConst reply) {
+  ensure_remote_status_trackers();
+  JsonObjectConst today = reply["response"];
+  auto number = [&today](const char *key) -> float {
+    JsonVariantConst value = today[key];
+    return value.is<float>() ? value.as<float>() : NAN;
+  };
+  weather_status_tracker_storage.store_forecast(idx, number("high"), number("low"), number("precipitation"));
 }
 
 inline const std::string &weather_state_for_index(int idx) {

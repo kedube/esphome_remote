@@ -1,0 +1,25 @@
+# macOS metadata (anywhere in the tree)
+.DS_Store
+
+# ESPHome and PlatformIO build output
+src/.esphome/
+esphome/.esphome/
+.pio/
+
+# Local configuration and secrets — never commit these
+esphome/secrets.yaml
+esphome/local_entities.h
+.vscode/settings.json
+
+# Release workflow scratch output
+release_artifacts/
+release_notes.md
+
+releases/2.5.md
+releases/2.7.md
+
+# Python bytecode
+__pycache__/
+*.pyc
+.vscode/extensions.json
+.vscode/c_cpp_properties.json

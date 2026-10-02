@@ -22,20 +22,24 @@ script:
       - script.execute:
           id: set_lock_feedback
           feedback: "LOCKING..."
+      # Home Assistant only answers a rejected request: a lock that fails on its
+      # own never gets a reply. So the lock's state is checked from now on.
       - homeassistant.action:
           action: lock.lock
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
-          on_success:
-            - script.execute:
-                id: verify_selected_lock_result
-                lock_index: !lambda 'return lock_index;'
-                expected_state: "locked"
-                success_feedback: "LOCKED"
           on_error:
+            - script.stop: verify_selected_lock_result
             - script.execute:
                 id: set_lock_feedback
                 feedback: "LOCK FAILED"
+      - script.execute:
+          id: verify_selected_lock_result
+          lock_index: !lambda 'return lock_index;'
+          expected_state: "locked"
+          success_feedback: "LOCKED"
+          pending_feedback: "LOCKING..."
+          failure_feedback: "LOCK FAILED"
 
   - id: unlock_selected_lock
     mode: queued
@@ -57,20 +61,24 @@ script:
       - script.execute:
           id: set_lock_feedback
           feedback: "UNLOCKING..."
+      # Home Assistant only answers a rejected request: a lock that fails on its
+      # own never gets a reply. So the lock's state is checked from now on.
       - homeassistant.action:
           action: lock.unlock
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
-          on_success:
-            - script.execute:
-                id: verify_selected_lock_result
-                lock_index: !lambda 'return lock_index;'
-                expected_state: "unlocked"
-                success_feedback: "UNLOCKED"
           on_error:
+            - script.stop: verify_selected_lock_result
             - script.execute:
                 id: set_lock_feedback
                 feedback: "UNLOCK FAILED"
+      - script.execute:
+          id: verify_selected_lock_result
+          lock_index: !lambda 'return lock_index;'
+          expected_state: "unlocked"
+          success_feedback: "UNLOCKED"
+          pending_feedback: "UNLOCKING..."
+          failure_feedback: "UNLOCK FAILED"
 
   # The verifiers poll the tracker for the device that was acted on. Once the
   # user selects a different item its feedback has been reset, so they stop
@@ -81,11 +89,14 @@ script:
       lock_index: int
       expected_state: std::string
       success_feedback: std::string
+      pending_feedback: std::string
+      failure_feedback: std::string
     then:
       - lambda: |-
           id(lock_verification_complete) = false;
+      # Up to 15 s: slow and cloud locks can take a while to report.
       - repeat:
-          count: 5
+          count: 15
           then:
             - if:
                 condition:
@@ -99,25 +110,20 @@ script:
                       }
                       auto result = evaluate_lock_verification(selected_lock_state(lock_index), expected_state,
                                                                success_feedback);
-                      if (!result.feedback.empty()) {
-                        id(set_lock_feedback).execute(result.feedback);
-                      }
+                      // Nothing reported yet: keep saying the command is on its way.
+                      id(set_lock_feedback).execute(result.feedback.empty() ? pending_feedback : result.feedback);
                       id(lock_verification_complete) = result.complete;
-      - if:
-          condition:
-            lambda: 'return !id(lock_verification_complete);'
-          then:
-            - delay: 500ms
-            - lambda: |-
-                id(lock_verification_complete) = true;
-                if (id(current_mode) != REMOTE_MODE_LOCKS || id(selected_lock_index) != lock_index) {
-                  return;
-                }
-                auto result = evaluate_lock_verification(selected_lock_state(lock_index), expected_state,
-                                                         success_feedback);
-                if (!result.feedback.empty()) {
-                  id(set_lock_feedback).execute(result.feedback);
-                }
+      - lambda: |-
+          if (id(lock_verification_complete)) {
+            return;
+          }
+          id(lock_verification_complete) = true;
+          if (id(current_mode) != REMOTE_MODE_LOCKS || id(selected_lock_index) != lock_index) {
+            return;
+          }
+          // Still not where it was sent, and not moving: the command didn't take.
+          auto result = evaluate_lock_verification(selected_lock_state(lock_index), expected_state, success_feedback);
+          id(set_lock_feedback).execute(result.feedback.empty() ? failure_feedback : result.feedback);
 
   - id: verify_selected_cover_result
     mode: restart
@@ -125,11 +131,14 @@ script:
       cover_index: int
       expected_state: std::string
       success_feedback: std::string
+      pending_feedback: std::string
+      failure_feedback: std::string
     then:
       - lambda: |-
           id(cover_verification_complete) = false;
+      # Up to 20 s: garage doors and long shades take a while to travel.
       - repeat:
-          count: 8
+          count: 20
           then:
             - if:
                 condition:
@@ -144,26 +153,21 @@ script:
                       auto result = evaluate_cover_verification(selected_cover_state(cover_index),
                                                                 selected_cover_position(cover_index),
                                                                 expected_state, success_feedback);
-                      if (!result.feedback.empty()) {
-                        id(set_cover_feedback).execute(result.feedback);
-                      }
+                      // Nothing reported yet: keep saying the command is on its way.
+                      id(set_cover_feedback).execute(result.feedback.empty() ? pending_feedback : result.feedback);
                       id(cover_verification_complete) = result.complete;
-      - if:
-          condition:
-            lambda: 'return !id(cover_verification_complete);'
-          then:
-            - delay: 500ms
-            - lambda: |-
-                id(cover_verification_complete) = true;
-                if (id(current_mode) != REMOTE_MODE_COVERS || id(selected_cover_index) != cover_index) {
-                  return;
-                }
-                auto result = evaluate_cover_verification(selected_cover_state(cover_index),
-                                                          selected_cover_position(cover_index),
-                                                          expected_state, success_feedback);
-                if (!result.feedback.empty()) {
-                  id(set_cover_feedback).execute(result.feedback);
-                }
+      - lambda: |-
+          if (id(cover_verification_complete)) {
+            return;
+          }
+          id(cover_verification_complete) = true;
+          if (id(current_mode) != REMOTE_MODE_COVERS || id(selected_cover_index) != cover_index) {
+            return;
+          }
+          // Not there, not moving, not stopped part-way: the command didn't take.
+          auto result = evaluate_cover_verification(selected_cover_state(cover_index), selected_cover_position(cover_index),
+                                                    expected_state, success_feedback);
+          id(set_cover_feedback).execute(result.feedback.empty() ? failure_feedback : result.feedback);
 
   - id: verify_selected_alarm_result
     mode: restart
@@ -212,6 +216,8 @@ script:
                   id(set_alarm_feedback).execute(result.feedback);
                 }
 
+  # The footer's arm-mode picker highlights the new choice, so this only
+  # redraws; a feedback toast would cover the picker being adjusted.
   - id: shift_selected_alarm_arm_mode
     parameters:
       step: int
@@ -220,17 +226,18 @@ script:
           AlarmArmMode next_mode = next_alarm_arm_mode(clamp_alarm_arm_mode(id(selected_alarm_arm_mode)), step);
           id(selected_alarm_arm_mode) = static_cast<int>(next_mode);
           id(selected_setting_detail) = std::string(alarm_arm_mode_selection_label(next_mode));
-      - script.execute:
-          id: set_alarm_feedback
-          feedback: !lambda |-
-            return std::string(alarm_arm_mode_selection_label(clamp_alarm_arm_mode(id(selected_alarm_arm_mode))));
+          id(updated_ui) = true;
+      - script.execute: update_display
 
   - id: set_alarm_blocked_feedback
     then:
       - script.execute:
           id: set_alarm_feedback
           feedback: !lambda |-
-            return id(selected_item_state) == "unknown" ? std::string("SYNCING") : std::string("ALREADY ARMED");
+            if (ha_state_missing(id(selected_item_state))) {
+              return std::string(id(selected_item_state) == "unavailable" ? "UNAVAILABLE" : "SYNCING");
+            }
+            return std::string("ALREADY ARMED");
 
   - id: start_alarm_transition
     parameters:
@@ -252,6 +259,14 @@ script:
       success_feedback: std::string
       failure_feedback: std::string
     then:
+      # Home Assistant only answers a rejected request, never a panel that fails
+      # on its own, so the panel's state is checked from now on.
+      - script.execute:
+          id: verify_selected_alarm_result
+          alarm_index: !lambda 'return alarm_index;'
+          expected_state: !lambda 'return expected_state;'
+          success_feedback: !lambda 'return success_feedback;'
+          failure_feedback: !lambda 'return failure_feedback;'
       - if:
           condition:
             lambda: 'return !std::string("${ALARM_CODE}").empty();'
@@ -261,14 +276,8 @@ script:
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
                   code: "${ALARM_CODE}"
-                on_success:
-                  - script.execute:
-                      id: verify_selected_alarm_result
-                      alarm_index: !lambda 'return alarm_index;'
-                      expected_state: !lambda 'return expected_state;'
-                      success_feedback: !lambda 'return success_feedback;'
-                      failure_feedback: !lambda 'return failure_feedback;'
                 on_error:
+                  - script.stop: verify_selected_alarm_result
                   - script.execute:
                       id: set_alarm_feedback
                       feedback: !lambda 'return failure_feedback;'
@@ -277,14 +286,8 @@ script:
                 action: !lambda 'return action_name;'
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
-                on_success:
-                  - script.execute:
-                      id: verify_selected_alarm_result
-                      alarm_index: !lambda 'return alarm_index;'
-                      expected_state: !lambda 'return expected_state;'
-                      success_feedback: !lambda 'return success_feedback;'
-                      failure_feedback: !lambda 'return failure_feedback;'
                 on_error:
+                  - script.stop: verify_selected_alarm_result
                   - script.execute:
                       id: set_alarm_feedback
                       feedback: !lambda 'return failure_feedback;'
@@ -321,7 +324,7 @@ script:
             case ALARM_ARM_MODE_AWAY:
             default: action_name = "alarm_control_panel.alarm_arm_away"; break;
           }
-          if (state == "unknown" || state == expected_armed) {
+          if (ha_state_missing(state) || state == expected_armed) {
             id(set_alarm_blocked_feedback).execute();
             return;
           }
@@ -332,11 +335,11 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return id(selected_item_state) == "unknown";'
+            lambda: 'return ha_state_missing(id(selected_item_state));'
           then:
             - script.execute:
                 id: set_alarm_feedback
-                feedback: "SYNCING"
+                feedback: !lambda 'return std::string(id(selected_item_state) == "unavailable" ? "UNAVAILABLE" : "SYNCING");'
             - script.stop: disarm_selected_alarm
       - if:
           condition:
@@ -363,11 +366,11 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return id(selected_item_state) == "unknown";'
+            lambda: 'return ha_state_missing(id(selected_item_state));'
           then:
             - script.execute:
                 id: set_alarm_feedback
-                feedback: "SYNCING"
+                feedback: !lambda 'return std::string(id(selected_item_state) == "unavailable" ? "UNAVAILABLE" : "SYNCING");'
             - script.stop: trigger_selected_alarm
       - if:
           condition:
@@ -402,20 +405,24 @@ script:
             id(selected_cover_position_pct) = 100;
           }
           id(updated_ui) = true;
+      # As with locks, the cover's state is checked from now on: Home Assistant
+      # never answers for a device that fails on its own.
       - homeassistant.action:
           action: cover.open_cover
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
-          on_success:
-            - script.execute:
-                id: verify_selected_cover_result
-                cover_index: !lambda 'return cover_index;'
-                expected_state: "open"
-                success_feedback: "OPENED"
           on_error:
+            - script.stop: verify_selected_cover_result
             - script.execute:
                 id: set_cover_feedback
                 feedback: "OPEN FAILED"
+      - script.execute:
+          id: verify_selected_cover_result
+          cover_index: !lambda 'return cover_index;'
+          expected_state: "open"
+          success_feedback: "OPENED"
+          pending_feedback: "OPENING..."
+          failure_feedback: "OPEN FAILED"
 
   - id: close_selected_cover
     mode: queued
@@ -425,20 +432,24 @@ script:
       - script.execute:
           id: set_cover_feedback
           feedback: "CLOSING..."
+      # As with locks, the cover's state is checked from now on: Home Assistant
+      # never answers for a device that fails on its own.
       - homeassistant.action:
           action: cover.close_cover
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
-          on_success:
-            - script.execute:
-                id: verify_selected_cover_result
-                cover_index: !lambda 'return cover_index;'
-                expected_state: "closed"
-                success_feedback: "CLOSED"
           on_error:
+            - script.stop: verify_selected_cover_result
             - script.execute:
                 id: set_cover_feedback
                 feedback: "CLOSE FAILED"
+      - script.execute:
+          id: verify_selected_cover_result
+          cover_index: !lambda 'return cover_index;'
+          expected_state: "closed"
+          success_feedback: "CLOSED"
+          pending_feedback: "CLOSING..."
+          failure_feedback: "CLOSE FAILED"
 
   - id: increase_cover_position
     mode: queued
@@ -497,14 +508,16 @@ script:
     mode: queued
     then:
       - lambda: |-
-          float current = local_change_hold_active(millis()) ? id(pending_cover_tilt_pct)
-                                                              : selected_cover_tilt(id(selected_cover_index));
+          float current = cover_tilt_sent_recently(millis(), id(selected_cover_index))
+                              ? id(pending_cover_tilt_pct)
+                              : selected_cover_tilt(id(selected_cover_index));
           if (isnan(current)) {
             current = 0.0f;
           }
           int next = int(current + 10.0f);
           if (next > 100) next = 100;
           id(pending_cover_tilt_pct) = next;
+          note_cover_tilt_sent(id(selected_cover_index));
           id(last_setting_interaction) = millis();
           char buffer[24];
           snprintf(buffer, sizeof(buffer), "TILT %d%%", next);
@@ -522,14 +535,16 @@ script:
     mode: queued
     then:
       - lambda: |-
-          float current = local_change_hold_active(millis()) ? id(pending_cover_tilt_pct)
-                                                              : selected_cover_tilt(id(selected_cover_index));
+          float current = cover_tilt_sent_recently(millis(), id(selected_cover_index))
+                              ? id(pending_cover_tilt_pct)
+                              : selected_cover_tilt(id(selected_cover_index));
           if (isnan(current)) {
             current = 100.0f;
           }
           int next = int(current - 10.0f);
           if (next < 0) next = 0;
           id(pending_cover_tilt_pct) = next;
+          note_cover_tilt_sent(id(selected_cover_index));
           id(last_setting_interaction) = millis();
           char buffer[24];
           snprintf(buffer, sizeof(buffer), "TILT %d%%", next);

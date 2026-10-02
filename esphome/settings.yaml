@@ -1,8 +1,8 @@
 substitutions:
   BOARD: "esp32dev"
-  DEVICE_NAME: "esphome-remote31"
+  DEVICE_NAME: "remote"
   FRIENDLY_NAME: "ESPHome Remote"
-  VERSION: "3.11"
+  VERSION: "4.0"
   FRAMEBUFFER_WEB_DEBUG: "0" # Set to 1 to enable the framebuffer web debugging server on port 80 (see web_server: section below)
   NOTIFICATION_FEED_MAX_ITEMS: "16" # Max number of notifications to keep in the feed and show on the remote
   MAX_PERSISTED_FAVORITE_LISTS: "16" # Max number of favorite lists that can be persisted (must be >= the number of lists defined in your configuration)
@@ -14,8 +14,9 @@ substitutions:
   DEEP_SLEEP_DURATION: "15min" # max awake time before forcing deep sleep. Do NOT set to 0 — ESPHome
                                # treats run_duration: 0 as "sleep immediately after boot", which makes
                                # the remote unusable and OTA nearly impossible. To disable forced deep
-                               # sleep, comment out the deep_sleep: block in remote_control.yaml instead,
-                               # or set a very long duration such as "1440min".
+                               # sleep, delete the run_duration: line from the deep_sleep: block in
+                               # remote_control.yaml (keep the block: powering off uses it), or set a
+                               # very long duration such as "1440min".
   LONG_PRESS_DURATION_MS: "2000" # hold time for lock/cover/automation actions
   EXTENDED_HOLD_DURATION_MS: "5000" # shared hold time for alarm trigger and wake-button reboot
   WAKE_BUTTON_DEBOUNCE_MS: "30" # debounce time for wake/power button press and release

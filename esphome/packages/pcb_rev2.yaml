@@ -13,6 +13,9 @@ esphome:
   # after a normal turn_off this is a no-op.
   on_shutdown:
     then:
+      # Forced sleep (run_duration), the hold-to-reboot and OTA restarts skip
+      # turn_off, so save the UI state here too.
+      - script.execute: persist_ui_state
       - script.execute: clear_display_for_sleep
 
 sensor:

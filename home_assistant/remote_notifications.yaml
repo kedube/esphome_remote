@@ -108,10 +108,15 @@ template:
             {% else %}
               {% set current = items %}
             {% endif %}
-            {% set texts = current
+            {# The newest 16 (the firmware's NOTIFICATION_FEED_MAX_ITEMS), each cut to 120
+               characters: the remote ignores a feed over 8 KB entirely. An id containing
+               '|' would split `ids` out of step with this list, so such a notification is
+               left out of both. #}
+            {% set newest = (current
+                | rejectattr('id', 'contains', '|')
                 | sort(attribute='created_at', reverse=true)
-                | map(attribute='text')
-                | list %}
+                | list)[:16] %}
+            {% set texts = newest | map(attribute='text') | map('truncate', 120, true, '…', 0) | list %}
             {{ texts | join('||') if texts else 'none' }}
           ids: >-
             {# Notification IDs are kept in the same order as `messages` for dismiss actions. #}
@@ -141,8 +146,10 @@ template:
             {% else %}
               {% set current = items %}
             {% endif %}
-            {% set ids = current
+            {# Same selection as `messages`. #}
+            {% set newest = (current
+                | rejectattr('id', 'contains', '|')
                 | sort(attribute='created_at', reverse=true)
-                | map(attribute='id')
-                | list %}
+                | list)[:16] %}
+            {% set ids = newest | map(attribute='id') | list %}
             {{ ids | join('||') if ids else 'none' }}

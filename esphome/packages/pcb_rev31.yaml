@@ -30,7 +30,9 @@ esphome:
         # means a dead display until the next reboot. No reset_pin is wired, so
         # init_reset_() is a no-op and this delay is the panel's ONLY settle
         # time. 10ms was marginal; the margin shrinks as the battery drains.
-        - delay: ${OLED_POWER_ON_SETTLE_MS}ms
+        # The wait must block: an on_boot `delay:` only postpones the rest of
+        # this automation, while setup carries straight on to the display.
+        - lambda: 'delay(${OLED_POWER_ON_SETTLE_MS});'
     - priority: 400
       then:
         - script.execute: update_battery
@@ -40,6 +42,9 @@ esphome:
   # order; after a normal turn_off both steps are no-ops.
   on_shutdown:
     then:
+      # Forced sleep (run_duration), the hold-to-reboot and OTA restarts skip
+      # turn_off, so save the UI state here too.
+      - script.execute: persist_ui_state
       - script.execute: clear_display_for_sleep
       - switch.turn_off: oled_power
 

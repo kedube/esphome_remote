@@ -17,92 +17,196 @@ script:
                   id(updated_ui) = false;
                   return;
                 }
-                if (!it->is_ready()) {
+                // A system page (connecting, the low-battery popup, powering off,
+                // rebooting, the reboot hold) owns the panel; updated_ui stays set
+                // so the UI redraws afterwards.
+                if (!it->is_ready() || id(system_screen_active) || id(wake_button_press_started_at) != 0 ||
+                    id(show_boot_screen) || id(low_battery_popup_active)) {
                   return;
                 }
-                RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
-                UiMenuHeader header = ui_menu_header(id(current_menu_index), mode);
+                auto selection_refs = make_mode_selection_state_refs(
+                    id(selected_light_index), id(selected_switch_index), id(selected_climate_index),
+                    id(selected_water_heater_index), id(selected_lock_index),
+                    id(selected_cover_index), id(selected_media_index), id(selected_automation_index),
+                    id(selected_weather_index), id(selected_fan_index), id(selected_humidifier_index),
+                    id(selected_sensor_index), id(selected_alarm_index), id(selected_notification_index),
+                    id(selected_info_index));
+                auto selection = resolve_current_ui_selection_context(id(current_mode), id(current_menu_index), selection_refs);
+                RemoteMode mode = selection.mode;
+                int idx = selection.resolved_index;
+                uint32_t now = millis();
+
                 RemoteRenderContext ctx;
                 ctx.mode = mode;
-                ctx.mode_title_override = header.title;
-                ctx.mode_icon_override = header.icon;
-                ctx.now = millis();
-                ctx.contrast = id(contrast);
-                ctx.automation_index = id(selected_automation_index);
-                ctx.info_index = id(selected_info_index);
-                ctx.selected_setting_option = id(selected_setting_option);
-                ctx.climate_target_focus = id(climate_target_focus);
-                ctx.selected_brightness_pct = id(selected_brightness_pct);
-                ctx.selected_fan_speed_pct = id(selected_fan_speed_pct);
-                ctx.selected_cover_position_pct = id(selected_cover_position_pct);
-                ctx.selected_media_volume_pct = id(selected_media_volume_pct);
-                ctx.battery_percentage = id(battery_percentage);
-                ctx.last_brightness_interaction = id(last_brightness_interaction);
-                ctx.last_switch_interaction = id(last_switch_interaction);
-                ctx.last_contrast_interaction = id(last_contrast_interaction);
-                ctx.last_fan_speed_interaction = id(last_fan_speed_interaction);
-                ctx.last_humidifier_interaction = id(last_humidifier_interaction);
-                ctx.last_humidifier_mode_interaction = id(last_humidifier_mode_interaction);
-                ctx.last_cover_interaction = id(last_cover_interaction);
-                ctx.last_cover_position_interaction = id(last_cover_position_interaction);
-                ctx.last_climate_target_focus_interaction = id(last_climate_target_focus_interaction);
-                ctx.last_media_volume_interaction = id(last_media_volume_interaction);
-                ctx.last_media_source_interaction = id(last_media_source_interaction);
-                ctx.last_media_power_interaction = id(last_media_power_interaction);
-                ctx.last_automation_interaction = id(last_automation_interaction);
-                ctx.last_alarm_interaction = id(last_alarm_interaction);
-                ctx.last_lock_interaction = id(last_lock_interaction);
-                ctx.last_notification_dismiss_interaction = id(last_notification_dismiss_interaction);
-                ctx.settings_button_press_started_at = id(settings_button_press_started_at);
-                ctx.settings_button_press_mode = id(settings_button_press_mode);
-                ctx.settings_button_long_press_fired = id(settings_button_long_press_fired);
+                ctx.list_title = menu_index_title(id(current_menu_index));
+                ctx.item_index = selection.index;
+                ctx.item_count = selection.count;
+                ctx.now = now;
+
+                auto current_time = id(homeassistant_time).now();
+                if (current_time.is_valid()) {
+                  ctx.clock_valid = true;
+                  ctx.clock_hour = current_time.hour;
+                  ctx.clock_minute = current_time.minute;
+                  ctx.clock_weekday = current_time.day_of_week;
+                  ctx.clock_day = current_time.day_of_month;
+                  ctx.clock_month = current_time.month;
+                  ctx.weather_is_night = current_time.hour < 6 || current_time.hour >= 18;
+                }
                 ctx.battery_monitoring_available = id(battery_monitoring_available);
-                ctx.selected_humidifier_target_humidity = id(selected_humidifier_target_humidity);
-                ctx.selected_humidifier_current_humidity = id(selected_humidifier_current_humidity);
-                ctx.selected_climate_target_temp = id(selected_climate_target_temp);
-                ctx.selected_water_heater_target_temp = id(selected_water_heater_target_temp);
-                ctx.selected_climate_target_temp_low = id(selected_climate_target_temp_low);
-                ctx.selected_climate_target_temp_high = id(selected_climate_target_temp_high);
-                ctx.selected_climate_current_temp = id(selected_climate_current_temp);
-                ctx.climate_target_focus_value = id(climate_target_focus_value);
-                ctx.selected_weather_temperature = id(selected_weather_temperature);
-                ctx.selected_weather_humidity = id(selected_weather_humidity);
+                ctx.battery_percentage = id(battery_percentage);
                 ctx.battery_voltage = id(battery_voltage);
+                ctx.contrast = id(contrast);
+                ctx.last_contrast_interaction = id(last_contrast_interaction);
+
+                ctx.selected_setting_option = id(selected_setting_option);
+                ctx.selected_setting_detail = &id(selected_setting_detail);
+                ctx.toast_text = &id(ui_toast_text);
+                ctx.toast_at = id(ui_toast_at);
+
+                RemoteHoldButton holds[3] = {
+                    {id(primary_button_press_started_at), id(primary_button_press_mode), id(primary_button_long_press_fired)},
+                    {id(settings_button_press_started_at), id(settings_button_press_mode), id(settings_button_long_press_fired)},
+                    {id(play_pause_button_press_started_at), id(play_pause_button_press_mode), id(play_pause_button_long_press_fired)},
+                };
+                std::string hold_label;
+                if (describe_active_hold(mode, now, holds, id(selected_item_state), id(selected_alarm_arm_mode),
+                                         ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS}, hold_label,
+                                         ctx.hold_progress)) {
+                  ctx.hold_label = hold_label.c_str();
+                }
+
                 ctx.selected_item_name = &id(selected_item_name);
                 ctx.selected_item_state = &id(selected_item_state);
+                ctx.selected_brightness_pct = id(selected_brightness_pct);
+                ctx.last_switch_feedback = &id(last_switch_feedback);
+                ctx.last_switch_interaction = id(last_switch_interaction);
+                ctx.selected_climate_current_temp = id(selected_climate_current_temp);
+                ctx.selected_climate_target_temp = id(selected_climate_target_temp);
+                ctx.selected_climate_target_temp_low = id(selected_climate_target_temp_low);
+                ctx.selected_climate_target_temp_high = id(selected_climate_target_temp_high);
+                ctx.selected_climate_target_humidity = id(selected_climate_target_humidity);
+                ctx.selected_climate_hvac_action = &id(selected_climate_hvac_action);
+                ctx.selected_climate_fan_mode = &id(selected_climate_fan_mode);
+                ctx.selected_climate_preset = &id(selected_climate_preset);
+                ctx.climate_target_focus = id(climate_target_focus);
+                ctx.climate_target_focus_value = id(climate_target_focus_value);
+                ctx.last_climate_target_focus_interaction = id(last_climate_target_focus_interaction);
+                ctx.selected_water_heater_target_temp = id(selected_water_heater_target_temp);
+                ctx.selected_water_heater_mode = &id(selected_water_heater_mode);
+                ctx.selected_water_heater_away = &id(selected_water_heater_away);
+                ctx.selected_humidifier_target_humidity = id(selected_humidifier_target_humidity);
+                ctx.selected_humidifier_current_humidity = id(selected_humidifier_current_humidity);
                 ctx.selected_humidifier_action = &id(selected_humidifier_action);
                 ctx.selected_humidifier_mode = &id(selected_humidifier_mode);
-                ctx.selected_climate_hvac_action = &id(selected_climate_hvac_action);
+                ctx.selected_fan_speed_pct = id(selected_fan_speed_pct);
+                ctx.selected_cover_position_pct = id(selected_cover_position_pct);
+                ctx.last_cover_feedback = &id(last_cover_feedback);
+                ctx.last_cover_interaction = id(last_cover_interaction);
+                ctx.last_lock_feedback = &id(last_lock_feedback);
+                ctx.last_lock_interaction = id(last_lock_interaction);
+                ctx.selected_media_volume_pct = id(selected_media_volume_pct);
                 ctx.selected_media_title = &id(selected_media_title);
                 ctx.selected_media_artist = &id(selected_media_artist);
                 ctx.selected_media_device_class = &id(selected_media_device_class);
                 ctx.selected_media_source = &id(selected_media_source);
-                ctx.selected_water_heater_mode = &id(selected_water_heater_mode);
-                ctx.selected_water_heater_away = &id(selected_water_heater_away);
+                ctx.selected_media_shuffle = &id(selected_media_shuffle);
+                ctx.selected_media_repeat = &id(selected_media_repeat);
+                ctx.selected_media_sound_mode = &id(selected_media_sound_mode);
                 ctx.last_media_power_feedback = &id(last_media_power_feedback);
-                ctx.last_automation_feedback = &id(last_automation_feedback);
-                ctx.last_alarm_feedback = &id(last_alarm_feedback);
-                ctx.last_switch_feedback = &id(last_switch_feedback);
-                ctx.last_lock_feedback = &id(last_lock_feedback);
-                ctx.last_cover_feedback = &id(last_cover_feedback);
-                ctx.selected_weather_condition = &id(selected_weather_condition);
+                ctx.last_media_power_interaction = id(last_media_power_interaction);
                 ctx.selected_sensor_unit = &id(selected_sensor_unit);
-                ctx.selected_setting_detail = &id(selected_setting_detail);
+                ctx.last_automation_feedback = &id(last_automation_feedback);
+                ctx.last_automation_interaction = id(last_automation_interaction);
+                ctx.selected_alarm_arm_mode = id(selected_alarm_arm_mode);
+                ctx.last_alarm_feedback = &id(last_alarm_feedback);
+                ctx.last_alarm_interaction = id(last_alarm_interaction);
+                ctx.last_notification_dismiss_interaction = id(last_notification_dismiss_interaction);
+                ctx.selected_weather_condition = &id(selected_weather_condition);
+                ctx.selected_weather_temperature = id(selected_weather_temperature);
+                ctx.selected_weather_humidity = id(selected_weather_humidity);
+                ctx.selected_weather_high_temp = id(selected_weather_high_temp);
+                ctx.selected_weather_low_temp = id(selected_weather_low_temp);
+                ctx.selected_weather_wind_speed = id(selected_weather_wind_speed);
+                ctx.selected_weather_wind_bearing = id(selected_weather_wind_bearing);
+                ctx.selected_weather_wind_gust_speed = id(selected_weather_wind_gust_speed);
+                ctx.selected_weather_pressure = id(selected_weather_pressure);
+                ctx.selected_weather_precipitation = id(selected_weather_precipitation);
+                ctx.selected_weather_cloud_coverage = id(selected_weather_cloud_coverage);
+                ctx.selected_weather_uv_index = id(selected_weather_uv_index);
+                ctx.selected_weather_dew_point = id(selected_weather_dew_point);
+                ctx.selected_weather_apparent_temperature = id(selected_weather_apparent_temperature);
                 ctx.temperature_unit = "${TEMPERATURE_UNIT}";
-                auto current_time = id(homeassistant_time).now();
-                if (current_time.is_valid()) {
-                  ctx.weather_is_night = current_time.hour < 6 || current_time.hour >= 18;
+                ctx.speed_unit = "${SPEED_UNIT}";
+                ctx.pressure_unit = "${PRESSURE_UNIT}";
+                ctx.precipitation_unit = "${PRECIPITATION_UNIT}";
+
+                // Values that live in the trackers rather than in globals.
+                switch (mode) {
+                  case REMOTE_MODE_LIGHTS:
+                    ctx.light_effect = &selected_light_effect(idx);
+                    break;
+                  case REMOTE_MODE_FANS: {
+                    const std::string &oscillating = fan_oscillating_for_index(idx);
+                    ctx.fan_oscillating = oscillating.empty() ? -1
+                        : (oscillating == "true" || oscillating == "True" || oscillating == "on") ? 1 : 0;
+                    ctx.fan_direction = &fan_direction_for_index(idx);
+                    ctx.fan_preset = &fan_preset_mode_for_index(idx);
+                    break;
+                  }
+                  case REMOTE_MODE_COVERS: {
+                    ctx.cover_has_position = selected_cover_has_position(idx);
+                    float tilt = cover_tilt_sent_recently(now, idx) ? id(pending_cover_tilt_pct) : selected_cover_tilt(idx);
+                    ctx.cover_tilt_pct = isnan(tilt) ? -1 : static_cast<int>(lroundf(tilt));
+                    break;
+                  }
+                  case REMOTE_MODE_AUTOMATION:
+                    ctx.automation_kind = automation_kind(idx);
+                    break;
+                  case REMOTE_MODE_INFO:
+                    ctx.info_index = id(selected_info_index);
+                    populate_remote_info_text(
+                        ctx.info_index, current_time, "${VERSION}", "${DEVICE_NAME}", "${FRIENDLY_NAME}",
+                        ctx.battery_monitoring_available, ctx.battery_percentage, ctx.battery_voltage,
+                        ctx.info_primary_text, ctx.info_secondary_text);
+                    if (wifi::global_wifi_component != nullptr && wifi::global_wifi_component->is_connected()) {
+                      ctx.wifi_rssi = wifi::global_wifi_component->wifi_rssi();
+                    }
+                    break;
+                  default:
+                    break;
                 }
 
-                if (mode == REMOTE_MODE_INFO) {
-                  populate_remote_info_text(
-                      ctx.info_index, current_time, "${VERSION}", "${DEVICE_NAME}", "${FRIENDLY_NAME}",
-                      ctx.battery_monitoring_available, ctx.battery_percentage, ctx.battery_voltage,
-                      ctx.info_primary_text, ctx.info_secondary_text);
-                }
-
-                render_remote_ui(
-                    it, id(tiny_font), id(small_font), id(medium_font), id(symbols), id(medium_symbols),
-                    id(weather_symbols), ctx);
+                render_remote_ui(it, remote_ui_fonts, ctx);
                 it->display();
                 id(updated_ui) = false;
+
+  # Redraws while a protected action (lock, cover, automation, alarm) is held so
+  # the footer's hold bar fills smoothly. Stops by itself on release or once
+  # the action fires.
+  - id: animate_hold_progress
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: |-
+              return (id(primary_button_press_started_at) != 0 && !id(primary_button_long_press_fired)) ||
+                     (id(settings_button_press_started_at) != 0 && !id(settings_button_long_press_fired)) ||
+                     (id(play_pause_button_press_started_at) != 0 && !id(play_pause_button_long_press_fired));
+          then:
+            - lambda: 'id(updated_ui) = true;'
+            - script.execute: update_display
+            - delay: 100ms
+      - lambda: 'id(updated_ui) = true;'
+      - script.execute: update_display
+
+  # Shows a short status message ("ALREADY ON") in the footer.
+  - id: show_toast
+    parameters:
+      text: std::string
+    then:
+      - lambda: |-
+          id(ui_toast_text) = text;
+          id(ui_toast_at) = millis();
+          id(updated_ui) = true;
+      - script.execute: update_display

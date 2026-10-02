@@ -4,12 +4,17 @@ esphome/secrets.yaml and esphome/local_entities.h are per-owner files kept out o
 the repository, but the config will not validate without them. This writes
 throwaway versions from the committed examples and selects a PCB revision.
 
-Usage: prepare_ci_config.py [--pcb pcb_rev31] [--root .]
+Outside CI it refuses to replace existing copies of those files, because git
+cannot restore them. Run it on a scratch copy of the repository (--root), or
+pass --force.
+
+Usage: prepare_ci_config.py [--pcb pcb_rev31] [--root .] [--force]
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import re
 import sys
@@ -21,7 +26,6 @@ wifi_ssid: "ci-build-ssid"
 wifi_password: "ci-build-password"
 # Valid base64 for a 32-byte key so the api encryption schema accepts it.
 encryption_key: "GLFRuKZjuVGxKrEXBKGdEbHrTVLNoOoTNQ7CPHqLPHo="
-ota_password: "ci-build-ota-password"
 alarm_code: "0000"
 web_server_username: "ci-build"
 web_server_password: "ci-build"
@@ -60,10 +64,28 @@ def _select_pcb(settings_path: Path, pcb: str) -> None:
     settings_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
 
 
+def _refuse_to_overwrite(paths: list[Path]) -> None:
+    """Stop before replacing an owner's real files outside CI."""
+    if os.environ.get("CI", "").lower() in ("1", "true"):
+        return
+    existing = [str(path) for path in paths if path.exists()]
+    if existing:
+        raise SystemExit(
+            f"Refusing to overwrite {' and '.join(existing)}: outside CI these hold "
+            "your own credentials and entities, and git cannot restore them. Run this "
+            "on a scratch copy of the repository (--root), or pass --force."
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pcb", choices=PCB_CHOICES, default="pcb_rev31")
     parser.add_argument("--root", type=Path, default=Path("."))
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="replace existing secrets.yaml and local_entities.h even outside CI",
+    )
     args = parser.parse_args()
 
     esphome_dir = args.root / "esphome"
@@ -73,8 +95,13 @@ def main() -> int:
     if not entities_example.is_file():
         raise SystemExit(f"Missing {entities_example}")
 
-    (esphome_dir / "secrets.yaml").write_text(CI_SECRETS, encoding="utf-8")
-    (esphome_dir / "local_entities.h").write_text(
+    secrets_path = esphome_dir / "secrets.yaml"
+    entities_path = esphome_dir / "local_entities.h"
+    if not args.force:
+        _refuse_to_overwrite([secrets_path, entities_path])
+
+    secrets_path.write_text(CI_SECRETS, encoding="utf-8")
+    entities_path.write_text(
         entities_example.read_text(encoding="utf-8"), encoding="utf-8"
     )
     _select_pcb(esphome_dir / "settings.yaml", args.pcb)

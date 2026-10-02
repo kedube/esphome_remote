@@ -4,646 +4,1640 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
-
-#include "remote_ui_logic.h"
+#include <strings.h>
 
 #include "esphome/components/display/display.h"
 #include "esphome/components/font/font.h"
 
 namespace esphome {
 
-static inline const std::string &render_string(const std::string *value) {
+namespace {
+
+using display::Display;
+using display::TextAlign;
+
+const Color ON = display::COLOR_ON;
+const Color OFF = display::COLOR_OFF;
+
+// Screen layout (128x64):
+//   0-8    header: list chip, clock, position dots, battery
+//   12-25  entity name
+//   26-50  hero: badge or graphic on the left, value to its right
+//   53-63  footer: the selected control, button hints, hold progress or a toast
+constexpr int SCREEN_W = 128;
+constexpr int HEADER_H = 9;
+constexpr int NAME_BASELINE = 22;
+constexpr int HERO_CX = 13;
+constexpr int HERO_CY = 38;
+constexpr int HERO_R = 12;
+constexpr int HERO_X = 31;            // left edge of the hero value column
+constexpr int HERO_BASELINE = 48;     // large-font baseline
+constexpr int HERO_WORD_BASELINE = 43;  // title-font baseline for state words
+constexpr int FOOTER_Y = 53;
+constexpr int FOOTER_H = 11;
+
+constexpr uint32_t FEEDBACK_MS = 5000;
+constexpr uint32_t TOAST_MS = 3000;
+
+// Material Symbols Rounded codepoints. Every glyph used here must also be listed
+// for the hero font in remote_fonts.yaml.
+namespace icon {
+const char *const LIGHTBULB = "\ue90f";
+const char *const POWER = "\uf8c7";
+const char *const THERMOSTAT = "\uf076";
+const char *const HEAT = "\uf16a";
+const char *const COOL = "\uf166";
+const char *const HEAT_COOL = "\uf16b";
+const char *const AUTO = "\uf077";
+const char *const DRY = "\ue798";
+const char *const FAN = "\uf168";
+const char *const WATER_HEATER = "\ue284";
+const char *const HUMIDITY = "\uf87e";
+const char *const LOCK = "\ue899";
+const char *const LOCK_OPEN = "\ue898";
+const char *const SPEAKER = "\ue32d";
+const char *const TV = "\ue63b";
+const char *const PLAY = "\ue037";
+const char *const PAUSE = "\ue034";
+const char *const SENSOR = "\ue51e";
+const char *const AUTOMATION = "\uf06c";
+const char *const SCRIPT = "\ue86f";
+const char *const SCENE = "\ue40a";
+const char *const SHIELD = "\ue9e0";
+const char *const SHIELD_ARMED = "\uf013";
+const char *const SHIELD_ALERT = "\uf014";
+const char *const ALL_CLEAR = "\ue2e6";
+const char *const SUNNY = "\ue81a";
+const char *const CLEAR_NIGHT = "\uf159";
+const char *const PARTLY_DAY = "\uf172";
+const char *const PARTLY_NIGHT = "\uf174";
+const char *const CLOUD = "\uf15c";
+const char *const RAIN = "\uf176";
+const char *const STORM = "\uebdb";
+const char *const SNOW = "\ue2cd";
+const char *const FOG = "\ue818";
+const char *const WIND = "\uefd8";
+const char *const HAIL = "\uf67f";
+const char *const CLOCK = "\uefd6";
+const char *const WIFI = "\ue63e";
+const char *const WIFI_OFF = "\ue648";
+const char *const LAN = "\ueb2f";
+const char *const DEVICE = "\ue30d";
+const char *const BATTERY = "\ue1a5";
+const char *const BATTERY_ALERT = "\ue19c";
+const char *const INFO = "\ue88e";
+const char *const RESTART = "\uf053";
+const char *const CLOUD_OFF = "\ue2c1";
+const char *const HOME = "\ue9b2";
+}  // namespace icon
+
+const std::string &str(const std::string *value) {
   static const std::string empty;
   return value != nullptr ? *value : empty;
 }
 
-static inline bool ui_recent_interaction(uint32_t now, uint32_t last_interaction, uint32_t duration_ms) {
-  return last_interaction > 0 && (now - last_interaction) <= duration_ms;
+bool recent(uint32_t now, uint32_t at, uint32_t window_ms) { return at != 0 && now - at <= window_ms; }
+
+bool truthy(const std::string &value) { return value == "on" || value == "true" || value == "True"; }
+
+// ---- Text ------------------------------------------------------------------
+
+// ESPHome's font code reads a whole UTF-8 character once it sees the first
+// byte, so text ending in a character that snprintf or a fixed buffer cut short
+// would make it read past the terminator. Returns text without that tail.
+const char *whole_chars(const char *text, char *buf, size_t size) {
+  size_t len = strlen(text);
+  size_t keep = utf8_complete_length(text, len);
+  if (keep == len) {
+    return text;
+  }
+  keep = utf8_complete_length(text, std::min(keep, size - 1));
+  memcpy(buf, text, keep);
+  buf[keep] = '\0';
+  return buf;
 }
 
-static inline const char *ui_power_state_label(const std::string &raw) {
-  if (raw == "on") return "ON";
-  if (raw == "off") return "OFF";
-  return "SYNCING";
+int text_width(font::Font *font, const char *text) {
+  if (font == nullptr || text == nullptr || text[0] == '\0') {
+    return 0;
+  }
+  char buf[64];
+  int width, x_offset, baseline, height;
+  font->measure(whole_chars(text, buf, sizeof(buf)), &width, &x_offset, &baseline, &height);
+  return width;
 }
 
-static inline void weather_condition_label(const std::string &raw, char *buffer, size_t buffer_size) {
-  remote_state_label_to_buffer(raw, buffer, buffer_size, "SYNCING");
-  for (size_t i = 0; buffer[i] != '\0'; i++) {
-    if (buffer[i] == '-') {
-      buffer[i] = ' ';
+// Returns text unchanged when it fits, otherwise a copy in buf cut at a UTF-8
+// boundary with an ellipsis appended.
+const char *fit_text(font::Font *font, const char *text, int max_width, char *buf, size_t buf_size) {
+  static const char ELLIPSIS[] = "\u2026";
+  if (text_width(font, text) <= max_width || buf_size <= sizeof(ELLIPSIS)) {
+    return text;
+  }
+  size_t len = strnlen(text, buf_size - sizeof(ELLIPSIS));
+  while (len > 0) {
+    len--;
+    while (len > 0 && (static_cast<unsigned char>(text[len]) & 0xC0) == 0x80) {
+      len--;
+    }
+    size_t cut = len;
+    while (cut > 0 && text[cut - 1] == ' ') {
+      cut--;
+    }
+    memcpy(buf, text, cut);
+    memcpy(buf + cut, ELLIPSIS, sizeof(ELLIPSIS));
+    if (text_width(font, buf) <= max_width) {
+      return buf;
     }
   }
-  if (strcmp(buffer, "PARTLYCLOUDY") == 0) {
-    snprintf(buffer, buffer_size, "PARTLY CLOUDY");
-  } else if (strcmp(buffer, "CLEAR NIGHT") == 0) {
-    snprintf(buffer, buffer_size, "CLEAR");
+  memcpy(buf, ELLIPSIS, sizeof(ELLIPSIS));
+  return buf;
+}
+
+void text(Display *it, font::Font *font, int x, int baseline, TextAlign align, const char *value, Color color = ON) {
+  if (font != nullptr && value != nullptr && value[0] != '\0') {
+    char buf[64];
+    it->print(x, baseline, font, color, align, whole_chars(value, buf, sizeof(buf)));
   }
 }
 
-static inline const char *weather_condition_icon(const std::string &raw) {
+// Prints text shortened to max_width.
+void text_fit(Display *it, font::Font *font, int x, int baseline, TextAlign align, const char *value, int max_width,
+              Color color = ON) {
+  char buf[64];
+  text(it, font, x, baseline, align, fit_text(font, value, max_width, buf, sizeof(buf)), color);
+}
+
+// Upper-cases an HA state ("heat_cool" -> "HEAT COOL") into buf.
+const char *label(const std::string &raw, char *buf, size_t size, const char *fallback = "") {
+  remote_state_label_to_buffer(raw, buf, size, fallback);
+  return buf;
+}
+
+// Decodes the character at s. Each continuation byte is checked before the
+// next is read, so a character cut short stops at the terminator.
+uint32_t utf8_codepoint(const char *s) {
+  const auto *p = reinterpret_cast<const uint8_t *>(s);
+  auto cont = [p](int i) { return (p[i] & 0xC0) == 0x80; };
+  if (p[0] < 0x80) return p[0];
+  if ((p[0] & 0xE0) == 0xC0 && cont(1)) return ((p[0] & 0x1F) << 6) | (p[1] & 0x3F);
+  if ((p[0] & 0xF0) == 0xE0 && cont(1) && cont(2)) return ((p[0] & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);
+  if ((p[0] & 0xF8) == 0xF0 && cont(1) && cont(2) && cont(3)) {
+    return ((p[0] & 0x07) << 18) | ((p[1] & 0x3F) << 12) | ((p[2] & 0x3F) << 6) | (p[3] & 0x3F);
+  }
+  return 0xFFFD;  // replacement character: no font here has a glyph for it
+}
+
+// Draws one icon glyph centred on its ink, not its em box, so every icon sits
+// in the middle of a badge regardless of the font's metrics.
+void draw_icon(Display *it, font::Font *font, int cx, int cy, const char *glyph, Color color = ON) {
+  if (font == nullptr || glyph == nullptr) {
+    return;
+  }
+  const font::Glyph *g = font->find_glyph(utf8_codepoint(glyph));
+  if (g == nullptr) {
+    return;
+  }
+  font->print(cx - g->offset_x - g->width / 2, cy - g->offset_y - g->height / 2, it, color, glyph, OFF);
+}
+
+// Prints text that inverts where it crosses the filled part of a bar ending at
+// split_x, so the label stays readable at any fill level.
+void text_over_fill(Display *it, font::Font *font, int x, int baseline, TextAlign align, const char *value, int area_x,
+                    int area_y, int area_w, int area_h, int split_x) {
+  if (split_x > area_x) {
+    it->start_clipping(area_x, area_y, split_x, area_y + area_h);
+    text(it, font, x, baseline, align, value, OFF);
+    it->end_clipping();
+  }
+  if (split_x < area_x + area_w) {
+    it->start_clipping(split_x, area_y, area_x + area_w, area_y + area_h);
+    text(it, font, x, baseline, align, value, ON);
+    it->end_clipping();
+  }
+}
+
+// ---- Shapes ------------------------------------------------------------------
+
+void fill_round_rect(Display *it, int x, int y, int w, int h, Color color = ON) {
+  it->filled_rectangle(x + 1, y, w - 2, h, color);
+  it->vertical_line(x, y + 1, h - 2, color);
+  it->vertical_line(x + w - 1, y + 1, h - 2, color);
+}
+
+void draw_round_rect(Display *it, int x, int y, int w, int h, Color color = ON) {
+  it->horizontal_line(x + 1, y, w - 2, color);
+  it->horizontal_line(x + 1, y + h - 1, w - 2, color);
+  it->vertical_line(x, y + 1, h - 2, color);
+  it->vertical_line(x + w - 1, y + 1, h - 2, color);
+}
+
+void fill_pill(Display *it, int x, int y, int w, int h, Color color = ON) {
+  int r = h / 2;
+  it->filled_circle(x + r, y + r, r, color);
+  it->filled_circle(x + w - 1 - r, y + r, r, color);
+  it->filled_rectangle(x + r, y, w - 2 * r, h, color);
+}
+
+void draw_pill(Display *it, int x, int y, int w, int h) {
+  fill_pill(it, x, y, w, h, ON);
+  fill_pill(it, x + 1, y + 1, w - 2, h - 2, OFF);
+}
+
+// Small left/right arrowheads used for "+/- cycles this" hints.
+void draw_chevron(Display *it, int x, int cy, bool right, Color color = ON) {
+  for (int i = 0; i < 4; i++) {
+    int dx = right ? i : 3 - i;
+    it->vertical_line(x + dx, cy - 3 + i, 7 - 2 * i, color);
+  }
+}
+
+void draw_minus(Display *it, int cx, int cy, Color color = ON) { it->horizontal_line(cx - 2, cy, 5, color); }
+
+void draw_plus(Display *it, int cx, int cy, Color color = ON) {
+  it->horizontal_line(cx - 2, cy, 5, color);
+  it->vertical_line(cx, cy - 2, 5, color);
+}
+
+// Icons of the two physical action buttons, for the footer hints.
+void draw_square_button(Display *it, int x, int cy) { it->rectangle(x, cy - 3, 7, 7, ON); }
+
+void draw_circle_button(Display *it, int cx, int cy) { it->circle(cx, cy, 3, ON); }
+
+// A lit badge means "on/active": the icon is cut out of a filled circle. Off is
+// a thin ring around the outline icon.
+void draw_badge(Display *it, const RemoteUiFonts &f, const char *glyph, bool lit, int cx = HERO_CX,
+                int cy = HERO_CY, int r = HERO_R) {
+  if (lit) {
+    it->filled_circle(cx, cy, r, ON);
+    draw_icon(it, f.hero, cx, cy, glyph, OFF);
+  } else {
+    it->circle(cx, cy, r, ON);
+    draw_icon(it, f.hero, cx, cy, glyph, ON);
+  }
+}
+
+// Inverted label. Returns its width.
+int draw_chip(Display *it, font::Font *font, int x, int y, int h, const char *value, bool filled = true) {
+  int w = text_width(font, value) + 6;
+  int baseline = y + (h + 7) / 2;
+  if (filled) {
+    fill_round_rect(it, x, y, w, h, ON);
+    text(it, font, x + 3, baseline, TextAlign::BASELINE_LEFT, value, OFF);
+  } else {
+    draw_round_rect(it, x, y, w, h, ON);
+    text(it, font, x + 3, baseline, TextAlign::BASELINE_LEFT, value, ON);
+  }
+  return w;
+}
+
+void draw_toggle(Display *it, int x, int y, int w, int h, bool on) {
+  int r = h / 2;
+  if (on) {
+    fill_pill(it, x, y, w, h, ON);
+    it->filled_circle(x + w - 1 - r, y + r, r - 2, OFF);
+  } else {
+    draw_pill(it, x, y, w, h);
+    it->filled_circle(x + r, y + r, r - 2, ON);
+  }
+}
+
+// Horizontal meter with its label printed across it.
+void draw_meter(Display *it, font::Font *font, int x, int y, int w, int h, int percent, const char *value) {
+  percent = std::max(0, std::min(100, percent));
+  draw_round_rect(it, x, y, w, h, ON);
+  int fill = (w - 2) * percent / 100;
+  if (fill > 0) {
+    it->filled_rectangle(x + 1, y + 1, fill, h - 2, ON);
+  }
+  text_over_fill(it, font, x + w / 2, y + (h + 7) / 2, TextAlign::BASELINE_CENTER, value, x, y, w, h, x + 1 + fill);
+}
+
+void draw_battery(Display *it, int x, int y, int percent) {
+  it->rectangle(x, y, 11, 7, ON);
+  it->vertical_line(x + 11, y + 2, 3, ON);
+  int fill = std::max(0, std::min(100, percent)) * 9 / 100;
+  if (fill > 0) {
+    it->filled_rectangle(x + 1, y + 1, fill, 5, ON);
+  }
+}
+
+void draw_signal_bars(Display *it, int x, int bottom, int rssi) {
+  int bars = rssi == 0 ? 0 : rssi >= -55 ? 4 : rssi >= -67 ? 3 : rssi >= -75 ? 2 : 1;
+  for (int i = 0; i < 4; i++) {
+    int h = 3 + i * 2;
+    if (i < bars) {
+      it->filled_rectangle(x + i * 5, bottom - h + 1, 3, h, ON);
+    } else {
+      it->rectangle(x + i * 5, bottom - h + 1, 3, h, ON);
+    }
+  }
+}
+
+// ---- Header ----------------------------------------------------------------------
+
+void draw_header(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  // Right: battery, then the clock. Fixed positions so they never jump around.
+  int right = SCREEN_W;
+  if (ctx.battery_monitoring_available) {
+    right -= 12;
+    draw_battery(it, right, 1, ctx.battery_percentage);
+    right -= 4;
+  }
+  char clock[12] = "";
+  if (ctx.clock_valid) {
+    int hour = ctx.clock_hour % 12;
+    snprintf(clock, sizeof(clock), "%d:%02d", hour == 0 ? 12 : hour, ctx.clock_minute);
+  }
+  int clock_w = text_width(f.tiny, clock);
+
+  // Left: the list chip followed by the position within the list.
+  char pos[24] = "";
+  bool dots = ctx.item_count > 1 && ctx.item_count <= 8;
+  if (ctx.item_count > 8) {
+    snprintf(pos, sizeof(pos), "%d/%d", ctx.item_index + 1, ctx.item_count);
+  }
+  int pos_w = dots ? ctx.item_count * 4 + 3 : (pos[0] != '\0' ? text_width(f.tiny, pos) + 4 : 0);
+  int x = 0;
+  if (ctx.list_title != nullptr && ctx.list_title[0] != '\0') {
+    // A long title takes the clock's space rather than being cut short.
+    int room = right - pos_w - 2;
+    if (clock_w > 0 && text_width(f.tiny, ctx.list_title) + 6 <= room - clock_w - 6) {
+      room -= clock_w + 6;
+    } else {
+      clock_w = 0;
+    }
+    char buf[32];
+    x = draw_chip(it, f.tiny, 0, 0, HEADER_H, fit_text(f.tiny, ctx.list_title, room - 6, buf, sizeof(buf)));
+  }
+  if (dots) {
+    // Current position: a 3x3 block; the others single pixels.
+    for (int i = 0; i < ctx.item_count; i++) {
+      int cx = x + 4 + i * 4;
+      if (i == ctx.item_index) {
+        it->filled_rectangle(cx - 1, 3, 3, 3, ON);
+      } else {
+        it->draw_pixel_at(cx, 4, ON);
+      }
+    }
+  } else if (pos[0] != '\0') {
+    text(it, f.tiny, x + 4, 8, TextAlign::BASELINE_LEFT, pos);
+  }
+  if (clock_w > 0) {
+    text(it, f.tiny, right, 8, TextAlign::BASELINE_RIGHT, clock);
+  }
+}
+
+void draw_name(Display *it, const RemoteUiFonts &f, const char *name) {
+  // Long names drop to the smaller font before they are shortened.
+  if (text_width(f.title, name) <= SCREEN_W) {
+    text(it, f.title, 0, NAME_BASELINE, TextAlign::BASELINE_LEFT, name);
+  } else {
+    text_fit(it, f.small, 0, NAME_BASELINE - 1, TextAlign::BASELINE_LEFT, name, SCREEN_W);
+  }
+}
+
+// ---- Footer ------------------------------------------------------------------------
+
+void footer_toast(Display *it, const RemoteUiFonts &f, const char *message) {
+  fill_round_rect(it, 0, FOOTER_Y, SCREEN_W, FOOTER_H, ON);
+  text_fit(it, f.tiny, SCREEN_W / 2, FOOTER_Y + 9, TextAlign::BASELINE_CENTER, message, SCREEN_W - 6, OFF);
+}
+
+void footer_hold(Display *it, const RemoteUiFonts &f, const char *message, int progress) {
+  draw_meter(it, f.tiny, 0, FOOTER_Y, SCREEN_W, FOOTER_H, progress, message);
+}
+
+// Chip naming the selected setting. Returns the x where the control may start.
+int footer_chip(Display *it, const RemoteUiFonts &f, const char *name) {
+  return draw_chip(it, f.tiny, 0, FOOTER_Y, FOOTER_H, name) + 3;
+}
+
+void footer_range(Display *it, const RemoteUiFonts &f, const char *name, int percent, const char *value) {
+  int x = footer_chip(it, f, name);
+  draw_meter(it, f.tiny, x, FOOTER_Y, SCREEN_W - x, FOOTER_H, percent, value);
+}
+
+// "- value +" for stepped values such as temperatures.
+void footer_stepper(Display *it, const RemoteUiFonts &f, const char *name, const char *value) {
+  int x = footer_chip(it, f, name);
+  int cy = FOOTER_Y + FOOTER_H / 2;
+  draw_minus(it, x + 3, cy);
+  draw_plus(it, SCREEN_W - 4, cy);
+  text_fit(it, f.tiny, (x + SCREEN_W) / 2, FOOTER_Y + 9, TextAlign::BASELINE_CENTER, value, SCREEN_W - x - 16);
+}
+
+// "< value >" for lists the +/- buttons step through.
+void footer_options(Display *it, const RemoteUiFonts &f, const char *name, const char *value) {
+  int x = footer_chip(it, f, name);
+  int cy = FOOTER_Y + FOOTER_H / 2;
+  draw_chevron(it, x + 1, cy, false);
+  draw_chevron(it, SCREEN_W - 5, cy, true);
+  text_fit(it, f.tiny, (x + SCREEN_W) / 2, FOOTER_Y + 9, TextAlign::BASELINE_CENTER,
+           value != nullptr && value[0] != '\0' ? value : "-", SCREEN_W - x - 14);
+}
+
+void footer_toggle(Display *it, const RemoteUiFonts &f, const char *name, bool on) {
+  int x = footer_chip(it, f, name);
+  draw_toggle(it, SCREEN_W - 20, FOOTER_Y + 1, 20, 9, on);
+  text(it, f.tiny, x + 2, FOOTER_Y + 9, TextAlign::BASELINE_LEFT, on ? "ON" : "OFF");
+}
+
+void footer_info(Display *it, const RemoteUiFonts &f, const char *name, const char *value) {
+  int x = footer_chip(it, f, name);
+  text_fit(it, f.tiny, (x + SCREEN_W) / 2, FOOTER_Y + 9, TextAlign::BASELINE_CENTER,
+           value != nullptr && value[0] != '\0' ? value : "-", SCREEN_W - x - 2);
+}
+
+// Labels for the square (left) and circle (right) action buttons. Protected
+// actions say "HOLD" between them, or "HOLD TO ..." when there is one action.
+void footer_hints(Display *it, const RemoteUiFonts &f, const char *square, const char *circle, bool hold) {
+  int cy = FOOTER_Y + FOOTER_H / 2;
+  int baseline = FOOTER_Y + 9;
+  bool has_square = square != nullptr && square[0] != '\0';
+  bool has_circle = circle != nullptr && circle[0] != '\0';
+  char lone[32];
+  if (hold && has_square != has_circle) {
+    snprintf(lone, sizeof(lone), "HOLD TO %s", has_square ? square : circle);
+    if (has_square) {
+      square = lone;
+    } else {
+      circle = lone;
+    }
+    hold = false;
+  }
+  int left_end = 0;
+  int right_start = SCREEN_W;
+  if (has_square) {
+    draw_square_button(it, 1, cy);
+    text(it, f.tiny, 11, baseline, TextAlign::BASELINE_LEFT, square);
+    left_end = 11 + text_width(f.tiny, square);
+  }
+  if (has_circle) {
+    draw_circle_button(it, SCREEN_W - 5, cy);
+    text(it, f.tiny, SCREEN_W - 11, baseline, TextAlign::BASELINE_RIGHT, circle);
+    right_start = SCREEN_W - 11 - text_width(f.tiny, circle);
+  }
+  if (hold && right_start - left_end >= text_width(f.tiny, "HOLD") + 8) {
+    text(it, f.tiny, (left_end + right_start) / 2, baseline, TextAlign::BASELINE_CENTER, "HOLD");
+  }
+}
+
+// Segmented picker, used for the alarm arm mode.
+void footer_segments(Display *it, const RemoteUiFonts &f, const char *const *names, int count, int selected) {
+  int seg_w = SCREEN_W / count;
+  for (int i = 0; i < count; i++) {
+    int x = i * seg_w;
+    int w = i == count - 1 ? SCREEN_W - x : seg_w - 1;
+    if (i == selected) {
+      fill_round_rect(it, x, FOOTER_Y, w, FOOTER_H, ON);
+      text(it, f.tiny, x + w / 2, FOOTER_Y + 9, TextAlign::BASELINE_CENTER, names[i], OFF);
+    } else {
+      draw_round_rect(it, x, FOOTER_Y, w, FOOTER_H, ON);
+      text(it, f.tiny, x + w / 2, FOOTER_Y + 9, TextAlign::BASELINE_CENTER, names[i], ON);
+    }
+  }
+}
+
+// ---- Hero helpers ------------------------------------------------------------------
+
+// True when every character of text has a glyph in font.
+bool has_glyphs(font::Font *font, const char *value) {
+  for (const char *p = value; *p != '\0';) {
+    if (font->find_glyph(utf8_codepoint(p)) == nullptr) {
+      return false;
+    }
+    p++;
+    while ((static_cast<unsigned char>(*p) & 0xC0) == 0x80) {
+      p++;
+    }
+  }
+  return true;
+}
+
+// Big value (digits, %, °, ON/OFF) to the right of the badge. Anything the
+// large font cannot draw falls back to the title font. Returns the right edge.
+int hero_value(Display *it, const RemoteUiFonts &f, const char *value, int x = HERO_X) {
+  if (!has_glyphs(f.large, value)) {
+    text_fit(it, f.title, x, HERO_WORD_BASELINE, TextAlign::BASELINE_LEFT, value, SCREEN_W - x);
+    return x + std::min(text_width(f.title, value), SCREEN_W - x);
+  }
+  text(it, f.large, x, HERO_BASELINE, TextAlign::BASELINE_LEFT, value);
+  return x + text_width(f.large, value);
+}
+
+void hero_word(Display *it, const RemoteUiFonts &f, const char *value, int x = HERO_X) {
+  text_fit(it, f.title, x, HERO_WORD_BASELINE, TextAlign::BASELINE_LEFT, value, SCREEN_W - x);
+}
+
+// Small caption stacked in the hero's right-hand column.
+void hero_caption(Display *it, const RemoteUiFonts &f, int baseline, const char *value, int min_x = HERO_X) {
+  text_fit(it, f.tiny, SCREEN_W, baseline, TextAlign::BASELINE_RIGHT, value, SCREEN_W - min_x);
+}
+
+// Status chip in the hero's top-right corner: filled while the device is
+// actively working, outlined while idle.
+void hero_status_chip(Display *it, const RemoteUiFonts &f, const char *value, bool active, int min_x) {
+  // Needs room for a few letters; a long label is shortened rather than dropped.
+  if (value == nullptr || value[0] == '\0' || SCREEN_W - min_x < 24) {
+    return;
+  }
+  char buf[24];
+  const char *shown = fit_text(f.tiny, value, SCREEN_W - min_x - 6, buf, sizeof(buf));
+  int w = text_width(f.tiny, shown) + 6;
+  draw_chip(it, f.tiny, SCREEN_W - w, 26, 10, shown, active);
+}
+
+// "SET 71°" in the hero's bottom-right corner, clear of the value ending at
+// min_x: the "SET" label goes first when space runs out.
+void hero_setpoint(Display *it, const RemoteUiFonts &f, const char *value, int min_x) {
+  int value_w = text_width(f.title, value);
+  if (SCREEN_W - value_w < min_x) {
+    return;
+  }
+  text(it, f.title, SCREEN_W, HERO_BASELINE, TextAlign::BASELINE_RIGHT, value);
+  if (SCREEN_W - value_w - 2 - text_width(f.tiny, "SET") >= min_x) {
+    text(it, f.tiny, SCREEN_W - value_w - 2, HERO_BASELINE, TextAlign::BASELINE_RIGHT, "SET");
+  }
+}
+
+void format_temp(char *buf, size_t size, float value) {
+  if (std::isnan(value)) {
+    snprintf(buf, size, "--°");
+  } else {
+    snprintf(buf, size, "%.0f°", value);
+  }
+}
+
+// The large text for an item without a usable state: Home Assistant reports
+// it unavailable, or hasn't sent it yet.
+const char *missing_word(const std::string &state) { return state == "unavailable" ? "UNAVAILABLE" : "SYNCING"; }
+
+// A setpoint's number. Celsius thermostats step by 0.5, so a half degree stays
+// ("21.5"); whole degrees print as "71".
+const char *setpoint_number(char *buf, size_t size, float value) {
+  bool whole = std::fabs(value - std::round(value)) < 0.05f;
+  snprintf(buf, size, whole ? "%.0f" : "%.1f", value);
+  return buf;
+}
+
+void format_setpoint(char *buf, size_t size, float value) {
+  if (std::isnan(value)) {
+    snprintf(buf, size, "--°");
+  } else {
+    char number[12];
+    snprintf(buf, size, "%s°", setpoint_number(number, sizeof(number), value));
+  }
+}
+
+// Footer text for a reading: "--" until Home Assistant has sent it.
+const char *or_dash(float reading, const char *formatted) { return std::isfinite(reading) ? formatted : "--"; }
+
+// Meter fill for a reading: empty until Home Assistant has sent it.
+int meter_percent(float reading) {
+  return std::isfinite(reading) ? static_cast<int>(std::clamp(reading, 0.0f, 100.0f)) : 0;
+}
+
+// ---- Footer state shared by every mode ----------------------------------------------
+
+// Hold progress, contrast, action feedback and status messages take the
+// footer over from the mode's own control. Returns true when one was drawn.
+bool draw_footer_overlay(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx, const char *feedback) {
+  if (ctx.hold_progress >= 0 && ctx.hold_label != nullptr) {
+    footer_hold(it, f, ctx.hold_label, ctx.hold_progress);
+    return true;
+  }
+  if (recent(ctx.now, ctx.last_contrast_interaction, FEEDBACK_MS)) {
+    char value[12];
+    snprintf(value, sizeof(value), "%d%%", ctx.contrast * 10);
+    footer_range(it, f, "CONTRAST", ctx.contrast * 10, value);
+    return true;
+  }
+  if (feedback != nullptr && feedback[0] != '\0') {
+    footer_toast(it, f, feedback);
+    return true;
+  }
+  if (recent(ctx.now, ctx.toast_at, TOAST_MS) && !str(ctx.toast_text).empty()) {
+    footer_toast(it, f, ctx.toast_text->c_str());
+    return true;
+  }
+  return false;
+}
+
+// Returns a domain's feedback text when it is still fresh.
+const char *fresh_feedback(const RemoteRenderContext &ctx, const std::string *feedback, uint32_t at, char *buf,
+                           size_t size) {
+  if (!recent(ctx.now, at, FEEDBACK_MS) || str(feedback).empty()) {
+    return nullptr;
+  }
+  return label(*feedback, buf, size);
+}
+
+// The footer control for the selected setting.
+void draw_setting_footer(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  auto option = static_cast<RemoteSettingOption>(ctx.selected_setting_option);
+  const std::string &detail = str(ctx.selected_setting_detail);
+  // The value just sent while it is fresh, otherwise what the entity reports.
+  auto pending_or = [&detail](const std::string *reported) -> const std::string & {
+    return detail.empty() ? str(reported) : detail;
+  };
+  char value[48];
+  char upper[48];
+  const char *t = ctx.temperature_unit;
+  switch (option) {
+    case REMOTE_SETTING_LIGHT_DIMMER:
+      // 0 while on: just turned on, at a level Home Assistant hasn't reported yet.
+      snprintf(value, sizeof(value), "%d%%", ctx.selected_brightness_pct);
+      footer_range(it, f, "BRIGHTNESS", ctx.selected_brightness_pct, ctx.selected_brightness_pct > 0 ? value : "--");
+      break;
+    case REMOTE_SETTING_LIGHT_EFFECT:
+      footer_options(it, f, "EFFECT", label(pending_or(ctx.light_effect), upper, sizeof(upper), "NONE"));
+      break;
+    case REMOTE_SETTING_CLIMATE_LOW:
+    case REMOTE_SETTING_CLIMATE_HIGH: {
+      bool high = option == REMOTE_SETTING_CLIMATE_HIGH;
+      float v = high ? ctx.selected_climate_target_temp_high : ctx.selected_climate_target_temp_low;
+      if (ctx.climate_target_focus == (high ? 2 : 1) && !std::isnan(ctx.climate_target_focus_value)) {
+        v = ctx.climate_target_focus_value;
+      }
+      char number[12];
+      snprintf(value, sizeof(value), "%s°%s", setpoint_number(number, sizeof(number), v), t);
+      footer_stepper(it, f, high ? "HIGH" : "LOW", std::isnan(v) ? "--" : value);
+      break;
+    }
+    case REMOTE_SETTING_CLIMATE_TARGET: {
+      float v = ctx.climate_target_focus != 0 && !std::isnan(ctx.climate_target_focus_value)
+                    ? ctx.climate_target_focus_value
+                    : ctx.selected_climate_target_temp;
+      char number[12];
+      snprintf(value, sizeof(value), "%s°%s", setpoint_number(number, sizeof(number), v), t);
+      footer_stepper(it, f, "TARGET", std::isnan(v) ? "--" : value);
+      break;
+    }
+    case REMOTE_SETTING_CLIMATE_FAN:
+      footer_options(it, f, "FAN", label(str(ctx.selected_climate_fan_mode), upper, sizeof(upper)));
+      break;
+    case REMOTE_SETTING_CLIMATE_HUMIDITY:
+      snprintf(value, sizeof(value), "%.0f%%", ctx.selected_climate_target_humidity);
+      footer_range(it, f, "HUMIDITY", meter_percent(ctx.selected_climate_target_humidity),
+                   or_dash(ctx.selected_climate_target_humidity, value));
+      break;
+    case REMOTE_SETTING_CLIMATE_PRESETS:
+      footer_options(it, f, "PRESET", label(str(ctx.selected_climate_preset), upper, sizeof(upper), "NONE"));
+      break;
+    case REMOTE_SETTING_CLIMATE_ACTION:
+      footer_info(it, f, "STATUS", label(str(ctx.selected_climate_hvac_action), upper, sizeof(upper)));
+      break;
+    case REMOTE_SETTING_CLIMATE_STATE:
+    case REMOTE_SETTING_CLIMATE_HVAC_MODE:
+      footer_info(it, f, "MODE", label(str(ctx.selected_item_state), upper, sizeof(upper), "SYNCING"));
+      break;
+    case REMOTE_SETTING_HUMIDIFIER_HUMIDITY:
+      snprintf(value, sizeof(value), "%.0f%%", ctx.selected_humidifier_target_humidity);
+      footer_range(it, f, "TARGET", meter_percent(ctx.selected_humidifier_target_humidity),
+                   or_dash(ctx.selected_humidifier_target_humidity, value));
+      break;
+    case REMOTE_SETTING_HUMIDIFIER_MODE:
+      footer_options(it, f, "MODE", label(str(ctx.selected_humidifier_mode), upper, sizeof(upper)));
+      break;
+    case REMOTE_SETTING_HUMIDIFIER_ACTION:
+      footer_info(it, f, "STATUS", label(str(ctx.selected_humidifier_action), upper, sizeof(upper)));
+      break;
+    case REMOTE_SETTING_HUMIDIFIER_STATE:
+      footer_info(it, f, "POWER", label(str(ctx.selected_item_state), upper, sizeof(upper), "SYNCING"));
+      break;
+    case REMOTE_SETTING_FAN_SPEED:
+      snprintf(value, sizeof(value), "%d%%", ctx.selected_fan_speed_pct);
+      footer_range(it, f, "SPEED", ctx.selected_fan_speed_pct, value);
+      break;
+    case REMOTE_SETTING_FAN_PRESETS:
+      footer_options(it, f, "PRESET", label(pending_or(ctx.fan_preset), upper, sizeof(upper), "NONE"));
+      break;
+    case REMOTE_SETTING_FAN_OSCILLATE:
+      footer_toggle(it, f, "OSCILLATE", detail.empty() ? ctx.fan_oscillating == 1 : detail == "ON");
+      break;
+    case REMOTE_SETTING_FAN_DIRECTION:
+      footer_options(it, f, "DIRECTION", label(pending_or(ctx.fan_direction), upper, sizeof(upper)));
+      break;
+    case REMOTE_SETTING_COVER_POSITION:
+      snprintf(value, sizeof(value), "%d%%", ctx.selected_cover_position_pct);
+      footer_range(it, f, "POSITION", ctx.selected_cover_position_pct, value);
+      break;
+    case REMOTE_SETTING_COVER_TILT:
+      snprintf(value, sizeof(value), "%d%%", std::max(0, ctx.cover_tilt_pct));
+      footer_range(it, f, "TILT", std::max(0, ctx.cover_tilt_pct), ctx.cover_tilt_pct < 0 ? "--" : value);
+      break;
+    case REMOTE_SETTING_MEDIA_SELECT:
+      footer_options(it, f, "TRACK", "PREV  /  NEXT");
+      break;
+    case REMOTE_SETTING_MEDIA_CHANNEL:
+      footer_options(it, f, "CHANNEL", "DOWN  /  UP");
+      break;
+    case REMOTE_SETTING_MEDIA_VOLUME:
+      // -1: the player reports no volume (it is off, or hasn't synced).
+      snprintf(value, sizeof(value), "%d%%", ctx.selected_media_volume_pct);
+      footer_range(it, f, "VOLUME", std::max(ctx.selected_media_volume_pct, 0),
+                   ctx.selected_media_volume_pct < 0 ? "--" : value);
+      break;
+    case REMOTE_SETTING_MEDIA_SHUFFLE:
+      footer_toggle(it, f, "SHUFFLE", truthy(str(ctx.selected_media_shuffle)));
+      break;
+    case REMOTE_SETTING_MEDIA_SOURCE:
+      footer_options(it, f, "SOURCE", label(str(ctx.selected_media_source), upper, sizeof(upper), "-"));
+      break;
+    case REMOTE_SETTING_MEDIA_REPEAT:
+      footer_options(it, f, "REPEAT", label(str(ctx.selected_media_repeat), upper, sizeof(upper)));
+      break;
+    case REMOTE_SETTING_MEDIA_SOUND:
+      footer_options(it, f, "SOUND", label(str(ctx.selected_media_sound_mode), upper, sizeof(upper)));
+      break;
+    case REMOTE_SETTING_MEDIA_STATE:
+      footer_info(it, f, "STATE", label(str(ctx.selected_item_state), upper, sizeof(upper), "SYNCING"));
+      break;
+    case REMOTE_SETTING_ALARM_STATE: {
+      static const char *const MODES[] = {"AWAY", "HOME", "NIGHT", "VAC"};
+      footer_segments(it, f, MODES, ALARM_ARM_MODE_COUNT, clamp_alarm_arm_mode(ctx.selected_alarm_arm_mode));
+      break;
+    }
+    case REMOTE_SETTING_WATER_HEATER_TARGET: {
+      char number[12];
+      snprintf(value, sizeof(value), "%s°%s",
+               setpoint_number(number, sizeof(number), ctx.selected_water_heater_target_temp), t);
+      footer_stepper(it, f, "TARGET", std::isnan(ctx.selected_water_heater_target_temp) ? "--" : value);
+      break;
+    }
+    case REMOTE_SETTING_WATER_HEATER_MODE:
+      footer_options(it, f, "MODE", label(str(ctx.selected_water_heater_mode), upper, sizeof(upper)));
+      break;
+    case REMOTE_SETTING_WATER_HEATER_AWAY:
+      footer_toggle(it, f, "AWAY", truthy(str(ctx.selected_water_heater_away)));
+      break;
+    default:
+      break;
+  }
+}
+
+// ---- Modes ---------------------------------------------------------------------------
+
+void render_light(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  bool on = state == "on";
+  draw_badge(it, f, icon::LIGHTBULB, on);
+  int value_right = 0;
+  if (ha_state_missing(state)) {
+    hero_word(it, f, missing_word(state));
+  } else if (!on) {
+    hero_value(it, f, "OFF");
+  } else if (ctx.selected_brightness_pct > 0) {
+    char value[12];
+    snprintf(value, sizeof(value), "%d%%", ctx.selected_brightness_pct);
+    value_right = hero_value(it, f, value);
+  } else {
+    value_right = hero_value(it, f, "ON");
+  }
+  // The active effect, when it fits beside the value and is not already the
+  // footer's subject.
+  const std::string &effect = str(ctx.light_effect);
+  if (value_right > 0 && !effect.empty() && effect != "none" && effect != "None" &&
+      ctx.selected_setting_option != REMOTE_SETTING_LIGHT_EFFECT) {
+    char buf[32];
+    label(effect, buf, sizeof(buf));
+    if (text_width(f.tiny, buf) <= SCREEN_W - value_right - 4) {
+      hero_caption(it, f, 33, buf, value_right + 4);
+    }
+  }
+  if (draw_footer_overlay(it, f, ctx, nullptr)) {
+    return;
+  }
+  if (on && ctx.selected_setting_option != REMOTE_SETTING_NONE) {
+    draw_setting_footer(it, f, ctx);
+  } else {
+    footer_hints(it, f, "OFF", "ON", false);
+  }
+}
+
+void render_switch(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  bool on = state == "on";
+  // A big toggle stands in for the badge: switches have nothing else to show.
+  if (ha_state_missing(state)) {
+    draw_pill(it, 0, 29, 36, 18);
+    hero_word(it, f, missing_word(state), 42);
+  } else if (state == "turning_on" || state == "turning_off") {
+    // Sent, not yet confirmed: the toggle shows where it is going.
+    bool turning_on = state == "turning_on";
+    draw_toggle(it, 0, 29, 36, 18, turning_on);
+    hero_word(it, f, turning_on ? "TURNING ON" : "TURNING OFF", 42);
+  } else {
+    draw_toggle(it, 0, 29, 36, 18, on);
+    hero_value(it, f, on ? "ON" : "OFF", 42);
+  }
+  char buf[32];
+  if (draw_footer_overlay(it, f, ctx,
+                          fresh_feedback(ctx, ctx.last_switch_feedback, ctx.last_switch_interaction, buf, sizeof(buf)))) {
+    return;
+  }
+  footer_hints(it, f, "OFF", "ON", false);
+}
+
+const char *climate_mode_icon(const std::string &mode) {
+  if (mode == "heat") return icon::HEAT;
+  if (mode == "cool") return icon::COOL;
+  if (mode == "heat_cool") return icon::HEAT_COOL;
+  if (mode == "auto") return icon::AUTO;
+  if (mode == "dry") return icon::DRY;
+  if (mode == "fan_only") return icon::FAN;
+  return icon::THERMOSTAT;
+}
+
+void render_climate(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &mode = str(ctx.selected_item_state);
+  const std::string &action = str(ctx.selected_climate_hvac_action);
+  bool off = mode == "off";
+  draw_badge(it, f, climate_mode_icon(mode), !off && !ha_state_missing(mode));
+
+  if (ha_state_missing(mode) && (mode == "unavailable" || std::isnan(ctx.selected_climate_current_temp))) {
+    hero_word(it, f, missing_word(mode));
+    if (!draw_footer_overlay(it, f, ctx, nullptr)) {
+      draw_setting_footer(it, f, ctx);
+    }
+    return;
+  }
+  char current[12];
+  format_temp(current, sizeof(current), ctx.selected_climate_current_temp);
+  int value_right = hero_value(it, f, current);
+
+  // The badge shows the mode; the chip what the system is doing right now.
+  char status[16];
+  label(action.empty() || ha_state_missing(action) ? mode : action, status, sizeof(status), "SYNCING");
+  // The tracker upper-cases hvac_action ("IDLE"); compare without case.
+  bool running = !action.empty() && strcasecmp(action.c_str(), "idle") != 0 &&
+                 strcasecmp(action.c_str(), "off") != 0 && !ha_state_missing(action);
+  hero_status_chip(it, f, status, running, value_right + 3);
+
+  bool focus = recent(ctx.now, ctx.last_climate_target_focus_interaction, FEEDBACK_MS) && ctx.climate_target_focus != 0 &&
+               !std::isnan(ctx.climate_target_focus_value);
+  bool dual = remote_ui_has_dual_climate_target(mode, ctx.selected_climate_target_temp_low,
+                                                ctx.selected_climate_target_temp_high);
+  char target[24];
+  if (dual) {
+    float low = focus && ctx.climate_target_focus == 1 ? ctx.climate_target_focus_value : ctx.selected_climate_target_temp_low;
+    float high = focus && ctx.climate_target_focus == 2 ? ctx.climate_target_focus_value : ctx.selected_climate_target_temp_high;
+    char low_text[12];
+    char high_text[12];
+    snprintf(target, sizeof(target), "%s-%s°", setpoint_number(low_text, sizeof(low_text), low),
+             setpoint_number(high_text, sizeof(high_text), high));
+    // Half degrees can make a range too wide to sit beside the reading.
+    if (text_width(f.title, target) > SCREEN_W - value_right - 4) {
+      snprintf(target, sizeof(target), "%.0f-%.0f°", low, high);
+    }
+  } else {
+    float value = focus ? ctx.climate_target_focus_value : ctx.selected_climate_target_temp;
+    format_setpoint(target, sizeof(target), value);
+  }
+  if (!off && (dual || !std::isnan(ctx.selected_climate_target_temp))) {
+    hero_setpoint(it, f, target, value_right + 4);
+  }
+
+  if (draw_footer_overlay(it, f, ctx, nullptr)) {
+    return;
+  }
+  draw_setting_footer(it, f, ctx);
+}
+
+void render_water_heater(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  bool on = !ha_state_missing(state) && state != "off";
+  draw_badge(it, f, icon::WATER_HEATER, on);
+  char target[12];
+  format_setpoint(target, sizeof(target), ctx.selected_water_heater_target_temp);
+  int value_right = HERO_X + 40;
+  if (state == "unavailable") {
+    hero_word(it, f, missing_word(state));
+  } else {
+    value_right = hero_value(it, f, target);
+  }
+  char mode[24];
+  label(str(ctx.selected_water_heater_mode), mode, sizeof(mode), on ? "ON" : "OFF");
+  hero_status_chip(it, f, mode, on, value_right + 3);
+  if (truthy(str(ctx.selected_water_heater_away))) {
+    hero_caption(it, f, HERO_BASELINE, "AWAY", 90);
+  }
+  if (draw_footer_overlay(it, f, ctx, nullptr)) {
+    return;
+  }
+  if (ctx.selected_setting_option != REMOTE_SETTING_NONE) {
+    draw_setting_footer(it, f, ctx);
+  } else {
+    footer_hints(it, f, "OFF", "ON", false);
+  }
+}
+
+void render_humidifier(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  bool on = state == "on";
+  draw_badge(it, f, icon::HUMIDITY, on);
+  // The big value is the room's humidity; the target goes in the corner with
+  // SET, so the two can't be mistaken for each other. A humidifier without a
+  // sensor shows ON/OFF instead.
+  char value[12];
+  int value_right = HERO_X + 40;
+  if (std::isnan(ctx.selected_humidifier_current_humidity) || state == "unavailable") {
+    hero_word(it, f, ha_state_missing(state) ? missing_word(state) : (on ? "ON" : "OFF"));
+  } else {
+    snprintf(value, sizeof(value), "%.0f%%", ctx.selected_humidifier_current_humidity);
+    value_right = hero_value(it, f, value);
+  }
+  if (!std::isnan(ctx.selected_humidifier_target_humidity)) {
+    char target[12];
+    snprintf(target, sizeof(target), "%.0f%%", ctx.selected_humidifier_target_humidity);
+    hero_setpoint(it, f, target, value_right + 4);
+  }
+  // HA reports humidifying/drying/idle/off; "HUMIDIFYING" is too wide for the chip.
+  const std::string &action = str(ctx.selected_humidifier_action);
+  char status[16];
+  if (action == "humidifying") {
+    snprintf(status, sizeof(status), "ACTIVE");
+  } else {
+    label(action.empty() || ha_state_missing(action) ? state : action, status, sizeof(status));
+  }
+  hero_status_chip(it, f, status, action == "humidifying" || action == "drying", value_right + 3);
+  if (draw_footer_overlay(it, f, ctx, nullptr)) {
+    return;
+  }
+  draw_setting_footer(it, f, ctx);
+}
+
+void render_fan(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  bool on = state == "on";
+  draw_badge(it, f, icon::FAN, on);
+  if (ha_state_missing(state)) {
+    hero_word(it, f, missing_word(state));
+  } else if (on && ctx.selected_fan_speed_pct > 0) {
+    char value[12];
+    snprintf(value, sizeof(value), "%d%%", ctx.selected_fan_speed_pct);
+    hero_value(it, f, value);
+  } else {
+    hero_value(it, f, on ? "ON" : "OFF");
+  }
+  // Speed steps, tallest last, lit up to the current speed.
+  int lit = on ? (ctx.selected_fan_speed_pct + 19) / 20 : 0;
+  for (int i = 0; i < 5; i++) {
+    int h = 4 + i * 3;
+    int x = SCREEN_W - 25 + i * 5;
+    if (i < lit) {
+      it->filled_rectangle(x, HERO_BASELINE - h, 4, h, ON);
+    } else {
+      it->rectangle(x, HERO_BASELINE - h, 4, h, ON);
+    }
+  }
+  if (on && ctx.fan_oscillating == 1) {
+    hero_caption(it, f, 31, "OSC", 100);
+  }
+  if (draw_footer_overlay(it, f, ctx, nullptr)) {
+    return;
+  }
+  if (on && ctx.selected_setting_option != REMOTE_SETTING_NONE) {
+    draw_setting_footer(it, f, ctx);
+  } else {
+    footer_hints(it, f, "OFF", "ON", false);
+  }
+}
+
+// A window with the shade drawn down to the current position.
+void draw_cover(Display *it, int position, bool known) {
+  const int x = 2, y = 26, w = 22, h = 25;
+  it->rectangle(x, y, w, h, ON);
+  it->horizontal_line(x - 1, y, w + 2, ON);
+  int inner = h - 2;
+  int covered = known ? inner * (100 - std::max(0, std::min(100, position))) / 100 : inner / 2;
+  for (int row = 0; row < covered; row += 2) {
+    it->horizontal_line(x + 1, y + 1 + row, w - 2, ON);
+  }
+  if (covered > 0) {
+    it->horizontal_line(x + 1, y + covered, w - 2, ON);
+    it->filled_rectangle(x + w / 2 - 1, y + covered + 1, 3, 2, ON);  // pull handle
+  }
+}
+
+void render_cover(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  bool known = ctx.cover_has_position;
+  int position = known ? ctx.selected_cover_position_pct : (state == "open" ? 100 : 0);
+  draw_cover(it, position, known || state == "open" || state == "closed");
+  char word[16];
+  label(state, word, sizeof(word), "SYNCING");
+  if (known && !ha_state_missing(state)) {
+    char value[12];
+    snprintf(value, sizeof(value), "%d%%", ctx.selected_cover_position_pct);
+    int value_right = hero_value(it, f, value);
+    hero_caption(it, f, 33, word, value_right + 4);
+  } else {
+    hero_word(it, f, word);
+  }
+  char buf[32];
+  if (draw_footer_overlay(it, f, ctx,
+                          fresh_feedback(ctx, ctx.last_cover_feedback, ctx.last_cover_interaction, buf, sizeof(buf)))) {
+    return;
+  }
+  if (ctx.selected_setting_option != REMOTE_SETTING_NONE) {
+    draw_setting_footer(it, f, ctx);
+  } else {
+    footer_hints(it, f, "CLOSE", "OPEN", true);
+  }
+}
+
+void render_lock(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  bool locked = state == "locked";
+  draw_badge(it, f, locked || state == "locking" ? icon::LOCK : icon::LOCK_OPEN, locked);
+  char word[16];
+  hero_word(it, f, label(state, word, sizeof(word), "SYNCING"));
+  char buf[32];
+  if (draw_footer_overlay(it, f, ctx,
+                          fresh_feedback(ctx, ctx.last_lock_feedback, ctx.last_lock_interaction, buf, sizeof(buf)))) {
+    return;
+  }
+  footer_hints(it, f, "UNLOCK", "LOCK", true);
+}
+
+void render_media(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  const std::string &device_class = str(ctx.selected_media_device_class);
+  bool is_tv = device_class == "tv" || device_class == "receiver";
+  bool on = !ha_state_missing(state) && state != "off" && state != "standby";
+  if (is_tv) {
+    draw_badge(it, f, icon::TV, on);
+    if (ha_state_missing(state)) {
+      hero_word(it, f, missing_word(state));
+    } else {
+      hero_value(it, f, on ? "ON" : "OFF");
+    }
+    char source[32];
+    if (on && !str(ctx.selected_media_source).empty()) {
+      hero_caption(it, f, 33, label(*ctx.selected_media_source, source, sizeof(source)), 84);
+    }
+  } else {
+    const char *badge = state == "playing" ? icon::PLAY : state == "paused" ? icon::PAUSE : icon::SPEAKER;
+    draw_badge(it, f, badge, state == "playing");
+    const std::string &title = str(ctx.selected_media_title);
+    const std::string &artist = str(ctx.selected_media_artist);
+    if (!title.empty()) {
+      text_fit(it, f.small, HERO_X, 36, TextAlign::BASELINE_LEFT, title.c_str(), SCREEN_W - HERO_X);
+      if (!artist.empty()) {
+        text_fit(it, f.tiny, HERO_X, 47, TextAlign::BASELINE_LEFT, artist.c_str(), SCREEN_W - HERO_X);
+      }
+    } else {
+      char word[16];
+      hero_word(it, f, label(state, word, sizeof(word), "SYNCING"));
+    }
+  }
+  const char *feedback = nullptr;
+  char buf[32];
+  if (!is_tv) {
+    feedback = fresh_feedback(ctx, ctx.last_media_power_feedback, ctx.last_media_power_interaction, buf, sizeof(buf));
+  }
+  if (draw_footer_overlay(it, f, ctx, feedback)) {
+    return;
+  }
+  draw_setting_footer(it, f, ctx);
+}
+
+void render_sensor(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  const std::string &unit = str(ctx.selected_sensor_unit);
+  bool binary = state == "on" || state == "off";
+  draw_badge(it, f, icon::SENSOR, state == "on");
+  if (ha_state_missing(state)) {
+    hero_word(it, f, missing_word(state));
+  } else if (binary) {
+    hero_value(it, f, state == "on" ? "ON" : "OFF");
+  } else {
+    // Numbers go big when they fit beside the unit; anything else is a word.
+    bool numeric = strspn(state.c_str(), "0123456789.-") == state.size();
+    int unit_w = text_width(f.small, unit.c_str());
+    int room = SCREEN_W - HERO_X - (unit_w > 0 ? unit_w + 2 : 0);
+    if (numeric && text_width(f.large, state.c_str()) <= room) {
+      int right = hero_value(it, f, state.c_str());
+      text(it, f.small, right + 2, HERO_BASELINE, TextAlign::BASELINE_LEFT, unit.c_str());
+    } else {
+      char value[48];
+      snprintf(value, sizeof(value), "%s%s%s", state.c_str(), unit.empty() ? "" : " ", unit.c_str());
+      hero_word(it, f, value);
+    }
+  }
+  draw_footer_overlay(it, f, ctx, nullptr);
+}
+
+void render_automation(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const char *glyph = icon::SCRIPT;
+  const char *kind = "SCRIPT";
+  if (ctx.automation_kind == AUTOMATION_KIND_AUTOMATION) {
+    glyph = icon::AUTOMATION;
+    kind = "AUTOMATION";
+  } else if (ctx.automation_kind == AUTOMATION_KIND_SCENE) {
+    glyph = icon::SCENE;
+    kind = "SCENE";
+  }
+  const std::string &state = str(ctx.selected_item_state);
+  bool running = state == "on" && ctx.automation_kind == AUTOMATION_KIND_SCRIPT;
+  draw_badge(it, f, glyph, running);
+  draw_chip(it, f.tiny, HERO_X, 27, 10, kind, false);
+  char word[16];
+  if (ctx.automation_kind == AUTOMATION_KIND_AUTOMATION) {
+    snprintf(word, sizeof(word), "%s", state == "off" ? "DISABLED" : "ENABLED");
+  } else {
+    snprintf(word, sizeof(word), "%s", running ? "RUNNING" : "READY");
+  }
+  text(it, f.title, HERO_X, 50, TextAlign::BASELINE_LEFT, ha_state_missing(state) ? missing_word(state) : word);
+  char buf[32];
+  if (draw_footer_overlay(it, f, ctx,
+                          fresh_feedback(ctx, ctx.last_automation_feedback, ctx.last_automation_interaction, buf,
+                                         sizeof(buf)))) {
+    return;
+  }
+  footer_hints(it, f, nullptr, "RUN", true);
+}
+
+void render_alarm(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  bool triggered = state == "triggered";
+  bool armed = state.rfind("armed", 0) == 0;
+  draw_badge(it, f, triggered ? icon::SHIELD_ALERT : armed ? icon::SHIELD_ARMED : icon::SHIELD, armed || triggered);
+  char word[24];
+  hero_word(it, f, label(state, word, sizeof(word), "SYNCING"));
+  char buf[32];
+  if (draw_footer_overlay(it, f, ctx,
+                          fresh_feedback(ctx, ctx.last_alarm_feedback, ctx.last_alarm_interaction, buf, sizeof(buf)))) {
+    return;
+  }
+  if (ctx.selected_setting_option == REMOTE_SETTING_ALARM_STATE) {
+    draw_setting_footer(it, f, ctx);
+  } else {
+    footer_hints(it, f, "DISARM", "ARM", true);
+  }
+}
+
+// Word-wraps a notification into up to max_lines lines; the last line is
+// shortened with an ellipsis when the message does not fit.
+void draw_wrapped(Display *it, font::Font *font, const char *message, int first_baseline, int line_height,
+                  int max_lines) {
+  const char *p = message;
+  for (int line = 0; line < max_lines && *p != '\0'; line++) {
+    while (*p == ' ' || *p == '\n') {
+      p++;
+    }
+    // Take whole words while they fit.
+    char row[96];
+    size_t row_len = 0;
+    const char *scan = p;
+    const char *row_end = p;
+    while (*scan != '\0' && *scan != '\n') {
+      const char *word_end = scan;
+      while (*word_end != '\0' && *word_end != ' ' && *word_end != '\n') {
+        word_end++;
+      }
+      size_t take = word_end - p;
+      if (take >= sizeof(row)) {
+        break;
+      }
+      memcpy(row, p, take);
+      row[take] = '\0';
+      if (text_width(font, row) > SCREEN_W && row_end != p) {
+        break;
+      }
+      row_end = word_end;
+      row_len = take;
+      scan = word_end;
+      while (*scan == ' ') {
+        scan++;
+      }
+    }
+    if (row_end == p) {
+      // A single word wider than the screen: let fit_text cut it.
+      row_len = std::min(strcspn(p, " \n"), sizeof(row) - 1);
+      row_end = p + row_len;
+    }
+    memcpy(row, p, row_len);
+    row[row_len] = '\0';
+    if (line == max_lines - 1 && *row_end != '\0') {
+      // More text follows: show as much of the rest as fits, with an ellipsis.
+      snprintf(row, sizeof(row), "%s", p);
+      for (char *c = row; *c != '\0'; c++) {
+        if (*c == '\n') {
+          *c = ' ';
+        }
+      }
+      text_fit(it, font, 0, first_baseline + line * line_height, TextAlign::BASELINE_LEFT, row, SCREEN_W);
+      return;
+    }
+    text_fit(it, font, 0, first_baseline + line * line_height, TextAlign::BASELINE_LEFT, row, SCREEN_W);
+    p = row_end;
+  }
+}
+
+void render_notifications(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &message = str(ctx.selected_item_state);
+  if (recent(ctx.now, ctx.last_notification_dismiss_interaction, TOAST_MS)) {
+    draw_icon(it, f.hero, 64, 30, icon::ALL_CLEAR);
+    footer_toast(it, f, "DISMISSED");
+    return;
+  }
+  if (message.empty() || ha_state_missing(message)) {
+    draw_icon(it, f.hero, 64, 28, icon::ALL_CLEAR);
+    text(it, f.small, 64, 50, TextAlign::BASELINE_CENTER, "ALL CAUGHT UP");
+    draw_footer_overlay(it, f, ctx, nullptr);
+    return;
+  }
+  draw_wrapped(it, f.small, message.c_str(), 21, 11, 3);
+  if (draw_footer_overlay(it, f, ctx, nullptr)) {
+    return;
+  }
+  footer_hints(it, f, nullptr, "DISMISS", false);
+  if (ctx.item_count > 1) {
+    int cy = FOOTER_Y + FOOTER_H / 2;
+    draw_chevron(it, 1, cy, false);
+    draw_chevron(it, 8, cy, true);
+    text(it, f.tiny, 15, FOOTER_Y + 9, TextAlign::BASELINE_LEFT, "MORE");
+  }
+}
+
+const char *weather_icon(const std::string &condition, bool night) {
+  // Home Assistant reports clear-night after dark, so sunny is always the sun.
+  // partlycloudy has no night form, so the clock decides.
+  if (condition == "sunny") return icon::SUNNY;
+  if (condition == "clear") return night ? icon::CLEAR_NIGHT : icon::SUNNY;  // not an HA condition, but seen
+  if (condition == "clear-night") return icon::CLEAR_NIGHT;
+  if (condition == "partlycloudy") return night ? icon::PARTLY_NIGHT : icon::PARTLY_DAY;
+  if (condition == "cloudy") return icon::CLOUD;
+  if (condition == "rainy" || condition == "pouring") return icon::RAIN;
+  if (condition == "lightning" || condition == "lightning-rainy" || condition == "exceptional") return icon::STORM;
+  if (condition == "snowy" || condition == "snowy-rainy") return icon::SNOW;
+  if (condition == "hail") return icon::HAIL;
+  if (condition == "fog") return icon::FOG;
+  if (condition == "windy" || condition == "windy-variant") return icon::WIND;
+  return icon::CLOUD;
+}
+
+void weather_condition_label(const std::string &raw, char *buf, size_t size) {
+  if (raw == "partlycloudy") {
+    snprintf(buf, size, "PARTLY CLOUDY");
+    return;
+  }
   if (raw == "clear-night") {
-    return "\ue51c";
+    snprintf(buf, size, "CLEAR");
+    return;
   }
-  if (raw == "sunny" || raw == "clear") {
-    return "\ue81a";
+  remote_state_label_to_buffer(raw, buf, size, "");
+  for (char *c = buf; *c != '\0'; c++) {
+    if (*c == '-') {
+      *c = ' ';
+    }
   }
-  if (raw == "cloudy" || raw == "fog" || raw == "windy" || raw == "windy-variant") {
-    return "\ue2bd";
-  }
-  if (raw == "rainy" || raw == "pouring" || raw == "hail" || raw == "snowy-rainy") {
-    return "\uf176";
-  }
-  if (raw == "lightning" || raw == "lightning-rainy" || raw == "exceptional") {
-    return "\uebdb";
-  }
-  return "\ue2bd";
 }
 
-static inline bool weather_condition_is_partly_cloudy(const std::string &raw) {
-  return raw == "partlycloudy";
+const char *compass_point(float bearing) {
+  static const char *const POINTS[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
+  if (!std::isfinite(bearing)) {
+    return "";
+  }
+  float sector = std::fmod(bearing + 22.5f, 360.0f);
+  if (sector < 0) {
+    sector += 360.0f;
+  }
+  return POINTS[static_cast<int>(sector / 45.0f) % 8];
 }
 
-// Backs pos up to the start of a UTF-8 code point so slicing at fixed byte
-// offsets cannot split a multi-byte character from an HA notification.
-static inline size_t utf8_floor(const char *data, size_t size, size_t pos) {
-  if (pos > size) {
-    pos = size;
-  }
-  while (pos > 0 && (static_cast<unsigned char>(data[pos]) & 0xC0) == 0x80) {
-    pos--;
-  }
-  return pos;
-}
-
-struct NotificationLines {
-  char line[3][26];
-};
-
-static inline NotificationLines split_notification_lines(const std::string &message) {
-  NotificationLines lines{};
-  const char *data = message.c_str();
-  size_t size = message.size();
-  if (size == 0) {
-    data = "NO NOTIFICATIONS";
-    size = strlen(data);
-  }
-
-  // Three 22-byte display rows; a longer message is truncated with "...".
-  bool truncated = size > 66;
-  size_t limit = truncated ? utf8_floor(data, size, 63) : size;
-  size_t breaks[4] = {0, utf8_floor(data, size, 22), utf8_floor(data, size, 44), limit};
-  for (int i = 0; i < 3; i++) {
-    size_t begin = std::min(breaks[i], limit);
-    size_t end = std::min(breaks[i + 1], limit);
-    size_t len = end - begin;
-    // Malformed UTF-8 (a run of continuation bytes) collapses the break points,
-    // so clamp to the row buffer instead of trusting them to stay in range.
-    if (len > sizeof(lines.line[i]) - 1) {
-      len = sizeof(lines.line[i]) - 1;
-    }
-    size_t out = 0;
-    for (size_t j = 0; j < len; j++) {
-      char ch = data[begin + j];
-      lines.line[i][out++] = (ch == '\n' || ch == '\r' || ch == '\t') ? ' ' : ch;
-    }
-    lines.line[i][out] = '\0';
-  }
-  if (truncated) {
-    strncat(lines.line[2], "...", sizeof(lines.line[2]) - strlen(lines.line[2]) - 1);
-  }
-  return lines;
-}
-
-void render_remote_ui(
-    display::Display *it, font::Font *tiny_font, font::Font *small_font, font::Font *medium_font,
-    font::Font *symbols, font::Font *medium_symbols, font::Font *weather_symbols, const RemoteRenderContext &ctx) {
-  const std::string &selected_item_name = render_string(ctx.selected_item_name);
-  const std::string &selected_item_state = render_string(ctx.selected_item_state);
-  const std::string &selected_setting_detail = render_string(ctx.selected_setting_detail);
-  char status_line[27];
-  char footer_line[27];
-  char detail_line[48];
-  char label_primary[32];
-  char label_secondary[32];
-  char label_tertiary[32];
-  const int bar_x = 14;
-  const int bar_y = 45;
-  const int bar_w = 100;
-  const int bar_h = 8;
-  status_line[0] = '\0';
-  footer_line[0] = '\0';
-  detail_line[0] = '\0';
-  label_primary[0] = '\0';
-  label_secondary[0] = '\0';
-  label_tertiary[0] = '\0';
-
-  bool show_contrast_feedback = ui_recent_interaction(ctx.now, ctx.last_contrast_interaction, 5000);
-  bool show_setting_detail_feedback = ctx.selected_setting_option != static_cast<int>(REMOTE_SETTING_NONE);
-
-  auto has_dual_climate_target = [&]() {
-    return remote_ui_has_dual_climate_target(
-        selected_item_state, ctx.selected_climate_target_temp_low, ctx.selected_climate_target_temp_high);
-  };
-  auto has_dual_climate_target_values = [&]() {
-    return !std::isnan(ctx.selected_climate_target_temp_low) &&
-           !std::isnan(ctx.selected_climate_target_temp_high);
-  };
-  auto draw_footer_dividers = [&]() {
-    it->filled_rectangle(0, 52, 128, 1, display::COLOR_ON);
-    it->filled_rectangle(30, 53, 1, 11, display::COLOR_ON);
-    it->filled_rectangle(98, 53, 1, 11, display::COLOR_ON);
-  };
-  auto draw_contrast_footer = [&]() {
-    snprintf(footer_line, sizeof(footer_line), "CONTRAST %d%%", ctx.contrast * 10);
-    it->filled_rectangle(0, 52, 128, 1, display::COLOR_ON);
-    it->print(64, 58, small_font, display::COLOR_ON, display::TextAlign::CENTER, footer_line);
-  };
-  auto draw_footer_chrome = [&](const char *left_icon, const char *right_icon) {
-    draw_footer_dividers();
-    it->print(6, 50, medium_symbols, display::COLOR_ON, left_icon);
-    it->print(108, 50, medium_symbols, display::COLOR_ON, right_icon);
-  };
-  auto draw_blank_or_contrast_footer = [&]() {
-    if (show_contrast_feedback) {
-      draw_contrast_footer();
-    } else {
-      draw_footer_dividers();
-    }
-  };
-  auto draw_footer_text = [&](const char *text) {
-    it->print(64, 58, small_font, display::COLOR_ON, display::TextAlign::CENTER, text);
-  };
-  auto draw_progress_bar = [&](int percent) {
-    int fill = (bar_w - 2) * percent / 100;
-    it->rectangle(bar_x, bar_y, bar_w, bar_h, display::COLOR_ON);
-    if (fill > 0) {
-      it->filled_rectangle(bar_x + 1, bar_y + 1, fill, bar_h - 2, display::COLOR_ON);
-    }
-  };
-  auto draw_progress_footer = [&](int percent, const char *label) {
-    draw_progress_bar(percent);
-    snprintf(footer_line, sizeof(footer_line), "%s %d%%", label, percent);
-    draw_footer_text(footer_line);
-  };
-  auto write_state_label = [&](const std::string &raw, char *buffer, size_t buffer_size, const char *fallback = "SYNCING") {
-    remote_state_label_to_buffer(raw, buffer, buffer_size, fallback);
-  };
-  auto draw_centered_state = [&](const char *text, int y, bool compact = false) {
-    if (compact) {
-      it->print(64, y, small_font, display::COLOR_ON, display::TextAlign::CENTER, text);
-    } else {
-      it->print(64, y, medium_font, display::COLOR_ON, display::TextAlign::CENTER, text);
-    }
-  };
-  auto draw_detail_text = [&](const char *text) {
-    if (text != nullptr && text[0] != '\0') {
-      it->print(64, 45, tiny_font, display::COLOR_ON, display::TextAlign::CENTER, text);
-    }
-  };
-  auto draw_setting_footer = [&]() {
-    if (show_contrast_feedback) {
-      draw_contrast_footer();
+// Weather details: +/- step through them, so they use the options footer, with
+// a meter or a compass where a picture says more than the number.
+void draw_weather_footer(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  auto option = static_cast<RemoteSettingOption>(ctx.selected_setting_option);
+  char value[32];
+  const char *t = ctx.temperature_unit;
+  switch (option) {
+    case REMOTE_SETTING_WEATHER_HUMIDITY:
+      snprintf(value, sizeof(value), "%.0f%%", ctx.selected_weather_humidity);
+      footer_range(it, f, "HUMIDITY", meter_percent(ctx.selected_weather_humidity),
+                   or_dash(ctx.selected_weather_humidity, value));
+      return;
+    case REMOTE_SETTING_WEATHER_CLOUD_COVERAGE:
+      snprintf(value, sizeof(value), "%.0f%%", ctx.selected_weather_cloud_coverage);
+      footer_range(it, f, "CLOUDS", meter_percent(ctx.selected_weather_cloud_coverage),
+                   or_dash(ctx.selected_weather_cloud_coverage, value));
+      return;
+    case REMOTE_SETTING_WEATHER_UV_INDEX:
+      snprintf(value, sizeof(value), "%.1f", ctx.selected_weather_uv_index);
+      footer_range(it, f, "UV INDEX", meter_percent(ctx.selected_weather_uv_index * 100 / 11),
+                   or_dash(ctx.selected_weather_uv_index, value));
+      return;
+    case REMOTE_SETTING_WEATHER_WIND_SPEED:
+    case REMOTE_SETTING_WEATHER_WIND_BEARING: {
+      bool bearing_only = option == REMOTE_SETTING_WEATHER_WIND_BEARING;
+      int x = footer_chip(it, f, bearing_only ? "WIND DIR" : "WIND");
+      draw_chevron(it, x + 1, FOOTER_Y + FOOTER_H / 2, false);
+      x += 7;
+      bool has_bearing = std::isfinite(ctx.selected_weather_wind_bearing);
+      if (has_bearing) {
+        // Compass: the needle points where the wind is blowing to.
+        int cx = x + 6, cy = FOOTER_Y + FOOTER_H / 2;
+        it->circle(cx, cy, 5, ON);
+        float rad = (ctx.selected_weather_wind_bearing + 180.0f) * static_cast<float>(M_PI) / 180.0f;
+        it->line(cx, cy, cx + static_cast<int>(std::lround(std::sin(rad) * 4)),
+                 cy - static_cast<int>(std::lround(std::cos(rad) * 4)), ON);
+        x += 14;
+      }
+      if (bearing_only) {
+        snprintf(value, sizeof(value), "%s %.0f°", compass_point(ctx.selected_weather_wind_bearing),
+                 ctx.selected_weather_wind_bearing);
+      } else if (has_bearing) {
+        snprintf(value, sizeof(value), "%.0f %s %s", ctx.selected_weather_wind_speed, ctx.speed_unit,
+                 compass_point(ctx.selected_weather_wind_bearing));
+      } else {
+        snprintf(value, sizeof(value), "%.0f %s", ctx.selected_weather_wind_speed, ctx.speed_unit);
+      }
+      text_fit(it, f.tiny, (x + SCREEN_W - 6) / 2, FOOTER_Y + 9, TextAlign::BASELINE_CENTER,
+               or_dash(bearing_only ? ctx.selected_weather_wind_bearing : ctx.selected_weather_wind_speed, value),
+               SCREEN_W - x - 8);
+      draw_chevron(it, SCREEN_W - 5, FOOTER_Y + FOOTER_H / 2, true);
       return;
     }
-    RemoteSettingOption option = static_cast<RemoteSettingOption>(ctx.selected_setting_option);
-    const char *label = remote_setting_option_label(option);
-    const char *left_icon = remote_setting_left_icon(option);
-    const char *right_icon = remote_setting_right_icon(option);
-    if (label == nullptr || label[0] == '\0') {
-      draw_footer_dividers();
+    case REMOTE_SETTING_WEATHER_WIND_GUST:
+      snprintf(value, sizeof(value), "%.0f %s", ctx.selected_weather_wind_gust_speed, ctx.speed_unit);
+      footer_options(it, f, "GUSTS", or_dash(ctx.selected_weather_wind_gust_speed, value));
       return;
-    }
-    draw_footer_chrome(left_icon, right_icon);
-    draw_footer_text(label);
-  };
-  auto draw_feedback_state_mode = [&](const char *state_text, const char *feedback_text, bool compact = false) {
-    draw_centered_state(state_text, 35, compact);
-    if (feedback_text != nullptr && feedback_text[0] != '\0') {
-      draw_detail_text(feedback_text);
-    }
-    draw_setting_footer();
-  };
-
-  auto draw_setting_detail_if_needed = [&]() {
-    if (show_setting_detail_feedback) {
-      RemoteSettingOption option = static_cast<RemoteSettingOption>(ctx.selected_setting_option);
-      if (ctx.mode == REMOTE_MODE_CLIMATE && has_dual_climate_target_values() &&
-          (option == REMOTE_SETTING_CLIMATE_LOW || option == REMOTE_SETTING_CLIMATE_HIGH)) {
-        snprintf(detail_line, sizeof(detail_line), "LOW: %.0f°%s   HIGH: %.0f°%s",
-                 ctx.selected_climate_target_temp_low, ctx.temperature_unit,
-                 ctx.selected_climate_target_temp_high, ctx.temperature_unit);
-        draw_detail_text(detail_line);
-      } else if (!selected_setting_detail.empty()) {
-        draw_detail_text(selected_setting_detail.c_str());
-      }
-      return true;
-    }
-    return false;
-  };
-  auto write_climate_target_detail = [&](char *buffer, size_t buffer_size, bool dual_target,
-                                         float low, float high, float single_target) {
-    format_climate_target_detail(buffer, buffer_size, dual_target, low, high, single_target, ctx.temperature_unit);
-  };
-  // Shared LIGHTS/FANS rendering: on/off state, optional percent detail, and a
-  // footer owned entirely here (progress bar during adjustment, setting footer
-  // while on, contrast/blank otherwise).
-  auto draw_toggle_percent_mode = [&](int percent_value, bool show_progress, const char *progress_label) {
-    draw_centered_state(ui_power_state_label(selected_item_state), 35);
-    if (selected_item_state == "on" && !show_progress && !show_setting_detail_feedback) {
-      snprintf(detail_line, sizeof(detail_line), "%d%%", percent_value);
-      draw_detail_text(detail_line);
-    }
-    if (show_progress) {
-      draw_progress_footer(percent_value, progress_label);
+    case REMOTE_SETTING_WEATHER_PRESSURE:
+      snprintf(value, sizeof(value), "%.0f %s", ctx.selected_weather_pressure, ctx.pressure_unit);
+      footer_options(it, f, "PRESSURE", or_dash(ctx.selected_weather_pressure, value));
       return;
-    }
-    if (selected_item_state == "on") {
-      draw_setting_detail_if_needed();
-      draw_setting_footer();
-    } else {
-      draw_blank_or_contrast_footer();
-    }
-  };
-
-  it->clear();
-  const char *header_icon = ctx.mode_icon_override != nullptr ? ctx.mode_icon_override : mode_icon(ctx.mode);
-  const char *header_title = ctx.mode_title_override != nullptr ? ctx.mode_title_override : mode_title(ctx.mode);
-  it->print(0, -3, symbols, display::COLOR_ON, display::TextAlign::LEFT, header_icon);
-  it->print(64, 4, small_font, display::COLOR_ON, display::TextAlign::CENTER, header_title);
-  it->print(128, -3, symbols, display::COLOR_ON, display::TextAlign::RIGHT, header_icon);
-
-  it->filled_rectangle(0, 12, 128, 1, display::COLOR_ON);
-  if (ctx.mode != REMOTE_MODE_NOTIFICATIONS) {
-    it->print(64, 20, medium_font, display::COLOR_ON, display::TextAlign::CENTER, selected_item_name.c_str());
-  }
-
-  switch (ctx.mode) {
-    case REMOTE_MODE_LIGHTS: {
-      bool show_brightness_bar =
-          ui_recent_interaction(ctx.now, ctx.last_brightness_interaction, 3000) &&
-          selected_item_state == "on";
-      draw_toggle_percent_mode(ctx.selected_brightness_pct, show_brightness_bar, "BRIGHTNESS");
-      break;
-    }
-
-    case REMOTE_MODE_FANS: {
-      bool show_fan_speed_bar =
-          ui_recent_interaction(ctx.now, ctx.last_fan_speed_interaction, 3000) &&
-          selected_item_state == "on";
-      draw_toggle_percent_mode(ctx.selected_fan_speed_pct, show_fan_speed_bar, "SPEED");
-      break;
-    }
-
-    case REMOTE_MODE_SWITCHES: {
-      const std::string &last_switch_feedback = render_string(ctx.last_switch_feedback);
-      bool show_switch_feedback = ui_recent_interaction(ctx.now, ctx.last_switch_interaction, 5000);
-      write_state_label(selected_item_state, label_primary, sizeof(label_primary));
-      if (show_switch_feedback) {
-        write_state_label(last_switch_feedback, label_secondary, sizeof(label_secondary), "");
-      }
-      draw_centered_state(label_primary, 35, false);
-      if (!draw_setting_detail_if_needed() && show_switch_feedback) {
-        draw_detail_text(label_secondary);
-      }
-      draw_blank_or_contrast_footer();
-      break;
-    }
-
-    case REMOTE_MODE_CLIMATE: {
-      const std::string &selected_climate_hvac_action = render_string(ctx.selected_climate_hvac_action);
-      bool show_climate_target_focus =
-          ui_recent_interaction(ctx.now, ctx.last_climate_target_focus_interaction, 5000) &&
-          ctx.climate_target_focus != 0;
-      write_state_label(selected_climate_hvac_action, label_secondary, sizeof(label_secondary), "");
-      bool dual_target = has_dual_climate_target();
-      if (show_climate_target_focus) {
-        if (!std::isnan(ctx.climate_target_focus_value)) {
-          if (!dual_target) {
-            write_climate_target_detail(detail_line, sizeof(detail_line), false,
-                                        NAN, NAN, ctx.climate_target_focus_value);
-          } else if (ctx.climate_target_focus == 2) {
-            write_climate_target_detail(detail_line, sizeof(detail_line), true,
-                                        ctx.selected_climate_target_temp_low,
-                                        ctx.climate_target_focus_value, NAN);
-          } else {
-            write_climate_target_detail(detail_line, sizeof(detail_line), true,
-                                        ctx.climate_target_focus_value,
-                                        ctx.selected_climate_target_temp_high, NAN);
-          }
-        }
-      }
-
-      if (!std::isnan(ctx.selected_climate_current_temp)) {
-        snprintf(status_line, sizeof(status_line), "%.0f°%s", ctx.selected_climate_current_temp, ctx.temperature_unit);
-      } else {
-        snprintf(status_line, sizeof(status_line), "SYNCING");
-      }
-      draw_centered_state(status_line, 35);
-
-      if (show_climate_target_focus) {
-        draw_detail_text(detail_line);
-      } else if (!show_setting_detail_feedback) {
-        if (dual_target) {
-          write_climate_target_detail(detail_line, sizeof(detail_line), true,
-                                      ctx.selected_climate_target_temp_low,
-                                      ctx.selected_climate_target_temp_high, NAN);
-          draw_detail_text(detail_line);
-        } else if (!std::isnan(ctx.selected_climate_target_temp)) {
-          write_climate_target_detail(detail_line, sizeof(detail_line), false,
-                                      NAN, NAN, ctx.selected_climate_target_temp);
-          draw_detail_text(detail_line);
-        }
-      }
-
-      bool drew_setting_detail = !show_climate_target_focus && draw_setting_detail_if_needed();
-      if (!drew_setting_detail && !show_setting_detail_feedback) {
-        draw_blank_or_contrast_footer();
-      } else {
-        draw_setting_footer();
-      }
-      break;
-    }
-
-    case REMOTE_MODE_WATER_HEATERS: {
-      const std::string &selected_water_heater_mode = render_string(ctx.selected_water_heater_mode);
-      const std::string &selected_water_heater_away = render_string(ctx.selected_water_heater_away);
-      if (!std::isnan(ctx.selected_water_heater_target_temp)) {
-        snprintf(status_line, sizeof(status_line), "TARGET: %.0f°%s", ctx.selected_water_heater_target_temp, ctx.temperature_unit);
-      } else {
-        snprintf(status_line, sizeof(status_line), "%s", ui_power_state_label(selected_item_state));
-      }
-      draw_centered_state(status_line, 35, true);
-      if (!draw_setting_detail_if_needed()) {
-        if (!selected_water_heater_mode.empty()) {
-          draw_detail_text(selected_water_heater_mode.c_str());
-        } else if (!selected_water_heater_away.empty()) {
-          draw_detail_text(selected_water_heater_away.c_str());
-        }
-      }
-      draw_setting_footer();
-      break;
-    }
-
-    case REMOTE_MODE_HUMIDIFIERS: {
-      const std::string &selected_humidifier_action = render_string(ctx.selected_humidifier_action);
-      const std::string &selected_humidifier_mode = render_string(ctx.selected_humidifier_mode);
-      bool show_humidifier_target = ui_recent_interaction(ctx.now, ctx.last_humidifier_interaction, 5000);
-      bool show_humidifier_mode = ui_recent_interaction(ctx.now, ctx.last_humidifier_mode_interaction, 5000);
-      write_state_label(selected_item_state, label_primary, sizeof(label_primary));
-      write_state_label(selected_humidifier_action, label_secondary, sizeof(label_secondary), "");
-      write_state_label(selected_humidifier_mode, label_tertiary, sizeof(label_tertiary), "");
-
-      if (show_humidifier_target && !std::isnan(ctx.selected_humidifier_target_humidity)) {
-        snprintf(status_line, sizeof(status_line), "TARGET: %.0f%%", ctx.selected_humidifier_target_humidity);
-      } else if (!std::isnan(ctx.selected_humidifier_current_humidity)) {
-        snprintf(status_line, sizeof(status_line), "%.0f%%", ctx.selected_humidifier_current_humidity);
-      } else {
-        snprintf(status_line, sizeof(status_line), "SYNCING");
-      }
-      draw_centered_state(status_line, 35);
-
-      if (!show_setting_detail_feedback) {
-        if (show_humidifier_mode && label_tertiary[0] != '\0') {
-          draw_detail_text(label_tertiary);
-        } else if (!show_humidifier_target && !std::isnan(ctx.selected_humidifier_target_humidity)) {
-          snprintf(detail_line, sizeof(detail_line), "TARGET: %.0f%%", ctx.selected_humidifier_target_humidity);
-          draw_detail_text(detail_line);
-        }
-      }
-
-      if (!draw_setting_detail_if_needed()) {
-        draw_blank_or_contrast_footer();
-      } else {
-        draw_setting_footer();
-      }
-      break;
-    }
-
-    case REMOTE_MODE_LOCKS: {
-      const std::string &last_lock_feedback = render_string(ctx.last_lock_feedback);
-      bool show_lock_feedback = ui_recent_interaction(ctx.now, ctx.last_lock_interaction, 5000);
-      write_state_label(selected_item_state, label_primary, sizeof(label_primary));
-      if (show_lock_feedback) {
-        write_state_label(last_lock_feedback, label_secondary, sizeof(label_secondary), "");
-      }
-      draw_feedback_state_mode(label_primary, show_lock_feedback ? label_secondary : "", true);
-      break;
-    }
-
-    case REMOTE_MODE_COVERS: {
-      const std::string &last_cover_feedback = render_string(ctx.last_cover_feedback);
-      bool show_cover_feedback = ui_recent_interaction(ctx.now, ctx.last_cover_interaction, 5000);
-      bool show_cover_position_bar = ui_recent_interaction(ctx.now, ctx.last_cover_position_interaction, 3000);
-      write_state_label(selected_item_state, label_primary, sizeof(label_primary));
-      write_state_label(last_cover_feedback, label_secondary, sizeof(label_secondary), "");
-      draw_centered_state(label_primary, 35, true);
-      if (show_cover_position_bar) {
-        draw_progress_footer(ctx.selected_cover_position_pct, "POSITION");
-      } else {
-        const char *cover_detail = "";
-        if (show_cover_feedback && label_secondary[0] != '\0') {
-          cover_detail = label_secondary;
-        } else if (strcmp(label_primary, "OPEN") == 0 && ctx.selected_cover_position_pct > 0) {
-          snprintf(detail_line, sizeof(detail_line), "%d%%", ctx.selected_cover_position_pct);
-          cover_detail = detail_line;
-        }
-        if (!draw_setting_detail_if_needed()) {
-          draw_detail_text(cover_detail);
-        }
-        draw_setting_footer();
-      }
-      break;
-    }
-
-    case REMOTE_MODE_MEDIA: {
-      const std::string &selected_media_title = render_string(ctx.selected_media_title);
-      const std::string &selected_media_artist = render_string(ctx.selected_media_artist);
-      const std::string &selected_media_device_class = render_string(ctx.selected_media_device_class);
-      const std::string &selected_media_source = render_string(ctx.selected_media_source);
-      const std::string &last_media_power_feedback = render_string(ctx.last_media_power_feedback);
-      bool show_media_feedback = ui_recent_interaction(ctx.now, ctx.last_media_volume_interaction, 3000);
-      bool show_media_source_feedback = ui_recent_interaction(ctx.now, ctx.last_media_source_interaction, 5000);
-      bool show_media_power_feedback = ui_recent_interaction(ctx.now, ctx.last_media_power_interaction, 5000);
-      bool is_tv = selected_media_device_class == "tv" || selected_media_device_class == "receiver";
-      bool media_is_on = selected_item_state != "off" && !ha_state_missing(selected_item_state);
-      if (is_tv) {
-        snprintf(status_line, sizeof(status_line), "%s", media_is_on ? "ON" : "OFF");
-        draw_centered_state(status_line, 35);
-      } else if (!selected_media_title.empty()) {
-        draw_centered_state(selected_media_title.c_str(), 35, true);
-      }
-      const char *media_detail = "";
-      if (!show_media_feedback) {
-        if (!is_tv && show_media_power_feedback && !last_media_power_feedback.empty()) {
-          media_detail = last_media_power_feedback.c_str();
-        } else if (show_media_source_feedback && !selected_media_source.empty()) {
-          media_detail = selected_media_source.c_str();
-        } else if (is_tv && media_is_on && !selected_media_source.empty()) {
-          media_detail = selected_media_source.c_str();
-        } else if (!selected_media_artist.empty()) {
-          media_detail = selected_media_artist.c_str();
-        }
-      }
-      if (!show_media_feedback && !draw_setting_detail_if_needed()) {
-        draw_detail_text(media_detail);
-      }
-
-      if (show_media_feedback) {
-        draw_progress_footer(ctx.selected_media_volume_pct, "VOLUME");
-      } else if (show_contrast_feedback) {
-        draw_contrast_footer();
-      } else {
-        draw_setting_footer();
-      }
-      break;
-    }
-
-    case REMOTE_MODE_SENSORS: {
-      const std::string &selected_sensor_unit = render_string(ctx.selected_sensor_unit);
-      const char *sensor_value;
-      bool numeric_value = false;
-      if (selected_item_state.empty() || selected_item_state == "unknown") {
-        sensor_value = "SYNCING";
-      } else if (selected_item_state == "on") {
-        sensor_value = "ON";
-      } else if (selected_item_state == "off") {
-        sensor_value = "OFF";
-      } else {
-        sensor_value = selected_item_state.c_str();
-        numeric_value = true;
-      }
-      if (!selected_sensor_unit.empty() && numeric_value) {
-        snprintf(status_line, sizeof(status_line), "%s %s", sensor_value, selected_sensor_unit.c_str());
-        draw_centered_state(status_line, 35, strlen(status_line) > 12);
-      } else {
-        draw_centered_state(sensor_value, 35, strlen(sensor_value) > 12);
-      }
-      draw_blank_or_contrast_footer();
-      break;
-    }
-
-    case REMOTE_MODE_AUTOMATION: {
-      const std::string &last_automation_feedback = render_string(ctx.last_automation_feedback);
-      bool show_automation_feedback = ui_recent_interaction(ctx.now, ctx.last_automation_interaction, 5000);
-      write_state_label(selected_item_state, label_primary, sizeof(label_primary), "READY");
-      write_state_label(last_automation_feedback, label_secondary, sizeof(label_secondary), "");
-      const char *automation_type = automation_kind_label(ctx.automation_index);
-      // Point at the chosen label rather than copying it into the shorter
-      // status_line buffer, which the label could not fit in full anyway.
-      const char *automation_status =
-          (show_automation_feedback && label_secondary[0] != '\0') ? label_secondary : label_primary;
-      it->print(64, 35, small_font, display::COLOR_ON, display::TextAlign::CENTER, automation_type);
-      if (!draw_setting_detail_if_needed()) {
-        draw_detail_text(automation_status);
-      }
-      draw_blank_or_contrast_footer();
-      break;
-    }
-
-    case REMOTE_MODE_ALARMS: {
-      const std::string &last_alarm_feedback = render_string(ctx.last_alarm_feedback);
-      bool show_alarm_hold_prompt =
-          ctx.settings_button_press_started_at > 0 &&
-          ctx.settings_button_press_mode == static_cast<int>(ctx.mode) &&
-          !ctx.settings_button_long_press_fired &&
-          last_alarm_feedback == "HOLD TO TRIGGER";
-      bool show_alarm_feedback =
-          ui_recent_interaction(ctx.now, ctx.last_alarm_interaction, 5000) || show_alarm_hold_prompt;
-      write_state_label(selected_item_state, label_primary, sizeof(label_primary));
-      if (show_alarm_feedback) {
-        write_state_label(last_alarm_feedback, label_secondary, sizeof(label_secondary), "");
-      }
-      draw_centered_state(label_primary, 35, true);
-      if (show_alarm_feedback) {
-        if (label_secondary[0] != '\0') {
-          draw_detail_text(label_secondary);
-        }
-      } else {
-        draw_setting_detail_if_needed();
-      }
-      draw_setting_footer();
-      break;
-    }
-
-    case REMOTE_MODE_NOTIFICATIONS: {
-      bool show_dismiss_feedback = ui_recent_interaction(ctx.now, ctx.last_notification_dismiss_interaction, 3000);
-      if (show_dismiss_feedback) {
-        it->print(64, 35, tiny_font, display::COLOR_ON, display::TextAlign::CENTER, "DISMISSED");
-      } else {
-        NotificationLines lines = split_notification_lines(selected_item_state);
-        for (int i = 0; i < 3; i++) {
-          if (lines.line[i][0] != '\0') {
-            it->print(
-                64, i == 0 ? 20 : (i == 1 ? 35 : 45), tiny_font, display::COLOR_ON, display::TextAlign::CENTER,
-                lines.line[i]);
-          }
-        }
-      }
-      draw_setting_footer();
-      break;
-    }
-
-    case REMOTE_MODE_WEATHER: {
-      const std::string &selected_weather_condition = render_string(ctx.selected_weather_condition);
-      weather_condition_label(selected_weather_condition, label_primary, sizeof(label_primary));
-      if (!std::isnan(ctx.selected_weather_temperature)) {
-        snprintf(status_line, sizeof(status_line), "%.0f°%s", ctx.selected_weather_temperature, ctx.temperature_unit);
-      } else {
-        snprintf(status_line, sizeof(status_line), "SYNCING");
-      }
-      bool weather_ready = strcmp(status_line, "SYNCING") != 0 && strcmp(label_primary, "SYNCING") != 0;
-      if (!weather_ready) {
-        draw_centered_state("SYNCING", 35);
-      } else {
-        if (weather_condition_is_partly_cloudy(selected_weather_condition)) {
-          it->print(
-              34, 29, weather_symbols, display::COLOR_ON, display::TextAlign::CENTER,
-              ctx.weather_is_night ? "\ue51c" : "\ue81a");
-          it->print(45, 35, weather_symbols, display::COLOR_ON, display::TextAlign::CENTER, "\ue2bd");
-        } else {
-          it->print(46, 32, weather_symbols, display::COLOR_ON, display::TextAlign::CENTER,
-                    weather_condition_icon(selected_weather_condition));
-        }
-        it->print(76, 35, medium_font, display::COLOR_ON, display::TextAlign::CENTER, status_line);
-        bool show_condition_label =
-            ctx.selected_setting_option == static_cast<int>(REMOTE_SETTING_NONE) ||
-            ctx.selected_setting_option == static_cast<int>(REMOTE_SETTING_WEATHER_CONDITIONS);
-        if (show_condition_label) {
-          it->print(64, 45, small_font, display::COLOR_ON, display::TextAlign::CENTER, label_primary);
-        }
-      }
-
-      if (!draw_setting_detail_if_needed()) {
-        const char *footer_status = nullptr;
-        if (!std::isnan(ctx.selected_weather_humidity)) {
-          snprintf(footer_line, sizeof(footer_line), "%.0f%%", ctx.selected_weather_humidity);
-          footer_status = footer_line;
-        } else if (weather_ready && label_primary[0] != '\0') {
-          footer_status = label_primary;
-        }
-        if (footer_status != nullptr && footer_status[0] != '\0') {
-          draw_footer_text(footer_status);
-        } else {
-          draw_blank_or_contrast_footer();
-        }
-      } else {
-        draw_setting_footer();
-      }
-      break;
-    }
-
-    case REMOTE_MODE_INFO:
+    case REMOTE_SETTING_WEATHER_PRECIPITATION:
+      // Rain in inches needs two decimals ("0.04 in"); millimetres one.
+      snprintf(value, sizeof(value), strcmp(ctx.precipitation_unit, "in") == 0 ? "%.2f %s" : "%.1f %s",
+               ctx.selected_weather_precipitation, ctx.precipitation_unit);
+      footer_options(it, f, "PRECIP", or_dash(ctx.selected_weather_precipitation, value));
+      return;
+    case REMOTE_SETTING_WEATHER_DEW_POINT:
+      snprintf(value, sizeof(value), "%.0f°%s", ctx.selected_weather_dew_point, t);
+      footer_options(it, f, "DEW POINT", or_dash(ctx.selected_weather_dew_point, value));
+      return;
+    case REMOTE_SETTING_WEATHER_APPARENT_TEMP:
+      snprintf(value, sizeof(value), "%.0f°%s", ctx.selected_weather_apparent_temperature, t);
+      footer_options(it, f, "FEELS LIKE", or_dash(ctx.selected_weather_apparent_temperature, value));
+      return;
+    case REMOTE_SETTING_WEATHER_HIGH_TEMP:
+      snprintf(value, sizeof(value), "%.0f°%s", ctx.selected_weather_high_temp, t);
+      footer_options(it, f, "HIGH", or_dash(ctx.selected_weather_high_temp, value));
+      return;
+    case REMOTE_SETTING_WEATHER_LOW_TEMP:
+      snprintf(value, sizeof(value), "%.0f°%s", ctx.selected_weather_low_temp, t);
+      footer_options(it, f, "LOW", or_dash(ctx.selected_weather_low_temp, value));
+      return;
+    case REMOTE_SETTING_WEATHER_CONDITIONS:
     default: {
-      font::Font *primary_font = ctx.info_index == 1 ? small_font : medium_font;
-      font::Font *secondary_font = ctx.info_index == 0 ? small_font : tiny_font;
-      it->print(64, 35, primary_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_primary_text.c_str());
-      it->print(64, 45, secondary_font, display::COLOR_ON, display::TextAlign::CENTER, ctx.info_secondary_text.c_str());
-      draw_blank_or_contrast_footer();
+      char condition[24];
+      weather_condition_label(str(ctx.selected_weather_condition), condition, sizeof(condition));
+      footer_options(it, f, "NOW", condition[0] != '\0' ? condition : "SYNCING");
+      return;
+    }
+  }
+}
+
+void render_weather(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &condition = str(ctx.selected_weather_condition);
+  if (condition.empty() || ha_state_missing(condition) || std::isnan(ctx.selected_weather_temperature)) {
+    draw_icon(it, f.hero, HERO_CX, HERO_CY, icon::CLOUD);
+    hero_word(it, f, missing_word(condition));
+  } else {
+    draw_icon(it, f.hero, HERO_CX, HERO_CY, weather_icon(condition, ctx.weather_is_night));
+    char temp[12];
+    format_temp(temp, sizeof(temp), ctx.selected_weather_temperature);
+    hero_value(it, f, temp);
+    // Today's high and low, each marked with a small up/down arrowhead.
+    char value[12];
+    if (!std::isnan(ctx.selected_weather_high_temp)) {
+      format_temp(value, sizeof(value), ctx.selected_weather_high_temp);
+      text(it, f.small, SCREEN_W, 36, TextAlign::BASELINE_RIGHT, value);
+      int x = SCREEN_W - text_width(f.small, value) - 7;
+      it->filled_triangle(x, 35, x + 4, 35, x + 2, 31, ON);
+    }
+    if (!std::isnan(ctx.selected_weather_low_temp)) {
+      format_temp(value, sizeof(value), ctx.selected_weather_low_temp);
+      text(it, f.small, SCREEN_W, HERO_BASELINE, TextAlign::BASELINE_RIGHT, value);
+      int x = SCREEN_W - text_width(f.small, value) - 7;
+      it->filled_triangle(x, 43, x + 4, 43, x + 2, 47, ON);
+    }
+  }
+  if (draw_footer_overlay(it, f, ctx, nullptr)) {
+    return;
+  }
+  draw_weather_footer(it, f, ctx);
+}
+
+void render_info(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const char *primary = ctx.info_primary_text.c_str();
+  const char *secondary = ctx.info_secondary_text.c_str();
+  switch (ctx.info_index) {
+    case 0: {  // Time & date: the clock is the hero, the date the title.
+      draw_badge(it, f, icon::CLOCK, false);
+      if (!ctx.clock_valid) {
+        hero_value(it, f, "--:--");
+        break;
+      }
+      char clock[12];
+      int hour = ctx.clock_hour % 12;
+      snprintf(clock, sizeof(clock), "%d:%02d", hour == 0 ? 12 : hour, ctx.clock_minute);
+      int right = hero_value(it, f, clock);
+      text(it, f.small, right + 2, HERO_BASELINE, TextAlign::BASELINE_LEFT, ctx.clock_hour >= 12 ? "PM" : "AM");
+      break;
+    }
+    case 1:  // Wireless
+      draw_badge(it, f, ctx.wifi_rssi == 0 ? icon::WIFI_OFF : icon::WIFI, ctx.wifi_rssi != 0);
+      text_fit(it, f.title, HERO_X, 36, TextAlign::BASELINE_LEFT, primary, SCREEN_W - HERO_X);
+      draw_signal_bars(it, HERO_X, 49, ctx.wifi_rssi);
+      text(it, f.tiny, HERO_X + 23, 49, TextAlign::BASELINE_LEFT, secondary);
+      break;
+    case 2:  // Network
+      draw_badge(it, f, icon::LAN, false);
+      text(it, f.tiny, HERO_X, 33, TextAlign::BASELINE_LEFT, "IP ADDRESS");
+      text_fit(it, f.title, HERO_X, 47, TextAlign::BASELINE_LEFT, primary, SCREEN_W - HERO_X);
+      break;
+    case 3:  // Device name
+      draw_badge(it, f, icon::DEVICE, false);
+      text_fit(it, f.title, HERO_X, 38, TextAlign::BASELINE_LEFT, primary, SCREEN_W - HERO_X);
+      text_fit(it, f.tiny, HERO_X, 49, TextAlign::BASELINE_LEFT, secondary, SCREEN_W - HERO_X);
+      break;
+    case 4: {  // Battery: a big battery filled to the charge level.
+      if (!ctx.battery_monitoring_available) {
+        draw_badge(it, f, icon::BATTERY, false);
+        hero_word(it, f, "UNAVAILABLE");
+        break;
+      }
+      const int x = 1, y = 29, w = 23, h = 17;
+      it->rectangle(x, y, w, h, ON);
+      it->filled_rectangle(x + w, y + 5, 2, h - 10, ON);
+      int fill = (w - 4) * std::max(0, std::min(100, ctx.battery_percentage)) / 100;
+      if (fill > 0) {
+        it->filled_rectangle(x + 2, y + 2, fill, h - 4, ON);
+      }
+      char pct[12];
+      snprintf(pct, sizeof(pct), "%d%%", ctx.battery_percentage);
+      hero_value(it, f, pct);
+      if (!std::isnan(ctx.battery_voltage)) {
+        char volts[12];
+        snprintf(volts, sizeof(volts), "%.2f V", ctx.battery_voltage);
+        hero_caption(it, f, HERO_BASELINE, volts, 96);
+      }
+      break;
+    }
+    default: {  // Version
+      draw_badge(it, f, icon::INFO, false);
+      int right = hero_value(it, f, primary);
+      text(it, f.tiny, SCREEN_W, 33, TextAlign::BASELINE_RIGHT, "ESPHOME");
+      hero_caption(it, f, HERO_BASELINE, secondary, right + 4);
       break;
     }
   }
+  draw_footer_overlay(it, f, ctx, nullptr);
+}
 
+}  // namespace
+
+void render_remote_ui(display::Display *it, const RemoteUiFonts &fonts, const RemoteRenderContext &ctx) {
+  it->clear();
+  draw_header(it, fonts, ctx);
+  if (ctx.mode == REMOTE_MODE_INFO && ctx.info_index == 0 && ctx.clock_valid && ctx.clock_weekday >= 1 &&
+      ctx.clock_weekday <= 7 && ctx.clock_month >= 1 && ctx.clock_month <= 12) {
+    static const char *const DAYS[] = {"", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+    static const char *const MONTHS[] = {"", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                         "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    char date[32];
+    snprintf(date, sizeof(date), "%s, %s %d", DAYS[ctx.clock_weekday], MONTHS[ctx.clock_month], ctx.clock_day);
+    draw_name(it, fonts, date);
+  } else if (ctx.mode != REMOTE_MODE_NOTIFICATIONS) {
+    draw_name(it, fonts, str(ctx.selected_item_name).c_str());
+  }
+  switch (ctx.mode) {
+    case REMOTE_MODE_LIGHTS:
+      render_light(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_SWITCHES:
+      render_switch(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_CLIMATE:
+      render_climate(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_WATER_HEATERS:
+      render_water_heater(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_HUMIDIFIERS:
+      render_humidifier(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_FANS:
+      render_fan(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_COVERS:
+      render_cover(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_LOCKS:
+      render_lock(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_MEDIA:
+      render_media(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_SENSORS:
+      render_sensor(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_AUTOMATION:
+      render_automation(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_ALARMS:
+      render_alarm(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_NOTIFICATIONS:
+      render_notifications(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_WEATHER:
+      render_weather(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_INFO:
+    default:
+      render_info(it, fonts, ctx);
+      break;
+  }
+}
+
+void render_system_screen(display::Display *it, const RemoteUiFonts &fonts, RemoteSystemScreen screen,
+                          const RemoteSystemScreenInfo &info) {
+  it->clear();
+  const RemoteUiFonts &f = fonts;
+  const char *glyph = icon::WIFI;
+  const char *headline = "";
+  const char *detail = "";
+  bool lit = false;
+  switch (screen) {
+    case REMOTE_SCREEN_CONNECTING_WIFI:
+      glyph = icon::WIFI;
+      headline = "WI-FI";
+      detail = "CONNECTING\u2026";
+      break;
+    case REMOTE_SCREEN_CONNECTING_API:
+      glyph = icon::HOME;
+      headline = "HOME ASSISTANT";
+      detail = "CONNECTING\u2026";
+      break;
+    case REMOTE_SCREEN_WIFI_LOST:
+      glyph = icon::WIFI_OFF;
+      headline = "WI-FI LOST";
+      detail = "RECONNECTING\u2026";
+      break;
+    case REMOTE_SCREEN_API_LOST:
+      glyph = icon::CLOUD_OFF;
+      headline = "HOME ASSISTANT";
+      detail = "RECONNECTING\u2026";
+      break;
+    case REMOTE_SCREEN_LOW_BATTERY:
+      glyph = icon::BATTERY_ALERT;
+      headline = "LOW BATTERY";
+      detail = "PLEASE CHARGE";
+      lit = true;
+      break;
+    case REMOTE_SCREEN_POWERING_OFF:
+      glyph = icon::POWER;
+      headline = "GOODBYE";
+      detail = "POWERING OFF";
+      break;
+    case REMOTE_SCREEN_HOLD_TO_REBOOT:
+      glyph = icon::RESTART;
+      headline = "HOLD TO REBOOT";
+      detail = "RELEASE TO SLEEP";
+      break;
+    case REMOTE_SCREEN_REBOOTING:
+      glyph = icon::RESTART;
+      headline = "REBOOTING";
+      detail = "BE RIGHT BACK";
+      lit = true;
+      break;
+  }
+  draw_badge(it, f, glyph, lit, 64, 15, 13);
+  text_fit(it, f.title, 64, 42, TextAlign::BASELINE_CENTER, headline, SCREEN_W);
+
+  if (screen == REMOTE_SCREEN_HOLD_TO_REBOOT && info.progress >= 0) {
+    draw_meter(it, f.tiny, 10, 50, SCREEN_W - 20, 11, info.progress, detail);
+    return;
+  }
+  if (screen == REMOTE_SCREEN_LOW_BATTERY && !std::isnan(info.battery_voltage)) {
+    char line[32];
+    snprintf(line, sizeof(line), "%s  %.2fV", detail, info.battery_voltage);
+    text(it, f.tiny, 64, 56, TextAlign::BASELINE_CENTER, line);
+    return;
+  }
+  text_fit(it, f.tiny, 64, 56, TextAlign::BASELINE_CENTER, detail, SCREEN_W);
+  if ((screen == REMOTE_SCREEN_CONNECTING_WIFI || screen == REMOTE_SCREEN_CONNECTING_API) && info.version != nullptr &&
+      info.version[0] != '\0') {
+    char version[16];
+    snprintf(version, sizeof(version), "V%s", info.version);
+    text(it, f.tiny, SCREEN_W, 63, TextAlign::BASELINE_RIGHT, version);
+  }
 }
 
 }  // namespace esphome

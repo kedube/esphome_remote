@@ -3,42 +3,50 @@ script:
     mode: single
     then:
       - script.stop: update_display
+      - script.stop: show_hold_to_reboot_screen
       - lambda: |-
+          id(system_screen_active) = true;
           auto it = id(oled_display);
           if (it->is_failed() || !it->is_ready()) {
             return;
           }
-          it->clear();
-          it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue8ac");
-          it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "POWERING OFF");
+          render_system_screen(it, remote_ui_fonts, REMOTE_SCREEN_POWERING_OFF, RemoteSystemScreenInfo{});
           it->display();
 
+  # Shown while the wake button is held, with a bar that fills over the reboot
+  # hold time. Ends by itself when the button is released or the reboot fires.
   - id: show_hold_to_reboot_screen
-    mode: single
+    mode: restart
     then:
       - script.stop: update_display
-      - lambda: |-
-          auto it = id(oled_display);
-          if (it->is_failed() || !it->is_ready()) {
-            return;
-          }
-          it->clear();
-          it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\uf053");
-          it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "HOLD TO REBOOT");
-          it->display();
+      - while:
+          condition:
+            lambda: 'return id(wake_button_press_started_at) != 0 && !id(wake_button_long_press_fired);'
+          then:
+            - lambda: |-
+                auto it = id(oled_display);
+                if (it->is_failed() || !it->is_ready()) {
+                  return;
+                }
+                RemoteSystemScreenInfo info;
+                uint32_t held = millis() - id(wake_button_press_started_at);
+                info.progress = held >= ${EXTENDED_HOLD_DURATION_MS} ? 100 : int(held * 100 / ${EXTENDED_HOLD_DURATION_MS});
+                render_system_screen(it, remote_ui_fonts, REMOTE_SCREEN_HOLD_TO_REBOOT, info);
+                it->display();
+            - delay: 100ms
 
   - id: show_rebooting_screen
     mode: single
     then:
       - script.stop: update_display
+      - script.stop: show_hold_to_reboot_screen
       - lambda: |-
+          id(system_screen_active) = true;
           auto it = id(oled_display);
           if (it->is_failed() || !it->is_ready()) {
             return;
           }
-          it->clear();
-          it->print(64, 24, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\uf053");
-          it->print(64, 48, id(small_font), COLOR_ON, display::TextAlign::CENTER, "REBOOTING...");
+          render_system_screen(it, remote_ui_fonts, REMOTE_SCREEN_REBOOTING, RemoteSystemScreenInfo{});
           it->display();
 
   - id: reboot_device
@@ -99,7 +107,7 @@ script:
           }
           state.selected_notification_index = id(selected_notification_index);
           state.selected_info_index = id(selected_info_index);
-          state.selected_setting_option = id(selected_setting_option);
+          state.selected_setting_option = id(preferred_setting_option);
           state.selected_weather_detail_index = id(selected_weather_detail_index);
           state.selected_alarm_arm_mode = id(selected_alarm_arm_mode);
           id(persisted_ui_state) = pack_persisted_ui_state(state);
@@ -115,54 +123,36 @@ script:
 
   - id: boot_screen
     then:
-      - if:
-          condition:
-            wifi.connected:
-          then:
-            - lambda: |-
-                auto it = id(oled_display);
-                if (it->is_failed() || !it->is_ready()) {
-                  return;
-                }
-                it->clear();
-                it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue63e");
-                it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WIFI CONNECTED");
-                it->print(64, 36, id(small_font), COLOR_ON, display::TextAlign::CENTER, "CONNECTING TO API");
-                it->display();
-          else:
-            - lambda: |-
-                auto it = id(oled_display);
-                if (it->is_failed() || !it->is_ready()) {
-                  return;
-                }
-                it->clear();
-                it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue648");
-                it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "CONNECTING TO WIFI");
-                it->print(64, 36, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WAITING FOR NETWORK");
-                it->print(64, 56, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "V${VERSION}");
-                it->display();
+      - lambda: |-
+          auto it = id(oled_display);
+          if (it->is_failed() || !it->is_ready()) {
+            return;
+          }
+          RemoteSystemScreenInfo info;
+          info.version = "${VERSION}";
+          bool wifi_up = wifi::global_wifi_component != nullptr && wifi::global_wifi_component->is_connected();
+          render_system_screen(
+              it, remote_ui_fonts, wifi_up ? REMOTE_SCREEN_CONNECTING_API : REMOTE_SCREEN_CONNECTING_WIFI, info);
+          it->display();
 
   - id: show_low_battery_popup
     mode: restart
     then:
       - script.stop: update_display
       - lambda: |-
+          // show_boot_screen stays set: the runtime tick clears it once Home
+          // Assistant is connected and this popup is gone.
           id(low_battery_popup_active) = true;
           id(low_battery_popup_shown) = true;
-          id(show_boot_screen) = false;
           id(updated_ui) = true;
 
           auto it = id(oled_display);
           if (it->is_failed() || !it->is_ready()) {
             return;
           }
-          it->clear();
-          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue19c");
-          it->print(64, 26, id(small_font), COLOR_ON, display::TextAlign::CENTER, "LOW BATTERY");
-          it->print(64, 38, id(small_font), COLOR_ON, display::TextAlign::CENTER, "PLEASE CHARGE");
-          if (!isnan(id(battery_voltage))) {
-            it->printf(64, 56, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "%.02fV", id(battery_voltage));
-          }
+          RemoteSystemScreenInfo info;
+          info.battery_voltage = id(battery_voltage);
+          render_system_screen(it, remote_ui_fonts, REMOTE_SCREEN_LOW_BATTERY, info);
           it->display();
       - delay: 10s
       - lambda: |-
@@ -176,11 +166,7 @@ script:
           if (it->is_failed() || !it->is_ready()) {
             return;
           }
-          it->clear();
-          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue63e");
-          it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WIFI CONNECTED");
-          it->print(64, 36, id(small_font), COLOR_ON, display::TextAlign::CENTER, "API DISCONNECTED");
-          it->print(64, 56, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "RECONNECTING...");
+          render_system_screen(it, remote_ui_fonts, REMOTE_SCREEN_API_LOST, RemoteSystemScreenInfo{});
           it->display();
 
   - id: wifi_disconnected_screen
@@ -190,8 +176,5 @@ script:
           if (it->is_failed() || !it->is_ready()) {
             return;
           }
-          it->clear();
-          it->print(64, 8, id(medium_symbols), COLOR_ON, display::TextAlign::CENTER, "\ue648");
-          it->print(64, 24, id(small_font), COLOR_ON, display::TextAlign::CENTER, "WIFI DISCONNECTED");
-          it->print(64, 36, id(tiny_font), COLOR_ON, display::TextAlign::CENTER, "RECONNECTING...");
+          render_system_screen(it, remote_ui_fonts, REMOTE_SCREEN_WIFI_LOST, RemoteSystemScreenInfo{});
           it->display();

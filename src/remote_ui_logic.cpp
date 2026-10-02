@@ -9,23 +9,6 @@
 
 namespace esphome {
 
-bool remote_ui_has_dual_climate_target(
-    const std::string &selected_item_state, float target_temp_low, float target_temp_high) {
-  return !std::isnan(target_temp_low) &&
-         !std::isnan(target_temp_high) &&
-         (selected_item_state == "heat_cool" || target_temp_low != target_temp_high);
-}
-
-void format_climate_target_detail(
-    char *buffer, size_t buffer_size, bool dual_target, float low, float high, float single_target,
-    const char *temperature_unit) {
-  if (dual_target) {
-    snprintf(buffer, buffer_size, "LOW: %.0f°%s   HIGH: %.0f°%s", low, temperature_unit, high, temperature_unit);
-  } else {
-    snprintf(buffer, buffer_size, "TARGET: %.0f°%s", single_target, temperature_unit);
-  }
-}
-
 void populate_remote_info_text(
     int info_index, const ESPTime &time_now, const char *version, const char *device_name,
     const char *friendly_name, bool battery_monitoring_available, int battery_percentage, float battery_voltage,

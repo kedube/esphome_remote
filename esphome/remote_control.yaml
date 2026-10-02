@@ -34,7 +34,8 @@ packages:
 esphome:
   name: ${DEVICE_NAME}
   friendly_name: ${FRIENDLY_NAME}
-  min_version: 2026.1.0
+  # 2026.9.0 is the first release with `ota: encryption:`.
+  min_version: 2026.9.0
   name_add_mac_suffix: false
   build_flags:
     - -DREMOTE_FRAMEBUFFER_WEB_DEBUG=${FRAMEBUFFER_WEB_DEBUG}
@@ -44,6 +45,7 @@ esphome:
     # Releases the deep-sleep GPIO hold on the OLED enable pin. This is a fix,
     # not instrumentation — keep it when removing debug code.
     - oled_hold_release.h
+    - ../include/remote_ui_types.h
     - ../include/entity_helpers.h
     - ../include/entity_trackers.h
     - ../include/entity_helpers_common.h
@@ -141,6 +143,11 @@ esphome:
             b.selected_notification_index = &id(selected_notification_index);
             b.updated_ui = &id(updated_ui);
             remote_ui_bindings_bound = true;
+            remote_ui_fonts.tiny = id(tiny_font);
+            remote_ui_fonts.small = id(small_font);
+            remote_ui_fonts.title = id(title_font);
+            remote_ui_fonts.large = id(large_font);
+            remote_ui_fonts.hero = id(hero_icons);
     - priority: 250
       then:
         - lambda: |-
@@ -153,6 +160,7 @@ esphome:
             id(selected_notification_index) = restored.selected_notification_index;
             id(selected_info_index) = restored.selected_info_index;
             id(selected_setting_option) = restored.selected_setting_option;
+            id(preferred_setting_option) = restored.selected_setting_option;
             id(selected_weather_detail_index) = restored.selected_weather_detail_index;
             id(selected_alarm_arm_mode) = static_cast<int>(clamp_alarm_arm_mode(restored.selected_alarm_arm_mode));
 
@@ -193,8 +201,9 @@ esp32:
       # high fails the update after the image has fully transferred.
       minimum_chip_revision: "3.0"
       # Maps SRAM1 as IRAM (+40KB of code space) at the cost of an equivalent
-      # amount of heap. Requires the rev 3 bootloader, which the pinned chip
-      # revision above already guarantees.
+      # amount of heap. Needs a bootloader from ESP-IDF 5.1 or later, which only
+      # a USB flash installs (OTA never updates the bootloader): a remote whose
+      # last USB flash was older firmware won't boot after an OTA of this one.
       sram1_as_iram: true
 
 wifi:
@@ -228,7 +237,7 @@ time:
 
 ota:
   - platform: esphome
-    password: !secret ota_password
+    encryption:
 
 safe_mode:
   boot_is_good_after: ${SAFE_MODE_BOOT_IS_GOOD_AFTER}

@@ -16,42 +16,7 @@
 #include "esphome/core/preferences.h"
 #include "esphome/core/string_ref.h"
 
-enum RemoteMode {
-  REMOTE_MODE_LIGHTS = 0,
-  REMOTE_MODE_SWITCHES = 1,
-  REMOTE_MODE_CLIMATE = 2,
-  REMOTE_MODE_WATER_HEATERS = 3,
-  REMOTE_MODE_HUMIDIFIERS = 4,
-  REMOTE_MODE_FANS = 5,
-  REMOTE_MODE_COVERS = 6,
-  REMOTE_MODE_LOCKS = 7,
-  REMOTE_MODE_MEDIA = 8,
-  REMOTE_MODE_SENSORS = 9,
-  REMOTE_MODE_AUTOMATION = 10,
-  REMOTE_MODE_NOTIFICATIONS = 11,
-  REMOTE_MODE_WEATHER = 12,
-  REMOTE_MODE_INFO = 13,
-  REMOTE_MODE_ALARMS = 14,
-};
-
-inline constexpr int REMOTE_MODE_COUNT = 15;
-inline constexpr RemoteMode MENU_MODE_ORDER[] = {
-    REMOTE_MODE_LIGHTS,
-    REMOTE_MODE_SWITCHES,
-    REMOTE_MODE_CLIMATE,
-    REMOTE_MODE_WATER_HEATERS,
-    REMOTE_MODE_HUMIDIFIERS,
-    REMOTE_MODE_FANS,
-    REMOTE_MODE_COVERS,
-    REMOTE_MODE_LOCKS,
-    REMOTE_MODE_MEDIA,
-    REMOTE_MODE_SENSORS,
-    REMOTE_MODE_AUTOMATION,
-    REMOTE_MODE_ALARMS,
-    REMOTE_MODE_WEATHER,
-    REMOTE_MODE_NOTIFICATIONS,
-    REMOTE_MODE_INFO,
-};
+#include "remote_ui_types.h"
 
 struct EntityEntry {
   const char *name;
@@ -140,6 +105,25 @@ inline constexpr RemoteMode favorite_entity_mode_constexpr(const char *entity_id
          cstr_starts_with_constexpr(entity_id, "weather.")          ? REMOTE_MODE_WEATHER :
                                                                         REMOTE_MODE_INFO;
 }
+
+// Every favorite needs an entity_id in a domain this firmware supports. One
+// without would belong to no mode: its page would be empty, and Previous/Next
+// could not move past it.
+inline constexpr bool favorite_entities_supported() {
+  for (size_t i = 0; i < FAVORITE_LIST_COUNT; i++) {
+    for (size_t j = 0; j < FAVORITE_LISTS[i].count; j++) {
+      const char *entity_id = FAVORITE_LISTS[i].entries[j].entity_id;
+      if (entity_id == nullptr || entity_id[0] == '\0' ||
+          favorite_entity_mode_constexpr(entity_id) == REMOTE_MODE_INFO) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+static_assert(favorite_entities_supported(),
+              "local_entities.h: a favorite has no entity_id, or its domain isn't supported (see Supported Home "
+              "Assistant Entity Domains in the README)");
 
 inline constexpr bool favorite_entity_seen_earlier(size_t list_index, size_t entry_index, const char *entity_id) {
   for (size_t i = 0; i <= list_index && i < FAVORITE_LIST_COUNT; i++) {
@@ -278,19 +262,6 @@ inline bool ha_api_ready() {
   return esphome::api::global_api_server != nullptr;
 }
 
-inline bool ha_state_missing(const char *data, size_t len) {
-  if (len == 0) {
-    return true;
-  }
-  return (len == 7 && memcmp(data, "unknown", 7) == 0) ||
-         (len == 11 && memcmp(data, "unavailable", 11) == 0) ||
-         (len == 4 && memcmp(data, "None", 4) == 0);
-}
-
-inline bool ha_state_missing(const std::string &value) {
-  return ha_state_missing(value.data(), value.size());
-}
-
 inline bool ha_state_missing(esphome::StringRef state) {
   return ha_state_missing(state.c_str(), state.size());
 }
@@ -302,7 +273,9 @@ inline void ha_assign(std::string &target, esphome::StringRef state) {
 }
 
 inline void ha_assign_state_or_unknown(std::string &target, esphome::StringRef state) {
-  if (ha_state_missing(state)) {
+  if (state.size() == 11 && memcmp(state.c_str(), "unavailable", 11) == 0) {
+    target = "unavailable";
+  } else if (ha_state_missing(state)) {
     target = "unknown";
   } else {
     target.assign(state.c_str(), state.size());
@@ -355,6 +328,27 @@ inline bool ha_payload_looks_like_json(esphome::StringRef state) {
 // for_each_delimited_option, so it is skipped rather than stored: splitting it
 // would surface two bogus options and send a truncated name back to Home
 // Assistant in the resulting service call.
+inline void ha_append_joined_item(std::string &target, const char *item, size_t len) {
+  while (len > 0 && (item[0] == ' ' || item[0] == '\t' || item[0] == '\r' || item[0] == '\n')) {
+    item++;
+    len--;
+  }
+  while (len > 0 && (item[len - 1] == ' ' || item[len - 1] == '\t' || item[len - 1] == '\r' || item[len - 1] == '\n')) {
+    len--;
+  }
+  if (len == 0) {
+    return;
+  }
+  if (memchr(item, '|', len) != nullptr) {
+    ESP_LOGW("remote_config", "Skipping option containing '|': %.*s", static_cast<int>(len), item);
+    return;
+  }
+  if (!target.empty()) {
+    target += '|';
+  }
+  target.append(item, len);
+}
+
 inline void ha_store_joined_list(std::string &target, esphome::StringRef state) {
   target.clear();
   if (ha_state_missing(state) || state.size() > REMOTE_HA_MAX_JSON_PAYLOAD_BYTES) {
@@ -366,76 +360,37 @@ inline void ha_store_joined_list(std::string &target, esphome::StringRef state) 
 
   JsonDocument doc;
   if (deserializeJson(doc, state.c_str(), state.size()) != DeserializationError::Ok || !doc.is<JsonArray>()) {
+    // Home Assistant sends str() of the attribute, so a list of enum members,
+    // such as a thermostat's hvac_modes, arrives as
+    // "[<HVACMode.OFF: 'off'>, <HVACMode.HEAT: 'heat'>]", which isn't JSON.
+    // Take the quoted values from it instead.
+    const char *p = state.c_str();
+    const char *end = p + state.size();
+    while (p < end) {
+      if (*p != '\'' && *p != '"') {
+        p++;
+        continue;
+      }
+      const char quote = *p++;
+      const char *item = p;
+      while (p < end && *p != quote) {
+        p++;
+      }
+      if (p >= end) {
+        break;
+      }
+      ha_append_joined_item(target, item, p - item);
+      p++;
+    }
     return;
   }
 
   for (JsonVariant value : doc.as<JsonArray>()) {
     const char *item = value.as<const char *>();
-    if (item == nullptr) {
-      continue;
-    }
-    size_t len = strlen(item);
-    while (len > 0 && (item[0] == ' ' || item[0] == '\t' || item[0] == '\r' || item[0] == '\n')) {
-      item++;
-      len--;
-    }
-    while (len > 0 && (item[len - 1] == ' ' || item[len - 1] == '\t' || item[len - 1] == '\r' || item[len - 1] == '\n')) {
-      len--;
-    }
-    if (len == 0) {
-      continue;
-    }
-    if (memchr(item, '|', len) != nullptr) {
-      ESP_LOGW("remote_config", "Skipping option containing '|': %.*s", static_cast<int>(len), item);
-      continue;
-    }
-    if (!target.empty()) {
-      target += '|';
-    }
-    target.append(item, len);
-  }
-}
-
-inline void remote_state_label_to_buffer(
-    const std::string &raw, char *buffer, size_t buffer_size, const char *fallback = "SYNCING") {
-  if (buffer == nullptr || buffer_size == 0) {
-    return;
-  }
-
-  size_t write_idx = 0;
-  for (char ch : raw) {
-    if (write_idx + 1 >= buffer_size) {
-      break;
-    }
-    if (ch >= 'a' && ch <= 'z') {
-      buffer[write_idx++] = ch - 'a' + 'A';
-    } else if (ch == '_') {
-      buffer[write_idx++] = ' ';
-    } else {
-      buffer[write_idx++] = ch;
+    if (item != nullptr) {
+      ha_append_joined_item(target, item, strlen(item));
     }
   }
-  buffer[write_idx] = '\0';
-
-  if (write_idx == 0 || strcmp(buffer, "UNKNOWN") == 0) {
-    snprintf(buffer, buffer_size, "%s", fallback != nullptr ? fallback : "");
-  }
-}
-
-// ASCII uppercase into a fixed buffer; avoids the temporary std::string that
-// str_upper_case() allocates when the result is only compared and discarded.
-inline void str_upper_to_buffer(const std::string &raw, char *buffer, size_t buffer_size) {
-  if (buffer == nullptr || buffer_size == 0) {
-    return;
-  }
-  size_t write_idx = 0;
-  for (char ch : raw) {
-    if (write_idx + 1 >= buffer_size) {
-      break;
-    }
-    buffer[write_idx++] = (ch >= 'a' && ch <= 'z') ? ch - 'a' + 'A' : ch;
-  }
-  buffer[write_idx] = '\0';
 }
 
 inline int clamp_percent_value(float value, float scale = 1.0f, int min_value = 0) {
@@ -468,8 +423,11 @@ inline std::string lock_operation_feedback_for_state(const std::string &state) {
 }
 
 inline bool cover_state_matches_expected(const std::string &state, float position, const std::string &expected_state) {
-  const bool reached_open = state == "open" || (!std::isnan(position) && position >= 99.0f);
-  const bool reached_closed = state == "closed" || (!std::isnan(position) && position <= 1.0f);
+  // Home Assistant reports "open" for any cover that isn't fully closed, so a
+  // cover that reports its position is only open once that position says so.
+  const bool has_position = !std::isnan(position);
+  const bool reached_open = has_position ? position >= 99.0f : state == "open";
+  const bool reached_closed = state == "closed" || (has_position && position <= 1.0f);
   return (expected_state == "open" && reached_open) || (expected_state == "closed" && reached_closed);
 }
 
@@ -752,351 +710,6 @@ inline const char *indexed_value_cstr(const char *const *values, int count, int 
   return (idx >= 0 && idx < count) ? values[idx] : "";
 }
 
-enum RemoteSettingOption {
-  REMOTE_SETTING_NONE = 0,
-  REMOTE_SETTING_LIGHT_DIMMER,
-  REMOTE_SETTING_LIGHT_EFFECT,
-  REMOTE_SETTING_CLIMATE_LOW,
-  REMOTE_SETTING_CLIMATE_HIGH,
-  REMOTE_SETTING_CLIMATE_TARGET,
-  REMOTE_SETTING_CLIMATE_FAN,
-  REMOTE_SETTING_CLIMATE_HUMIDITY,
-  REMOTE_SETTING_CLIMATE_PRESETS,
-  REMOTE_SETTING_CLIMATE_HVAC_MODE,
-  REMOTE_SETTING_CLIMATE_ACTION,
-  REMOTE_SETTING_CLIMATE_STATE,
-  REMOTE_SETTING_HUMIDIFIER_HUMIDITY,
-  REMOTE_SETTING_HUMIDIFIER_MODE,
-  REMOTE_SETTING_HUMIDIFIER_ACTION,
-  REMOTE_SETTING_HUMIDIFIER_STATE,
-  REMOTE_SETTING_FAN_SPEED,
-  REMOTE_SETTING_FAN_PRESETS,
-  REMOTE_SETTING_FAN_OSCILLATE,
-  REMOTE_SETTING_FAN_DIRECTION,
-  REMOTE_SETTING_COVER_POSITION,
-  REMOTE_SETTING_COVER_TILT,
-  REMOTE_SETTING_MEDIA_SELECT,
-  REMOTE_SETTING_MEDIA_VOLUME,
-  REMOTE_SETTING_MEDIA_SHUFFLE,
-  REMOTE_SETTING_MEDIA_CHANNEL,
-  REMOTE_SETTING_MEDIA_SOURCE,
-  REMOTE_SETTING_MEDIA_REPEAT,
-  REMOTE_SETTING_MEDIA_SOUND,
-  REMOTE_SETTING_MEDIA_STATE,
-  REMOTE_SETTING_ALARM_STATE,
-  REMOTE_SETTING_NOTIFICATION_MESSAGES,
-  REMOTE_SETTING_WEATHER_CONDITIONS,
-  REMOTE_SETTING_WEATHER_HUMIDITY,
-  REMOTE_SETTING_WEATHER_WIND_SPEED,
-  REMOTE_SETTING_WEATHER_WIND_BEARING,
-  REMOTE_SETTING_WEATHER_WIND_GUST,
-  REMOTE_SETTING_WEATHER_PRESSURE,
-  REMOTE_SETTING_WEATHER_PRECIPITATION,
-  REMOTE_SETTING_WEATHER_CLOUD_COVERAGE,
-  REMOTE_SETTING_WEATHER_UV_INDEX,
-  REMOTE_SETTING_WEATHER_DEW_POINT,
-  REMOTE_SETTING_WEATHER_APPARENT_TEMP,
-  REMOTE_SETTING_WEATHER_HIGH_TEMP,
-  REMOTE_SETTING_WEATHER_LOW_TEMP,
-  REMOTE_SETTING_WATER_HEATER_TARGET,
-  REMOTE_SETTING_WATER_HEATER_MODE,
-  REMOTE_SETTING_WATER_HEATER_AWAY,
-};
-
-inline const char *remote_setting_option_label(RemoteSettingOption option) {
-  switch (option) {
-    case REMOTE_SETTING_LIGHT_DIMMER:
-      return "DIMMER";
-    case REMOTE_SETTING_LIGHT_EFFECT:
-      return "EFFECT";
-    case REMOTE_SETTING_CLIMATE_LOW:
-      return "LOW";
-    case REMOTE_SETTING_CLIMATE_HIGH:
-      return "HIGH";
-    case REMOTE_SETTING_CLIMATE_TARGET:
-      return "TARGET";
-    case REMOTE_SETTING_CLIMATE_FAN:
-      return "FAN";
-    case REMOTE_SETTING_CLIMATE_HUMIDITY:
-      return "HUMIDITY";
-    case REMOTE_SETTING_CLIMATE_PRESETS:
-      return "PRESETS";
-    case REMOTE_SETTING_CLIMATE_HVAC_MODE:
-      return "HVAC MODE";
-    case REMOTE_SETTING_CLIMATE_ACTION:
-      return "STATUS";
-    case REMOTE_SETTING_CLIMATE_STATE:
-      return "MODE";
-    case REMOTE_SETTING_HUMIDIFIER_HUMIDITY:
-      return "HUMIDITY";
-    case REMOTE_SETTING_HUMIDIFIER_MODE:
-      return "MODE";
-    case REMOTE_SETTING_HUMIDIFIER_ACTION:
-      return "STATUS";
-    case REMOTE_SETTING_HUMIDIFIER_STATE:
-      return "STATUS";
-    case REMOTE_SETTING_FAN_SPEED:
-      return "SPEED";
-    case REMOTE_SETTING_FAN_PRESETS:
-      return "PRESETS";
-    case REMOTE_SETTING_FAN_OSCILLATE:
-      return "OSCILLATE";
-    case REMOTE_SETTING_FAN_DIRECTION:
-      return "DIRECTION";
-    case REMOTE_SETTING_COVER_POSITION:
-      return "POSITION";
-    case REMOTE_SETTING_COVER_TILT:
-      return "TILT";
-    case REMOTE_SETTING_MEDIA_SELECT:
-      return "SELECT";
-    case REMOTE_SETTING_MEDIA_VOLUME:
-      return "VOLUME";
-    case REMOTE_SETTING_MEDIA_SHUFFLE:
-      return "SHUFFLE";
-    case REMOTE_SETTING_MEDIA_CHANNEL:
-      return "CHANNEL";
-    case REMOTE_SETTING_MEDIA_SOURCE:
-      return "SOURCE";
-    case REMOTE_SETTING_MEDIA_REPEAT:
-      return "REPEAT";
-    case REMOTE_SETTING_MEDIA_SOUND:
-      return "SOUND";
-    case REMOTE_SETTING_MEDIA_STATE:
-      return "STATE";
-    case REMOTE_SETTING_ALARM_STATE:
-      return "MODE";
-    case REMOTE_SETTING_NOTIFICATION_MESSAGES:
-      return "MESSAGES";
-    case REMOTE_SETTING_WEATHER_CONDITIONS:
-      return "CONDITIONS";
-    case REMOTE_SETTING_WEATHER_HUMIDITY:
-      return "HUMIDITY";
-    case REMOTE_SETTING_WEATHER_WIND_SPEED:
-      return "WIND SPEED";
-    case REMOTE_SETTING_WEATHER_WIND_BEARING:
-      return "WIND DIR";
-    case REMOTE_SETTING_WEATHER_WIND_GUST:
-      return "WIND GUST";
-    case REMOTE_SETTING_WEATHER_PRESSURE:
-      return "PRESSURE";
-    case REMOTE_SETTING_WEATHER_PRECIPITATION:
-      return "PRECIP";
-    case REMOTE_SETTING_WEATHER_CLOUD_COVERAGE:
-      return "CLOUD COV";
-    case REMOTE_SETTING_WEATHER_UV_INDEX:
-      return "UV INDEX";
-    case REMOTE_SETTING_WEATHER_DEW_POINT:
-      return "DEW POINT";
-    case REMOTE_SETTING_WEATHER_APPARENT_TEMP:
-      return "FEELS LIKE";
-    case REMOTE_SETTING_WEATHER_HIGH_TEMP:
-      return "HIGH TEMP";
-    case REMOTE_SETTING_WEATHER_LOW_TEMP:
-      return "LOW TEMP";
-    case REMOTE_SETTING_WATER_HEATER_TARGET:
-      return "TARGET";
-    case REMOTE_SETTING_WATER_HEATER_MODE:
-      return "MODE";
-    case REMOTE_SETTING_WATER_HEATER_AWAY:
-      return "AWAY";
-    case REMOTE_SETTING_NONE:
-    default:
-      return "";
-  }
-}
-
-inline const char *remote_setting_left_icon(RemoteSettingOption option) {
-  switch (option) {
-    case REMOTE_SETTING_LIGHT_DIMMER:
-    case REMOTE_SETTING_CLIMATE_HUMIDITY:
-    case REMOTE_SETTING_HUMIDIFIER_HUMIDITY:
-    case REMOTE_SETTING_FAN_SPEED:
-    case REMOTE_SETTING_FAN_DIRECTION:
-    case REMOTE_SETTING_COVER_POSITION:
-    case REMOTE_SETTING_COVER_TILT:
-    case REMOTE_SETTING_WATER_HEATER_AWAY:
-    case REMOTE_SETTING_CLIMATE_LOW:
-    case REMOTE_SETTING_CLIMATE_HIGH:
-    case REMOTE_SETTING_CLIMATE_TARGET:
-    case REMOTE_SETTING_WATER_HEATER_TARGET:
-      return "\ue15b";
-    case REMOTE_SETTING_MEDIA_SELECT:
-      return "\ue045";
-    case REMOTE_SETTING_MEDIA_CHANNEL:
-      return "\uead0";
-    case REMOTE_SETTING_MEDIA_VOLUME:
-      return "\ue04d";
-    case REMOTE_SETTING_LIGHT_EFFECT:
-    case REMOTE_SETTING_CLIMATE_FAN:
-    case REMOTE_SETTING_CLIMATE_PRESETS:
-    case REMOTE_SETTING_CLIMATE_HVAC_MODE:
-    case REMOTE_SETTING_HUMIDIFIER_MODE:
-    case REMOTE_SETTING_FAN_PRESETS:
-    case REMOTE_SETTING_FAN_OSCILLATE:
-    case REMOTE_SETTING_MEDIA_SOURCE:
-    case REMOTE_SETTING_MEDIA_SHUFFLE:
-    case REMOTE_SETTING_MEDIA_REPEAT:
-    case REMOTE_SETTING_MEDIA_SOUND:
-    case REMOTE_SETTING_MEDIA_STATE:
-    case REMOTE_SETTING_ALARM_STATE:
-    case REMOTE_SETTING_NOTIFICATION_MESSAGES:
-    case REMOTE_SETTING_WATER_HEATER_MODE:
-    case REMOTE_SETTING_WEATHER_CONDITIONS:
-    case REMOTE_SETTING_WEATHER_HUMIDITY:
-    case REMOTE_SETTING_WEATHER_WIND_SPEED:
-    case REMOTE_SETTING_WEATHER_WIND_BEARING:
-    case REMOTE_SETTING_WEATHER_WIND_GUST:
-    case REMOTE_SETTING_WEATHER_PRESSURE:
-    case REMOTE_SETTING_WEATHER_PRECIPITATION:
-    case REMOTE_SETTING_WEATHER_CLOUD_COVERAGE:
-    case REMOTE_SETTING_WEATHER_UV_INDEX:
-    case REMOTE_SETTING_WEATHER_DEW_POINT:
-    case REMOTE_SETTING_WEATHER_APPARENT_TEMP:
-    case REMOTE_SETTING_WEATHER_HIGH_TEMP:
-    case REMOTE_SETTING_WEATHER_LOW_TEMP:
-      return "\ueac3";
-    case REMOTE_SETTING_CLIMATE_ACTION:
-    case REMOTE_SETTING_HUMIDIFIER_ACTION:
-    case REMOTE_SETTING_HUMIDIFIER_STATE:
-    case REMOTE_SETTING_NONE:
-    default:
-      return "";
-  }
-}
-
-inline const char *remote_setting_right_icon(RemoteSettingOption option) {
-  switch (option) {
-    case REMOTE_SETTING_LIGHT_DIMMER:
-    case REMOTE_SETTING_CLIMATE_HUMIDITY:
-    case REMOTE_SETTING_HUMIDIFIER_HUMIDITY:
-    case REMOTE_SETTING_FAN_SPEED:
-    case REMOTE_SETTING_FAN_DIRECTION:
-    case REMOTE_SETTING_COVER_POSITION:
-    case REMOTE_SETTING_COVER_TILT:
-    case REMOTE_SETTING_WATER_HEATER_AWAY:
-    case REMOTE_SETTING_CLIMATE_LOW:
-    case REMOTE_SETTING_CLIMATE_HIGH:
-    case REMOTE_SETTING_CLIMATE_TARGET:
-    case REMOTE_SETTING_WATER_HEATER_TARGET:
-      return "\ue145";
-    case REMOTE_SETTING_MEDIA_SELECT:
-      return "\ue044";
-    case REMOTE_SETTING_MEDIA_CHANNEL:
-      return "\ueacf";
-    case REMOTE_SETTING_MEDIA_VOLUME:
-      return "\ue050";
-    case REMOTE_SETTING_LIGHT_EFFECT:
-    case REMOTE_SETTING_CLIMATE_FAN:
-    case REMOTE_SETTING_CLIMATE_PRESETS:
-    case REMOTE_SETTING_CLIMATE_HVAC_MODE:
-    case REMOTE_SETTING_HUMIDIFIER_MODE:
-    case REMOTE_SETTING_FAN_PRESETS:
-    case REMOTE_SETTING_FAN_OSCILLATE:
-    case REMOTE_SETTING_MEDIA_SOURCE:
-    case REMOTE_SETTING_MEDIA_SHUFFLE:
-    case REMOTE_SETTING_MEDIA_REPEAT:
-    case REMOTE_SETTING_MEDIA_SOUND:
-    case REMOTE_SETTING_MEDIA_STATE:
-    case REMOTE_SETTING_ALARM_STATE:
-    case REMOTE_SETTING_NOTIFICATION_MESSAGES:
-    case REMOTE_SETTING_WATER_HEATER_MODE:
-    case REMOTE_SETTING_WEATHER_CONDITIONS:
-    case REMOTE_SETTING_WEATHER_HUMIDITY:
-    case REMOTE_SETTING_WEATHER_WIND_SPEED:
-    case REMOTE_SETTING_WEATHER_WIND_BEARING:
-    case REMOTE_SETTING_WEATHER_WIND_GUST:
-    case REMOTE_SETTING_WEATHER_PRESSURE:
-    case REMOTE_SETTING_WEATHER_PRECIPITATION:
-    case REMOTE_SETTING_WEATHER_CLOUD_COVERAGE:
-    case REMOTE_SETTING_WEATHER_UV_INDEX:
-    case REMOTE_SETTING_WEATHER_DEW_POINT:
-    case REMOTE_SETTING_WEATHER_APPARENT_TEMP:
-    case REMOTE_SETTING_WEATHER_HIGH_TEMP:
-    case REMOTE_SETTING_WEATHER_LOW_TEMP:      
-      return "\ueac9";
-    case REMOTE_SETTING_CLIMATE_ACTION:
-    case REMOTE_SETTING_HUMIDIFIER_ACTION:
-    case REMOTE_SETTING_HUMIDIFIER_STATE:
-    case REMOTE_SETTING_NONE:
-    default:
-      return "";
-  }
-}
-
-inline const char *mode_title(RemoteMode mode) {
-  switch (mode) {
-    case REMOTE_MODE_LIGHTS:
-      return "LIGHTS";
-    case REMOTE_MODE_SWITCHES:
-      return "SWITCHES";
-    case REMOTE_MODE_CLIMATE:
-      return "CLIMATE";
-    case REMOTE_MODE_WATER_HEATERS:
-      return "WATER HEATERS";
-    case REMOTE_MODE_HUMIDIFIERS:
-      return "HUMIDIFIERS";
-    case REMOTE_MODE_FANS:
-      return "FANS";
-    case REMOTE_MODE_COVERS:
-      return "COVERS";
-    case REMOTE_MODE_LOCKS:
-      return "DOOR LOCKS";
-    case REMOTE_MODE_MEDIA:
-      return "MEDIA";
-    case REMOTE_MODE_SENSORS:
-      return "SENSORS";
-    case REMOTE_MODE_AUTOMATION:
-      return "AUTOMATIONS";
-    case REMOTE_MODE_ALARMS:
-      return "ALARMS";
-    case REMOTE_MODE_NOTIFICATIONS:
-      return "NOTIFICATIONS";
-    case REMOTE_MODE_WEATHER:
-      return "WEATHER";
-    case REMOTE_MODE_INFO:
-      return "INFO";
-    default:
-      return "MODE";
-  }
-}
-
-inline const char *mode_icon(RemoteMode mode) {
-  switch (mode) {
-    case REMOTE_MODE_LIGHTS:
-      return "\ue90f";
-    case REMOTE_MODE_SWITCHES:
-      return "\ue1f4";
-    case REMOTE_MODE_CLIMATE:
-      return "\uf076";
-    case REMOTE_MODE_WATER_HEATERS:
-      return "\uf16a";
-    case REMOTE_MODE_HUMIDIFIERS:
-      return "\uf165";
-    case REMOTE_MODE_FANS:
-      return "\uf168";
-    case REMOTE_MODE_COVERS:
-      return "\ue286";
-    case REMOTE_MODE_LOCKS:
-      return "\ue897";
-    case REMOTE_MODE_MEDIA:
-      return "\uf4f2";
-    case REMOTE_MODE_SENSORS:
-      return "\uf556";
-    case REMOTE_MODE_AUTOMATION:
-      return "\ue88a";
-    case REMOTE_MODE_ALARMS:
-      return "\ue7f7";
-    case REMOTE_MODE_NOTIFICATIONS:
-      return "\ue158";
-    case REMOTE_MODE_WEATHER:
-      return "\ue81a";
-    case REMOTE_MODE_INFO:
-      return "\ue88e";
-    default:
-      return "\ue90f";
-  }
-}
-
 inline RemoteMode favorite_entity_mode(const char *entity_id) {
   return favorite_entity_mode_constexpr(entity_id);
 }
@@ -1248,20 +861,6 @@ inline const char *menu_index_title(int menu_index) {
     return mode_title(REMOTE_MODE_NOTIFICATIONS);
   }
   return mode_title(REMOTE_MODE_INFO);
-}
-
-struct UiMenuHeader {
-  const char *title;
-  const char *icon;
-};
-
-inline UiMenuHeader ui_menu_header(int menu_index, RemoteMode current_mode) {
-  UiMenuHeader header{};
-  header.title = menu_index_title(menu_index);
-  header.icon = menu_index_is_favorite(menu_index)
-      ? mode_icon(current_mode)
-      : mode_icon(menu_index_is_notifications(menu_index) ? REMOTE_MODE_NOTIFICATIONS : REMOTE_MODE_INFO);
-  return header;
 }
 
 inline int mode_item_count(RemoteMode mode) {
@@ -1425,61 +1024,6 @@ inline std::string mode_item_entity(RemoteMode mode, int idx) {
   return entity != nullptr ? std::string(entity) : std::string();
 }
 
-enum AutomationKind {
-  AUTOMATION_KIND_AUTOMATION = 0,
-  AUTOMATION_KIND_SCRIPT = 1,
-  AUTOMATION_KIND_SCENE = 2,
-};
-
-enum AlarmArmMode {
-  ALARM_ARM_MODE_AWAY = 0,
-  ALARM_ARM_MODE_HOME = 1,
-  ALARM_ARM_MODE_NIGHT = 2,
-  ALARM_ARM_MODE_VACATION = 3,
-};
-
-inline constexpr int ALARM_ARM_MODE_COUNT = 4;
-
-inline AlarmArmMode clamp_alarm_arm_mode(int value) {
-  if (value < 0 || value >= ALARM_ARM_MODE_COUNT) {
-    return ALARM_ARM_MODE_AWAY;
-  }
-  return static_cast<AlarmArmMode>(value);
-}
-
-inline AlarmArmMode next_alarm_arm_mode(AlarmArmMode mode, int step = 1) {
-  int next = (static_cast<int>(mode) + (step % ALARM_ARM_MODE_COUNT) + ALARM_ARM_MODE_COUNT) % ALARM_ARM_MODE_COUNT;
-  return static_cast<AlarmArmMode>(next);
-}
-
-inline const char *alarm_arm_mode_selection_label(AlarmArmMode mode) {
-  switch (mode) {
-    case ALARM_ARM_MODE_HOME:
-      return "ARM HOME";
-    case ALARM_ARM_MODE_NIGHT:
-      return "ARM NIGHT";
-    case ALARM_ARM_MODE_VACATION:
-      return "ARM VACATION";
-    case ALARM_ARM_MODE_AWAY:
-    default:
-      return "ARM AWAY";
-  }
-}
-
-inline const char *alarm_arm_mode_hold_label(AlarmArmMode mode) {
-  switch (mode) {
-    case ALARM_ARM_MODE_HOME:
-      return "HOLD TO ARM HOME";
-    case ALARM_ARM_MODE_NIGHT:
-      return "HOLD TO ARM NIGHT";
-    case ALARM_ARM_MODE_VACATION:
-      return "HOLD TO ARM VACATION";
-    case ALARM_ARM_MODE_AWAY:
-    default:
-      return "HOLD TO ARM AWAY";
-  }
-}
-
 inline const char *alarm_expected_armed_state(AlarmArmMode mode) {
   switch (mode) {
     case ALARM_ARM_MODE_HOME: return "armed_home";
@@ -1491,7 +1035,7 @@ inline const char *alarm_expected_armed_state(AlarmArmMode mode) {
 }
 
 inline bool alarm_action_is_arm(const std::string &state, AlarmArmMode arm_mode) {
-  if (state == "unknown") return false;
+  if (ha_state_missing(state)) return false;
   return state != alarm_expected_armed_state(arm_mode);
 }
 

@@ -7,8 +7,11 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    # Weekly build so ESPHome releases that break the config surface here rather
-    # than the next time someone tries to flash a remote.
+    # Weekly build so breakage from anything that isn't pinned, such as the
+    # Google Fonts the config downloads, surfaces here rather than the next time
+    # someone tries to flash a remote. This run installs the pinned ESPHome, so
+    # new ESPHome releases arrive as Dependabot pull requests instead
+    # (.github/dependabot.yml).
     - cron: "0 6 * * 1"
 
 concurrency:
@@ -85,7 +88,11 @@ jobs:
         run: esphome config esphome/remote_control.yaml
 
       - name: Compile firmware
-        run: esphome compile esphome/remote_control.yaml
+        # The restored cache can hold build folders from an earlier device name
+        # or ESPHome version; drop their firmware so only this build's is uploaded.
+        run: |
+          rm -f esphome/.esphome/build/*/build/*.bin
+          esphome compile esphome/remote_control.yaml
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
@@ -95,4 +102,45 @@ jobs:
             esphome/.esphome/build/*/build/*.factory.bin
             esphome/.esphome/build/*/build/*.ota.bin
           if-no-files-found: error
+          retention-days: 14
+
+  ui:
+    name: UI preview and renderer stress test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install ESPHome
+        run: pip install -r requirements.txt
+
+      - name: Let AddressSanitizer start
+        # Some GCC releases' AddressSanitizer crashes before main() under the
+        # kernel's default 32-bit mmap randomisation.
+        run: sudo sysctl vm.mmap_rnd_bits=28
+
+      - name: Render every screen and stress-test the renderer
+        # Draws the sample screens from tools/ui_preview/scenarios.cpp, then
+        # every mode and setting with hostile input (broken text, NaN readings)
+        # under AddressSanitizer and UndefinedBehaviorSanitizer. Any report
+        # fails the build.
+        run: python tools/ui_preview/preview.py --stress
+
+      - name: Upload screens
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-preview
+          path: tools/ui_preview/.cache/ui_preview.png
+          # The contact sheet is written under the .cache/ directory.
+          include-hidden-files: true
+          if-no-files-found: warn
           retention-days: 14

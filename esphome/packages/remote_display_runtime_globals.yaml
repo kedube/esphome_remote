@@ -85,6 +85,22 @@ globals:
     type: uint32_t
     initial_value: '0'
 
+  # Short status message ("ALREADY ON") the footer shows for a few seconds.
+  - id: ui_toast_text
+    type: std::string
+    restore_value: no
+    initial_value: ''
+
+  - id: ui_toast_at
+    type: uint32_t
+    initial_value: '0'
+
+  # Set while a full-screen system page (powering off, rebooting) owns the
+  # display, so a queued UI redraw cannot paint over it.
+  - id: system_screen_active
+    type: bool
+    initial_value: 'false'
+
   - id: lock_verification_complete
     type: bool
     initial_value: 'false'
@@ -174,6 +190,14 @@ globals:
     initial_value: 'false'
 
   - id: selected_setting_option
+    type: int
+    initial_value: '0'
+
+  # The setting the user last picked with Settings. selected_setting_option
+  # falls back to an item's first setting while this one isn't offered (a value
+  # that hasn't synced yet, or a different kind of item) and returns to it once
+  # it is. This is what is saved across sleep.
+  - id: preferred_setting_option
     type: int
     initial_value: '0'
 

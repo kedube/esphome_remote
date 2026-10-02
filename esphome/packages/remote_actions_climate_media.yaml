@@ -6,7 +6,7 @@ script:
       - lambda: |-
           std::string mode = climate_turn_on_mode_for_index(id(selected_climate_index));
           if (mode.empty()) {
-            id(set_setting_preview).execute("SYNCING");
+            id(show_toast).execute("SYNCING");
             return;
           }
           id(set_selected_climate_hvac_mode).execute(mode, "TURNING ON");
@@ -35,7 +35,7 @@ script:
             entity_id: !lambda 'return id(selected_item_entity);'
             hvac_mode: !lambda 'return mode_name;'
       - script.execute:
-          id: set_setting_preview
+          id: show_toast
           text: !lambda 'return preview;'
 
   - id: adjust_climate_temperature
@@ -73,9 +73,9 @@ script:
             id(climate_target_focus_value) = next;
             id(climate_target_focus) = target_focus;
           } else {
+            // Leave low/high alone: a single-setpoint unit in heat_cool would
+            // otherwise look dual-target below and be sent a range it rejects.
             id(selected_climate_target_temp) = next;
-            id(selected_climate_target_temp_low) = next;
-            id(selected_climate_target_temp_high) = next;
             id(climate_target_focus_value) = next;
             id(climate_target_focus) = 1;
           }
@@ -97,11 +97,18 @@ script:
                   target_temp_low: !lambda 'return id(selected_climate_target_temp_low);'
                   target_temp_high: !lambda 'return id(selected_climate_target_temp_high);'
           else:
-            - homeassistant.action:
-                action: climate.set_temperature
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  temperature: !lambda 'return id(selected_climate_target_temp);'
+            # The lambda's early return doesn't stop this script: skip the call
+            # when there is no target to send (not synced yet, or the
+            # thermostat is off and reports none).
+            - if:
+                condition:
+                  lambda: 'return !isnan(id(selected_climate_target_temp));'
+                then:
+                  - homeassistant.action:
+                      action: climate.set_temperature
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                        temperature: !lambda 'return id(selected_climate_target_temp);'
       - script.execute: update_display
 
   - id: climate_temperature_up
@@ -325,11 +332,16 @@ script:
     mode: queued
     then:
       - lambda: |-
-          // Bound the setpoint so repeated presses cannot walk it off to a value
-          // Home Assistant will reject while the remote keeps showing it.
+          // Home Assistant passes water heater setpoints to the device without a
+          // range check, so keep to the heater's own min_temp/max_temp. Until
+          // those sync, fall back to a typical tank's range.
           const bool celsius = std::string("${TEMPERATURE_UNIT}") == "C";
-          const float min_target = celsius ? 30.0f : 90.0f;
-          const float max_target = celsius ? 80.0f : 175.0f;
+          float min_target = selected_water_heater_min_temperature(id(selected_water_heater_index));
+          float max_target = selected_water_heater_max_temperature(id(selected_water_heater_index));
+          if (isnan(min_target) || isnan(max_target) || min_target >= max_target) {
+            min_target = celsius ? 30.0f : 90.0f;
+            max_target = celsius ? 60.0f : 140.0f;
+          }
           float next = id(selected_water_heater_target_temp);
           if (isnan(next)) {
             next = celsius ? 49.0f : 120.0f;
@@ -509,21 +521,32 @@ script:
       delta: int
     mode: queued
     then:
-      - lambda: |-
-          int next = id(selected_media_volume_pct) + delta;
-          if (next > 100) next = 100;
-          if (next < 0) next = 0;
-          id(selected_media_volume_pct) = next;
-          id(last_media_volume_interaction) = millis();
-          id(last_media_interaction) = millis();
-          note_local_change();
-          id(updated_ui) = true;
-      - homeassistant.action:
-          action: media_player.volume_set
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-            volume_level: !lambda 'return id(selected_media_volume_pct) / 100.0f;'
-      - script.execute: update_display
+      - if:
+          # The player reports no volume (it is off, or hasn't synced): ask it to
+          # step instead of setting a level guessed from nothing.
+          condition:
+            lambda: 'return id(selected_media_volume_pct) < 0;'
+          then:
+            - homeassistant.action:
+                action: !lambda 'return delta > 0 ? "media_player.volume_up" : "media_player.volume_down";'
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+          else:
+            - lambda: |-
+                int next = id(selected_media_volume_pct) + delta;
+                if (next > 100) next = 100;
+                if (next < 0) next = 0;
+                id(selected_media_volume_pct) = next;
+                id(last_media_volume_interaction) = millis();
+                id(last_media_interaction) = millis();
+                note_local_change();
+                id(updated_ui) = true;
+            - homeassistant.action:
+                action: media_player.volume_set
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  volume_level: !lambda 'return id(selected_media_volume_pct) / 100.0f;'
+            - script.execute: update_display
 
   - id: media_volume_up
     mode: queued

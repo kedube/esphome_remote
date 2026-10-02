@@ -1,13 +1,31 @@
 script:
+  # Action buttons do nothing until Home Assistant is connected: it drops
+  # actions sent earlier, while the screen still shows CONNECTING, so the remote
+  # would show a change that never happens. On an entity Home Assistant reports
+  # as unavailable they show UNAVAILABLE instead of sending a command.
   - id: primary_mode_action
     then:
-      - script.execute: execute_square_button_action
+      - if:
+          condition:
+            api.connected:
+              state_subscription_only: true
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(selected_item_state) == "unavailable";'
+                then:
+                  - script.execute:
+                      id: show_toast
+                      text: "UNAVAILABLE"
+                else:
+                  - script.execute: execute_square_button_action
 
   - id: secondary_mode_action
     then:
       - script.execute:
           id: cycle_setting_option
           step: 1
+          quiet: false
 
   # Settings button held for EXTENDED_HOLD_DURATION_MS. Only alarm mode arms a
   # long-press action ("HOLD TO TRIGGER"); every other mode keeps the short-press
@@ -24,7 +42,20 @@ script:
 
   - id: play_pause_mode_action
     then:
-      - script.execute: execute_circle_button_action
+      - if:
+          condition:
+            api.connected:
+              state_subscription_only: true
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(selected_item_state) == "unavailable";'
+                then:
+                  - script.execute:
+                      id: show_toast
+                      text: "UNAVAILABLE"
+                else:
+                  - script.execute: execute_circle_button_action
 
   - id: increase_mode_value
     then:
@@ -35,10 +66,24 @@ script:
             - script.execute:
                 id: cycle_setting_option
                 step: 1
+                quiet: false
           else:
-            - script.execute:
-                id: adjust_selected_setting
-                step: 1
+            - if:
+                condition:
+                  api.connected:
+                    state_subscription_only: true
+                then:
+                  - if:
+                      condition:
+                        lambda: 'return id(selected_item_state) == "unavailable";'
+                      then:
+                        - script.execute:
+                            id: show_toast
+                            text: "UNAVAILABLE"
+                      else:
+                        - script.execute:
+                            id: adjust_selected_setting
+                            step: 1
 
   - id: decrease_mode_value
     then:
@@ -49,10 +94,24 @@ script:
             - script.execute:
                 id: cycle_setting_option
                 step: -1
+                quiet: false
           else:
-            - script.execute:
-                id: adjust_selected_setting
-                step: -1
+            - if:
+                condition:
+                  api.connected:
+                    state_subscription_only: true
+                then:
+                  - if:
+                      condition:
+                        lambda: 'return id(selected_item_state) == "unavailable";'
+                      then:
+                        - script.execute:
+                            id: show_toast
+                            text: "UNAVAILABLE"
+                      else:
+                        - script.execute:
+                            id: adjust_selected_setting
+                            step: -1
 
   - id: reset_idle_timer
     mode: restart

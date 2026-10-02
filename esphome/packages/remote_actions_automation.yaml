@@ -46,18 +46,29 @@ script:
           condition:
             lambda: 'return automation_kind(automation_index) == AUTOMATION_KIND_AUTOMATION;'
           then:
+            # Home Assistant answers automation.trigger only once the whole run has
+            # finished, which can be minutes away and land on whatever is selected
+            # by then. A rejected request is answered at once, so report it as
+            # triggered after a moment unless that happened.
             - homeassistant.action:
                 action: automation.trigger
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
-                on_success:
-                  - script.execute:
-                      id: set_automation_feedback
-                      feedback: "TRIGGERED"
                 on_error:
                   - script.execute:
                       id: set_automation_feedback
                       feedback: "FAILED"
+            - delay: 1s
+            - if:
+                condition:
+                  lambda: |-
+                    return id(current_mode) == REMOTE_MODE_AUTOMATION &&
+                           id(selected_automation_index) == automation_index &&
+                           id(last_automation_feedback) == "TRIGGERING...";
+                then:
+                  - script.execute:
+                      id: set_automation_feedback
+                      feedback: "TRIGGERED"
           else:
             - if:
                 condition:

@@ -98,9 +98,10 @@ globals:
     type: float
     initial_value: 'NAN'
 
+  # -1 while the selected player reports no volume.
   - id: selected_media_volume_pct
     type: int
-    initial_value: '0'
+    initial_value: '-1'
 
   - id: selected_media_title
     type: std::string

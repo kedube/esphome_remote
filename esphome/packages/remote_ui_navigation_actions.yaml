@@ -6,6 +6,7 @@ script:
           id(last_navigation_requested_at) = millis();
           id(current_menu_index) = next_available_menu_index(id(current_menu_index), 1);
           id(selected_setting_option) = REMOTE_SETTING_NONE;
+          id(preferred_setting_option) = REMOTE_SETTING_NONE;
           id(selected_setting_detail).clear();
           id(last_setting_interaction) = 0;
           id(updated_ui) = true;
@@ -23,9 +24,15 @@ script:
           id(updated_ui) = true;
       - script.execute: update_display
 
+  # step +1/-1: Settings (or Plus/Minus in Weather) moves to the next/previous
+  # setting, which becomes the preferred one. step 0: a new item was selected, or
+  # with quiet, Home Assistant sent new values; show the preferred setting if
+  # this item offers it, else its first. quiet leaves the screen alone unless
+  # the setting actually changes.
   - id: cycle_setting_option
     parameters:
       step: int
+      quiet: bool
     then:
       - lambda: |-
           RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
@@ -44,10 +51,16 @@ script:
           };
 
           switch (mode) {
-            case REMOTE_MODE_LIGHTS:
-              if (selected_light_has_brightness(id(selected_light_index))) add_option(REMOTE_SETTING_LIGHT_DIMMER);
-              if (selected_light_has_effect(id(selected_light_index))) add_option(REMOTE_SETTING_LIGHT_EFFECT);
+            case REMOTE_MODE_LIGHTS: {
+              // While a light is off the footer shows the on/off hints and only
+              // the dimmer applies: Plus turns it on (Home Assistant drops the
+              // brightness for lights that can't dim). An off light reports no
+              // brightness, so don't wait for one.
+              bool off = id(selected_item_state) == "off";
+              if (off || selected_light_has_brightness(id(selected_light_index))) add_option(REMOTE_SETTING_LIGHT_DIMMER);
+              if (!off && selected_light_has_effect(id(selected_light_index))) add_option(REMOTE_SETTING_LIGHT_EFFECT);
               break;
+            }
             case REMOTE_MODE_CLIMATE:
               if (remote_ui_has_dual_climate_target(id(selected_item_state), id(selected_climate_target_temp_low),
                                                     id(selected_climate_target_temp_high))) {
@@ -68,12 +81,17 @@ script:
               if (!id(selected_humidifier_action).empty() && id(selected_humidifier_action) != "unknown") add_option(REMOTE_SETTING_HUMIDIFIER_ACTION);
               add_option(REMOTE_SETTING_HUMIDIFIER_STATE);
               break;
-            case REMOTE_MODE_FANS:
-              if (selected_fan_has_percentage(id(selected_fan_index))) add_option(REMOTE_SETTING_FAN_SPEED);
-              if (!fan_preset_modes_for_index(id(selected_fan_index)).empty()) add_option(REMOTE_SETTING_FAN_PRESETS);
-              if (!fan_oscillating_for_index(id(selected_fan_index)).empty()) add_option(REMOTE_SETTING_FAN_OSCILLATE);
-              if (!fan_direction_for_index(id(selected_fan_index)).empty()) add_option(REMOTE_SETTING_FAN_DIRECTION);
+            case REMOTE_MODE_FANS: {
+              // As with lights: while off, only Plus turning it on applies.
+              bool off = id(selected_item_state) == "off";
+              if (off || selected_fan_has_percentage(id(selected_fan_index))) add_option(REMOTE_SETTING_FAN_SPEED);
+              if (!off) {
+                if (!fan_preset_modes_for_index(id(selected_fan_index)).empty()) add_option(REMOTE_SETTING_FAN_PRESETS);
+                if (!fan_oscillating_for_index(id(selected_fan_index)).empty()) add_option(REMOTE_SETTING_FAN_OSCILLATE);
+                if (!fan_direction_for_index(id(selected_fan_index)).empty()) add_option(REMOTE_SETTING_FAN_DIRECTION);
+              }
               break;
+            }
             case REMOTE_MODE_COVERS:
               if (selected_cover_has_position(id(selected_cover_index))) add_option(REMOTE_SETTING_COVER_POSITION);
               if (selected_cover_has_tilt(id(selected_cover_index))) add_option(REMOTE_SETTING_COVER_TILT);
@@ -124,25 +142,50 @@ script:
           }
 
           if (count <= 0) {
+            if (quiet && id(selected_setting_option) == REMOTE_SETTING_NONE) {
+              return;
+            }
             id(selected_setting_option) = REMOTE_SETTING_NONE;
             id(selected_setting_detail).clear();
             id(last_setting_interaction) = 0;
             id(updated_ui) = true;
+            id(update_display).execute();
             return;
           }
 
           int current = id(selected_setting_option);
           int next_idx = 0;
-          bool found = false;
-          for (int i = 0; i < count; i++) {
-            if (options[i] == current) {
-              next_idx = (i + step + count) % count;
-              found = true;
-              break;
+          if (step == 0) {
+            for (int i = 0; i < count; i++) {
+              if (options[i] == id(preferred_setting_option)) {
+                next_idx = i;
+                break;
+              }
             }
+          } else {
+            bool found = false;
+            for (int i = 0; i < count; i++) {
+              if (options[i] == current) {
+                next_idx = (i + step + count) % count;
+                found = true;
+                break;
+              }
+            }
+            if (!found) {
+              next_idx = step >= 0 ? 0 : count - 1;
+            }
+            id(preferred_setting_option) = options[next_idx];
           }
-          if (!found) {
-            next_idx = step >= 0 ? 0 : count - 1;
+          if (quiet) {
+            if (options[next_idx] == current) {
+              return;
+            }
+            id(selected_setting_option) = options[next_idx];
+            id(selected_setting_detail).clear();
+            id(last_setting_interaction) = 0;
+            id(updated_ui) = true;
+            id(update_display).execute();
+            return;
           }
           id(selected_setting_option) = options[next_idx];
           RemoteSettingOption chosen = static_cast<RemoteSettingOption>(id(selected_setting_option));
@@ -251,8 +294,10 @@ script:
               detail = id(selected_media_artist);
               break;
             case REMOTE_SETTING_MEDIA_VOLUME:
-              snprintf(buf, sizeof(buf), "%d%%", id(selected_media_volume_pct));
-              detail = buf;
+              if (id(selected_media_volume_pct) >= 0) {
+                snprintf(buf, sizeof(buf), "%d%%", id(selected_media_volume_pct));
+                detail = buf;
+              }
               break;
             case REMOTE_SETTING_MEDIA_SHUFFLE: {
               const std::string &sh = id(selected_media_shuffle);
@@ -366,7 +411,7 @@ script:
           id(selected_setting_detail) = detail;
           id(last_setting_interaction) = millis();
           id(updated_ui) = true;
-      - script.execute: update_display
+          id(update_display).execute();
 
   - id: adjust_selected_setting
     parameters:
@@ -562,8 +607,12 @@ script:
                 id: media_set_shuffle
                 enabled: !lambda 'return step > 0;'
       - if:
+          # The source list can empty out (a TV turning off) while SOURCE is
+          # selected; the lambda's return below can't stop the call after it.
           condition:
-            lambda: 'return id(selected_setting_option) == REMOTE_SETTING_MEDIA_SOURCE;'
+            lambda: |-
+              return id(selected_setting_option) == REMOTE_SETTING_MEDIA_SOURCE &&
+                     media_source_option_count(id(selected_media_index)) > 0;
           then:
             - lambda: |-
                 std::string next_source = step > 0
@@ -682,7 +731,7 @@ script:
                   - script.execute: turn_off_selected_climate
                 else:
                   - script.execute:
-                      id: set_setting_preview
+                      id: show_toast
                       text: "ALREADY OFF"
       - if:
           condition:
@@ -694,11 +743,11 @@ script:
                 then:
                   - script.execute: toggle_selected_humidifier_power
                   - script.execute:
-                      id: set_setting_preview
+                      id: show_toast
                       text: "TURNING OFF"
                 else:
                   - script.execute:
-                      id: set_setting_preview
+                      id: show_toast
                       text: "ALREADY OFF"
       - if:
           condition:
@@ -776,7 +825,7 @@ script:
                   - script.execute: turn_on_selected_climate
                 else:
                   - script.execute:
-                      id: set_setting_preview
+                      id: show_toast
                       text: "ALREADY ON"
       - if:
           condition:
@@ -788,11 +837,11 @@ script:
                 then:
                   - script.execute: toggle_selected_humidifier_power
                   - script.execute:
-                      id: set_setting_preview
+                      id: show_toast
                       text: "TURNING ON"
                 else:
                   - script.execute:
-                      id: set_setting_preview
+                      id: show_toast
                       text: "ALREADY ON"
       - if:
           condition:

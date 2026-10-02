@@ -41,6 +41,7 @@ script:
           // previous item's "TRIGGERED..." stays on screen for the next one.
           id(last_automation_feedback).clear();
           id(last_automation_interaction) = 0;
+          id(ui_toast_at) = 0;
 
           if (selection.mode == REMOTE_MODE_MEDIA) {
             const std::string &state = selected_media_state(selection.resolved_index);
@@ -68,6 +69,9 @@ script:
               if (pct < 0) pct = 0;
               if (pct > 100) pct = 100;
               id(selected_media_volume_pct) = pct;
+            } else {
+              // Unknown: never step from the previous player's level.
+              id(selected_media_volume_pct) = -1;
             }
           }
       - script.execute: persist_ui_state
@@ -75,6 +79,32 @@ script:
       - script.execute:
           id: cycle_setting_option
           step: 0
+          quiet: false
+
+  # Today's high, low and precipitation for a weather entity. Home Assistant
+  # dropped the forecast attribute from weather entities in 2024.3, so ask
+  # weather.get_forecasts, and have Home Assistant shrink the reply to those
+  # three numbers before sending it.
+  - id: fetch_weather_forecast
+    mode: queued
+    parameters:
+      weather_index: int
+    then:
+      - lambda: 'mark_weather_forecast_requested(weather_index);'
+      - homeassistant.action:
+          action: weather.get_forecasts
+          data:
+            entity_id: !lambda 'return std::string(weather_entity_id_for_index(weather_index));'
+            type: daily
+          capture_response: true
+          response_template: >-
+            {% set ns = namespace(today={}) %}
+            {% for data in response.values() %}{% if data.get('forecast') %}{% set ns.today = data.get('forecast')[0] %}{% endif %}{% endfor %}
+            {{ {'high': ns.today.get('temperature'), 'low': ns.today.get('templow'), 'precipitation': ns.today.get('precipitation')} }}
+          on_success:
+            - lambda: |-
+                store_weather_forecast(weather_index, response);
+                id(updated_ui) = true;
 
   - id: sync_current_mode_status
     mode: restart
@@ -95,7 +125,23 @@ script:
           const RemoteUiBindings &bindings = remote_ui_bindings;
           RemoteUiSyncState ui = make_remote_ui_sync_state(bindings);
 
+          bool redraw_pending = id(updated_ui);
+          id(updated_ui) = false;
           sync_remote_ui_state(selection.mode, selection.resolved_index, ui);
+          bool synced = id(updated_ui);
+          id(updated_ui) = redraw_pending || synced;
+          if (synced) {
+            // New values can change which settings the item offers: most arrive
+            // after a wake, and a light only has a brightness while it is on.
+            id(cycle_setting_option).execute(0, true);
+          }
+          // Today's forecast, once per wake for each weather entity. Only once
+          // Home Assistant is connected: it drops requests sent before.
+          if (selection.mode == REMOTE_MODE_WEATHER && !weather_forecast_requested(selection.resolved_index) &&
+              esphome::api::global_api_server != nullptr &&
+              esphome::api::global_api_server->is_connected_with_state_subscription()) {
+            id(fetch_weather_forecast).execute(selection.resolved_index);
+          }
           if (static_cast<RemoteSettingOption>(id(selected_setting_option)) == REMOTE_SETTING_LIGHT_DIMMER
               && id(selected_item_state) == "on" && id(selected_brightness_pct) > 0) {
             char buf[16];
@@ -209,7 +255,10 @@ script:
             }
             if (opt == REMOTE_SETTING_MEDIA_VOLUME) {
               char buf[24];
-              snprintf(buf, sizeof(buf), "%d%%", id(selected_media_volume_pct));
+              buf[0] = '\0';
+              if (id(selected_media_volume_pct) >= 0) {
+                snprintf(buf, sizeof(buf), "%d%%", id(selected_media_volume_pct));
+              }
               if (id(selected_setting_detail) != buf) {
                 id(selected_setting_detail) = buf;
                 id(updated_ui) = true;
@@ -244,7 +293,7 @@ script:
               char buf[48];
               buf[0] = '\0';
               if (dual || !isnan(single)) {
-                esphome::format_climate_target_detail(buf, sizeof(buf), dual, low, high, single, "${TEMPERATURE_UNIT}");
+                format_climate_target_detail(buf, sizeof(buf), dual, low, high, single, "${TEMPERATURE_UNIT}");
               }
               if (id(selected_setting_detail) != buf) {
                 id(selected_setting_detail) = buf;

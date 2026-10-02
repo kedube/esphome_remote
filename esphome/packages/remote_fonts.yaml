@@ -1,82 +1,83 @@
+# Fonts used by the renderer (src/remote_ui_renderer.cpp). Every icon the
+# renderer draws must be listed under hero_icons.
 font:
+  # The text fonts carry printable ASCII, Latin-1 (accented letters, ² ³ µ °)
+  # and typographic quotes, dashes, • € and …, so Home Assistant names, units
+  # and notifications draw without boxes for missing characters.
   - file: "../assets/fonts/arial-bold.ttf"
     id: tiny_font
     size: 9
-    glyphs: &arial_glyphs ['0123456789.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_ :<>%[](){}|''!?/+-&*=$#@^°']
+    glyphs: &text_glyphs [' !"#$%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ‘’“”–—•€…']
   - file: "../assets/fonts/arial-bold.ttf"
     id: small_font
     size: 10
-    glyphs: *arial_glyphs
-  - file: "../assets/fonts/arial-bold.ttf"
-    id: medium_font
-    size: 13
-    glyphs: *arial_glyphs
+    glyphs: *text_glyphs
+  - file:
+      type: gfonts
+      family: Roboto Condensed
+      weight: 700
+    id: title_font
+    size: 14
+    glyphs: *text_glyphs
+  - file:
+      type: gfonts
+      family: Roboto Condensed
+      weight: 700
+    id: large_font
+    size: 28
+    glyphs: ['0123456789°%.-: ONF']
   - file:
       type: gfonts
       family: Material+Symbols+Rounded
       weight: 400
-    id: symbols
-    size: 12
+    id: hero_icons
+    size: 24
     glyphs: [
-      "\ue1ac", # brightness_high
-      "\ue8ac", # power_settings_new
-      "\ue047", # stop
-      "\ue90f", # light_mode
-      "\ue1f4", # switch
+      "\ue90f", # lightbulb
+      "\uf8c7", # power_settings_new
       "\uf076", # thermostat
-      "\uf165", # humidity_mid
-      "\uf168", # fan_mode
-      "\ue286", # blinds
-      "\ue897", # lock
-      "\uf4f2", # media_output
-      "\uf556", # sensors
-      "\ue88a", # home
-      "\ue7f7", # notifications_active
-      "\ue158", # mail
-      "\ue81a", # sunny
       "\uf16a", # mode_heat
-      "\ue88e", # info
-    ]
-  - file:
-      type: gfonts
-      family: Material+Symbols+Rounded
-      weight: 400
-    id: medium_symbols
-    size: 15
-    glyphs: [
-      "\ueac3", # keyboard_double_arrow_left
-      "\ueac9", # keyboard_double_arrow_right
-      "\ueacf", # keyboard_double_arrow_up
-      "\uead0", # keyboard_double_arrow_down
-      "\ue045", # skip_previous
-      "\ue044", # skip_next
-      "\ue145", # add
-      "\ue15b", # remove
-      "\ue04d", # volume_down
-      "\ue050", # volume_up
-      "\uf581", # thermometer_minus
-      "\uf582", # thermometer_add
+      "\uf166", # mode_cool
+      "\uf16b", # mode_heat_cool
+      "\uf077", # thermostat_auto
+      "\ue798", # water_drop
+      "\uf168", # mode_fan
+      "\ue284", # water_heater
+      "\uf87e", # humidity_percentage
+      "\ue899", # lock
+      "\ue898", # lock_open
+      "\ue32d", # speaker
+      "\ue63b", # tv
+      "\ue037", # play_arrow
+      "\ue034", # pause
+      "\ue51e", # sensors
+      "\uf06c", # smart_toy
+      "\ue86f", # code
+      "\ue40a", # palette
+      "\ue9e0", # shield
+      "\uf013", # gpp_good
+      "\uf014", # gpp_maybe
+      "\ue2e6", # task_alt
+      "\ue81a", # sunny
+      "\uf159", # clear_night
+      "\uf172", # partly_cloudy_day
+      "\uf174", # partly_cloudy_night
+      "\uf15c", # cloud
+      "\uf176", # rainy
+      "\uebdb", # thunderstorm
+      "\ue2cd", # weather_snowy
+      "\ue818", # foggy
+      "\uefd8", # air
+      "\uf67f", # weather_hail
+      "\uefd6", # schedule
       "\ue63e", # wifi
       "\ue648", # wifi_off
-      "\ue8ac", # power_settings_new
+      "\ueb2f", # lan
+      "\ue30d", # developer_board
+      "\ue1a5", # battery_full
       "\ue19c", # battery_alert
-      "\ue81a", # sunny
-      "\ue51c", # dark_mode
-      "\ue2bd", # cloud
-      "\uf176", # rainy
-      "\uebdb", # thunderstorm
+      "\ue88e", # info
       "\uf053", # restart_alt
-    ]
-  - file:
-      type: gfonts
-      family: Material+Symbols+Rounded
-      weight: 400
-    id: weather_symbols
-    size: 9
-    glyphs: [
-      "\ue81a", # sunny
-      "\ue51c", # dark_mode
-      "\ue2bd", # cloud
-      "\uf176", # rainy
-      "\uebdb", # thunderstorm
+      "\ue2c1", # cloud_off
+      "\ue9b2", # home
     ]

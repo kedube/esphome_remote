@@ -24,6 +24,21 @@ inline bool local_change_hold_active(uint32_t now) {
   return local_change_at != 0 && now - local_change_at < LOCAL_CHANGE_HOLD_MS;
 }
 
+// The cover whose tilt the remote just sent. Its pending_cover_tilt_pct is what
+// the next press steps from, and what the screen shows, until Home Assistant
+// catches up: only for that cover, and only within the local-change hold.
+inline int cover_tilt_sent_index = -1;
+inline uint32_t cover_tilt_sent_at = 0;
+
+inline void note_cover_tilt_sent(int cover_index) {
+  cover_tilt_sent_index = cover_index;
+  cover_tilt_sent_at = millis() | 1;  // 0 means "nothing sent"
+}
+inline bool cover_tilt_sent_recently(uint32_t now, int cover_index) {
+  return cover_tilt_sent_at != 0 && cover_tilt_sent_index == cover_index &&
+         now - cover_tilt_sent_at < LOCAL_CHANGE_HOLD_MS;
+}
+
 struct RemoteUiResetState {
   std::string *selected_item_state = nullptr;
   int *selected_brightness_pct = nullptr;
@@ -113,6 +128,7 @@ struct RemoteUiTimeoutState {
   uint32_t *last_media_power_interaction = nullptr;
   uint32_t *last_automation_interaction = nullptr;
   uint32_t *last_alarm_interaction = nullptr;
+  uint32_t *ui_toast_at = nullptr;
   int *climate_target_focus = nullptr;
   float *climate_target_focus_value = nullptr;
   std::string *selected_setting_detail = nullptr;
