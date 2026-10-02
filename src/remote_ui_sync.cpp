@@ -36,14 +36,8 @@ static inline bool assign_float_if_changed(float *target, float value) {
   return true;
 }
 
-static inline void request_refresh(RemoteUiSyncState &ui, int idx) {
-  ui.refresh_requested = true;
-  ui.refresh_idx = idx;
-}
-
-static inline void sync_simple_state(RemoteUiSyncState &ui, const std::string &state, int idx) {
+static inline void sync_simple_state(RemoteUiSyncState &ui, const std::string &state) {
   if (ha_state_missing(state)) {
-    request_refresh(ui, idx);
     return;
   }
   *ui.updated_ui = assign_string_if_changed(ui.selected_item_state, state) || *ui.updated_ui;
@@ -53,7 +47,7 @@ static inline void sync_simple_state(RemoteUiSyncState &ui, const std::string &s
 // zero_when_missing selects the fan behavior (no percentage support -> 0)
 // versus the light behavior (brightness unavailable while on -> assume 100).
 static inline void sync_toggle_percent_mode(
-    RemoteUiSyncState &ui, int idx, const std::string &state, bool has_value, float value, float scale,
+    RemoteUiSyncState &ui, const std::string &state, bool has_value, float value, float scale,
     int *pct_field, bool zero_when_missing) {
   const char *next_state;
   int next_pct = *pct_field;
@@ -76,7 +70,6 @@ static inline void sync_toggle_percent_mode(
     next_pct = 0;
   } else {
     next_state = "unknown";
-    request_refresh(ui, idx);
   }
 
   if (*ui.selected_item_state != next_state || next_pct != *pct_field) {
@@ -88,13 +81,13 @@ static inline void sync_toggle_percent_mode(
 
 void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
   if (mode == REMOTE_MODE_LIGHTS) {
-    sync_toggle_percent_mode(ui, idx, selected_light_state(idx), selected_light_has_brightness(idx),
+    sync_toggle_percent_mode(ui, selected_light_state(idx), selected_light_has_brightness(idx),
                              selected_light_brightness(idx), 100.0f / 255.0f, ui.selected_brightness_pct, false);
     return;
   }
 
   if (mode == REMOTE_MODE_FANS) {
-    sync_toggle_percent_mode(ui, idx, selected_fan_state(idx), selected_fan_has_percentage(idx),
+    sync_toggle_percent_mode(ui, selected_fan_state(idx), selected_fan_has_percentage(idx),
                              selected_fan_percentage(idx), 1.0f, ui.selected_fan_speed_pct, true);
     return;
   }
@@ -107,9 +100,7 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     float current = humidifier_current_humidity_for_index(idx);
     bool changed = false;
 
-    if (ha_state_missing(state) && std::isnan(target) && std::isnan(current)) {
-      request_refresh(ui, idx);
-    } else {
+    if (!ha_state_missing(state) || !std::isnan(target) || !std::isnan(current)) {
       changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
       changed = assign_string_if_changed(ui.selected_humidifier_action, action) || changed;
       changed = assign_string_if_changed(ui.selected_humidifier_mode, mode_value) || changed;
@@ -121,7 +112,7 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
   }
 
   if (mode == REMOTE_MODE_SWITCHES) {
-    sync_simple_state(ui, selected_switch_state(idx), idx);
+    sync_simple_state(ui, selected_switch_state(idx));
     return;
   }
 
@@ -129,7 +120,7 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     const std::string &state = selected_climate_state(idx);
     const std::string &hvac_action = climate_hvac_action_for_index(idx);
     const std::string &fan_mode = climate_fan_mode_for_index(idx);
-    const std::string &hvac_mode = climate_hvac_mode_for_index(idx);
+    const std::string &preset = selected_climate_preset_mode(idx);
     float target = selected_climate_target_temperature(idx);
     float target_low = selected_climate_target_temperature_low(idx);
     float target_high = selected_climate_target_temperature_high(idx);
@@ -137,18 +128,13 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     float humidity = climate_target_humidity_for_index(idx);
     bool changed = false;
 
-    if (ha_state_missing(state)) {
-      request_refresh(ui, idx);
-    } else {
+    if (!ha_state_missing(state)) {
       changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
-      if (state != "off") {
-        changed = assign_string_if_changed(ui.last_climate_mode, state) || changed;
-      }
       if (!hvac_action.empty()) {
         changed = assign_string_if_changed(ui.selected_climate_hvac_action, hvac_action) || changed;
       }
       changed = assign_string_if_changed(ui.selected_climate_fan_mode, fan_mode) || changed;
-      changed = assign_string_if_changed(ui.selected_climate_hvac_mode, hvac_mode) || changed;
+      changed = assign_string_if_changed(ui.selected_climate_preset, preset) || changed;
       changed = assign_float_if_changed(ui.selected_climate_target_temp, target) || changed;
       changed = assign_float_if_changed(ui.selected_climate_target_temp_low, target_low) || changed;
       changed = assign_float_if_changed(ui.selected_climate_target_temp_high, target_high) || changed;
@@ -165,9 +151,7 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     const std::string &away_mode = selected_water_heater_away_mode(idx);
     float target = selected_water_heater_target_temperature(idx);
     bool changed = false;
-    if (ha_state_missing(state) && std::isnan(target)) {
-      request_refresh(ui, idx);
-    } else {
+    if (!ha_state_missing(state) || !std::isnan(target)) {
       changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
       changed = assign_string_if_changed(ui.selected_water_heater_mode, operation_mode) || changed;
       changed = assign_string_if_changed(ui.selected_water_heater_away, away_mode) || changed;
@@ -178,7 +162,7 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
   }
 
   if (mode == REMOTE_MODE_LOCKS) {
-    sync_simple_state(ui, selected_lock_state(idx), idx);
+    sync_simple_state(ui, selected_lock_state(idx));
     return;
   }
 
@@ -187,9 +171,7 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     float position = selected_cover_position(idx);
     bool changed = false;
 
-    if (ha_state_missing(state) && std::isnan(position)) {
-      request_refresh(ui, idx);
-    } else {
+    if (!ha_state_missing(state) || !std::isnan(position)) {
       if (!ha_state_missing(state)) {
         changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
       }
@@ -213,9 +195,7 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     float volume = selected_media_volume(idx);
     bool changed = false;
 
-    if (ha_state_missing(state)) {
-      request_refresh(ui, idx);
-    } else {
+    if (!ha_state_missing(state)) {
       changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
       changed = assign_string_if_changed(ui.selected_media_title, title) || changed;
       changed = assign_string_if_changed(ui.selected_media_artist, artist) || changed;
@@ -242,9 +222,7 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     bool changed = false;
     const std::string &state = sensor_state_for_index(idx);
     const std::string &unit = sensor_unit_for_index(idx);
-    if (ha_state_missing(state)) {
-      request_refresh(ui, idx);
-    } else {
+    if (!ha_state_missing(state)) {
       changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
       changed = assign_string_if_changed(ui.selected_sensor_unit, unit) || changed;
       if (changed) *ui.updated_ui = true;
@@ -257,15 +235,12 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     std::string next_state = automation_supports_enabled_state(idx) ? state : "ready";
     bool changed = false;
     changed = assign_string_if_changed(ui.selected_item_state, next_state) || changed;
-    if (ha_state_missing(state)) {
-      request_refresh(ui, idx);
-    }
     if (changed) *ui.updated_ui = true;
     return;
   }
 
   if (mode == REMOTE_MODE_ALARMS) {
-    sync_simple_state(ui, alarm_state_for_index(idx), idx);
+    sync_simple_state(ui, alarm_state_for_index(idx));
     return;
   }
 
@@ -283,9 +258,6 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     *ui.updated_ui = assign_cstr_if_changed(ui.selected_item_name, next_name) || *ui.updated_ui;
     *ui.updated_ui = assign_cstr_if_changed(ui.selected_item_entity, next_entity) || *ui.updated_ui;
     *ui.updated_ui = assign_string_if_changed(ui.selected_item_state, next_message) || *ui.updated_ui;
-    if (next_entity[0] == '\0' || (count > 1 && next_message.empty())) {
-      request_refresh(ui, clamped_idx);
-    }
     return;
   }
 
@@ -306,10 +278,8 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     float precipitation = weather_precipitation_for_index(idx);
     bool changed = false;
 
-    if (ha_state_missing(condition) && std::isnan(temperature) && std::isnan(humidity) &&
-        std::isnan(high) && std::isnan(low)) {
-      request_refresh(ui, idx);
-    } else {
+    if (!ha_state_missing(condition) || !std::isnan(temperature) || !std::isnan(humidity) ||
+        !std::isnan(high) || !std::isnan(low)) {
       changed = assign_string_if_changed(ui.selected_item_state, condition) || changed;
       changed = assign_string_if_changed(ui.selected_weather_condition, condition) || changed;
       changed = assign_float_if_changed(ui.selected_weather_temperature, temperature) || changed;

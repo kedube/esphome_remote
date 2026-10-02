@@ -2,6 +2,11 @@ script:
   - id: update_display
     mode: restart
     then:
+      # Defer the render to the next loop pass. A single press often runs
+      # several scripts that each request a redraw; with mode: restart, every
+      # request made before this delay elapses collapses into one render
+      # (~25 ms of blocking I2C each) instead of drawing the frame twice.
+      - delay: 0ms
       - if:
           condition:
             lambda: 'return id(updated_ui) == true;'

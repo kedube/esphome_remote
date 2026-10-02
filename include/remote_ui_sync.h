@@ -26,8 +26,7 @@ struct RemoteUiSyncState {
   float *selected_climate_target_humidity = nullptr;
   std::string *selected_climate_hvac_action = nullptr;
   std::string *selected_climate_fan_mode = nullptr;
-  std::string *selected_climate_hvac_mode = nullptr;
-  std::string *last_climate_mode = nullptr;
+  std::string *selected_climate_preset = nullptr;
   std::string *selected_water_heater_mode = nullptr;
   std::string *selected_water_heater_away = nullptr;
   int *selected_media_volume_pct = nullptr;
@@ -55,8 +54,6 @@ struct RemoteUiSyncState {
   std::string *selected_weather_condition = nullptr;
   int *selected_notification_index = nullptr;
   bool *updated_ui = nullptr;
-  bool refresh_requested = false;
-  int refresh_idx = -1;
 };
 
 void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui);

@@ -606,6 +606,12 @@ inline std::string next_delimited_option(const std::string &source_list, const s
   return first;
 }
 
+// Next (step > 0) or previous option after current_value in a '|'-joined list.
+inline std::string step_delimited_option(const std::string &source_list, const std::string &current_value, int step) {
+  return step > 0 ? next_delimited_option(source_list, current_value)
+                  : previous_delimited_option(source_list, current_value);
+}
+
 inline bool notifications_mode_enabled() {
   return NOTIFICATION_FEED_ENTITY[0] != '\0';
 }

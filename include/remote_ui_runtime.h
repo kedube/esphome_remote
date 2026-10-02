@@ -4,7 +4,25 @@
 #include <cstdint>
 #include <string>
 
+#include "esphome/core/hal.h"
+
 namespace esphome {
+
+// Hold on syncing after a local change. Actions write the expected result into
+// the UI globals as soon as they send a command, but the periodic sync would
+// copy Home Assistant's not-yet-updated value straight back over it within
+// 500 ms: the screen jumped back, and a second press stepped from the stale
+// value and re-sent the first one. While the hold is active the sync leaves the
+// selected item alone; once it lapses Home Assistant's value wins again, so a
+// rejected command still reverts. Selecting another item clears the hold.
+inline constexpr uint32_t LOCAL_CHANGE_HOLD_MS = 3000;
+inline uint32_t local_change_at = 0;
+
+inline void note_local_change() { local_change_at = millis() | 1; }  // 0 means "no hold"
+inline void clear_local_change() { local_change_at = 0; }
+inline bool local_change_hold_active(uint32_t now) {
+  return local_change_at != 0 && now - local_change_at < LOCAL_CHANGE_HOLD_MS;
+}
 
 struct RemoteUiResetState {
   std::string *selected_item_state = nullptr;
@@ -21,7 +39,7 @@ struct RemoteUiResetState {
   float *selected_water_heater_target_temp = nullptr;
   std::string *selected_climate_hvac_action = nullptr;
   std::string *selected_climate_fan_mode = nullptr;
-  std::string *selected_climate_hvac_mode = nullptr;
+  std::string *selected_climate_preset = nullptr;
   float *selected_climate_target_temp_low = nullptr;
   float *selected_climate_target_temp_high = nullptr;
   float *selected_climate_current_temp = nullptr;

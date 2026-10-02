@@ -117,10 +117,16 @@ script:
           id(primary_button_press_started_at) = millis();
           id(primary_button_press_mode) = id(current_mode);
           id(primary_button_long_press_fired) = false;
-      - script.execute:
-          id: show_sensitive_action_prompt
-          action: 0
-      - script.execute: await_primary_long_press
+      # The lambda's early return only exits the lambda, so gate the prompt and
+      # the hold timer on the press actually waiting for a long press.
+      - if:
+          condition:
+            lambda: 'return id(primary_button_press_started_at) != 0;'
+          then:
+            - script.execute:
+                id: show_sensitive_action_prompt
+                action: 0
+            - script.execute: await_primary_long_press
 
   - id: handle_primary_button_release
     then:
@@ -156,10 +162,16 @@ script:
           id(play_pause_button_press_started_at) = millis();
           id(play_pause_button_press_mode) = id(current_mode);
           id(play_pause_button_long_press_fired) = false;
-      - script.execute:
-          id: show_sensitive_action_prompt
-          action: 2
-      - script.execute: await_play_pause_long_press
+      # The lambda's early return only exits the lambda, so gate the prompt and
+      # the hold timer on the press actually waiting for a long press.
+      - if:
+          condition:
+            lambda: 'return id(play_pause_button_press_started_at) != 0;'
+          then:
+            - script.execute:
+                id: show_sensitive_action_prompt
+                action: 2
+            - script.execute: await_play_pause_long_press
 
   - id: handle_play_pause_button_release
     then:
@@ -195,10 +207,16 @@ script:
           id(settings_button_press_started_at) = millis();
           id(settings_button_press_mode) = id(current_mode);
           id(settings_button_long_press_fired) = false;
-      - script.execute:
-          id: show_sensitive_action_prompt
-          action: 1
-      - script.execute: await_settings_long_press
+      # The lambda's early return only exits the lambda, so gate the prompt and
+      # the hold timer on the press actually waiting for a long press.
+      - if:
+          condition:
+            lambda: 'return id(settings_button_press_started_at) != 0;'
+          then:
+            - script.execute:
+                id: show_sensitive_action_prompt
+                action: 1
+            - script.execute: await_settings_long_press
 
   - id: handle_settings_button_release
     then:

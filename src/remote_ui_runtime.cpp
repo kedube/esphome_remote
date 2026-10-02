@@ -17,7 +17,7 @@ void reset_remote_ui_state(RemoteUiResetState &state) {
   *state.selected_water_heater_target_temp = NAN;
   *state.selected_climate_hvac_action = "unknown";
   state.selected_climate_fan_mode->clear();
-  state.selected_climate_hvac_mode->clear();
+  state.selected_climate_preset->clear();
   *state.selected_climate_target_temp_low = NAN;
   *state.selected_climate_target_temp_high = NAN;
   *state.selected_climate_current_temp = NAN;
@@ -68,6 +68,7 @@ void reset_remote_ui_state(RemoteUiResetState &state) {
   state.selected_sensor_unit->clear();
   state.selected_setting_detail->clear();
   *state.updated_ui = true;
+  clear_local_change();
 }
 
 // Fire-once latch: returns true exactly once after the timeout elapses and

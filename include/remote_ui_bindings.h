@@ -22,14 +22,13 @@ struct RemoteUiBindings {
   float *selected_water_heater_target_temp = nullptr;
   std::string *selected_climate_hvac_action = nullptr;
   std::string *selected_climate_fan_mode = nullptr;
-  std::string *selected_climate_hvac_mode = nullptr;
+  std::string *selected_climate_preset = nullptr;
   float *selected_climate_target_temp_low = nullptr;
   float *selected_climate_target_temp_high = nullptr;
   float *selected_climate_current_temp = nullptr;
   float *selected_climate_target_humidity = nullptr;
   std::string *selected_water_heater_mode = nullptr;
   std::string *selected_water_heater_away = nullptr;
-  std::string *last_climate_mode = nullptr;
   int *climate_target_focus = nullptr;
   float *climate_target_focus_value = nullptr;
   uint32_t *last_climate_target_focus_interaction = nullptr;
@@ -78,111 +77,12 @@ struct RemoteUiBindings {
   bool *updated_ui = nullptr;
 };
 
-static inline RemoteUiBindings make_remote_ui_bindings(
-    std::string &selected_item_name, std::string &selected_item_entity, std::string &selected_item_state,
-    int &selected_brightness_pct, int &selected_fan_speed_pct, float &selected_humidifier_target_humidity,
-    float &selected_humidifier_current_humidity, std::string &selected_humidifier_action,
-    std::string &selected_humidifier_mode, int &selected_cover_position_pct, std::string &last_switch_feedback,
-    uint32_t &last_switch_interaction, float &selected_climate_target_temp, float &selected_water_heater_target_temp,
-    std::string &selected_climate_hvac_action, std::string &selected_climate_fan_mode,
-    std::string &selected_climate_hvac_mode,
-    float &selected_climate_target_temp_low, float &selected_climate_target_temp_high,
-    float &selected_climate_current_temp, float &selected_climate_target_humidity,
-    std::string &selected_water_heater_mode, std::string &selected_water_heater_away,
-    std::string &last_climate_mode, int &climate_target_focus,
-    float &climate_target_focus_value, uint32_t &last_climate_target_focus_interaction,
-    int &selected_media_volume_pct, std::string &selected_media_title, std::string &selected_media_artist,
-    std::string &selected_media_device_class, std::string &selected_media_source,
-    std::string &selected_media_shuffle, std::string &selected_media_repeat, std::string &selected_media_sound_mode,
-    std::string &last_media_power_feedback,
-    std::string &last_alarm_feedback, uint32_t &last_alarm_interaction, std::string &last_lock_feedback,
-    uint32_t &last_lock_interaction, std::string &last_cover_feedback, uint32_t &last_cover_interaction,
-    uint32_t &last_cover_position_interaction, uint32_t &primary_button_press_started_at,
-    uint32_t &play_pause_button_press_started_at, uint32_t &settings_button_press_started_at,
-    int &primary_button_press_mode, int &play_pause_button_press_mode, int &settings_button_press_mode,
-    bool &primary_button_long_press_fired, bool &play_pause_button_long_press_fired,
-    bool &settings_button_long_press_fired, float &selected_weather_temperature,
-    float &selected_weather_humidity, float &selected_weather_high_temp, float &selected_weather_low_temp,
-    float &selected_weather_wind_speed, float &selected_weather_wind_bearing,
-    float &selected_weather_wind_gust_speed, float &selected_weather_pressure,
-    float &selected_weather_cloud_coverage, float &selected_weather_uv_index,
-    float &selected_weather_dew_point, float &selected_weather_apparent_temperature,
-    float &selected_weather_precipitation,
-    std::string &selected_weather_condition, std::string &selected_sensor_unit,
-    std::string &selected_setting_detail, int &selected_notification_index, bool &updated_ui) {
-  RemoteUiBindings bindings;
-  bindings.selected_item_name = &selected_item_name;
-  bindings.selected_item_entity = &selected_item_entity;
-  bindings.selected_item_state = &selected_item_state;
-  bindings.selected_brightness_pct = &selected_brightness_pct;
-  bindings.selected_fan_speed_pct = &selected_fan_speed_pct;
-  bindings.selected_humidifier_target_humidity = &selected_humidifier_target_humidity;
-  bindings.selected_humidifier_current_humidity = &selected_humidifier_current_humidity;
-  bindings.selected_humidifier_action = &selected_humidifier_action;
-  bindings.selected_humidifier_mode = &selected_humidifier_mode;
-  bindings.selected_cover_position_pct = &selected_cover_position_pct;
-  bindings.last_switch_feedback = &last_switch_feedback;
-  bindings.last_switch_interaction = &last_switch_interaction;
-  bindings.selected_climate_target_temp = &selected_climate_target_temp;
-  bindings.selected_water_heater_target_temp = &selected_water_heater_target_temp;
-  bindings.selected_climate_hvac_action = &selected_climate_hvac_action;
-  bindings.selected_climate_fan_mode = &selected_climate_fan_mode;
-  bindings.selected_climate_hvac_mode = &selected_climate_hvac_mode;
-  bindings.selected_climate_target_temp_low = &selected_climate_target_temp_low;
-  bindings.selected_climate_target_temp_high = &selected_climate_target_temp_high;
-  bindings.selected_climate_current_temp = &selected_climate_current_temp;
-  bindings.selected_climate_target_humidity = &selected_climate_target_humidity;
-  bindings.selected_water_heater_mode = &selected_water_heater_mode;
-  bindings.selected_water_heater_away = &selected_water_heater_away;
-  bindings.last_climate_mode = &last_climate_mode;
-  bindings.climate_target_focus = &climate_target_focus;
-  bindings.climate_target_focus_value = &climate_target_focus_value;
-  bindings.last_climate_target_focus_interaction = &last_climate_target_focus_interaction;
-  bindings.selected_media_volume_pct = &selected_media_volume_pct;
-  bindings.selected_media_title = &selected_media_title;
-  bindings.selected_media_artist = &selected_media_artist;
-  bindings.selected_media_device_class = &selected_media_device_class;
-  bindings.selected_media_source = &selected_media_source;
-  bindings.selected_media_shuffle = &selected_media_shuffle;
-  bindings.selected_media_repeat = &selected_media_repeat;
-  bindings.selected_media_sound_mode = &selected_media_sound_mode;
-  bindings.last_media_power_feedback = &last_media_power_feedback;
-  bindings.last_alarm_feedback = &last_alarm_feedback;
-  bindings.last_alarm_interaction = &last_alarm_interaction;
-  bindings.last_lock_feedback = &last_lock_feedback;
-  bindings.last_lock_interaction = &last_lock_interaction;
-  bindings.last_cover_feedback = &last_cover_feedback;
-  bindings.last_cover_interaction = &last_cover_interaction;
-  bindings.last_cover_position_interaction = &last_cover_position_interaction;
-  bindings.primary_button_press_started_at = &primary_button_press_started_at;
-  bindings.play_pause_button_press_started_at = &play_pause_button_press_started_at;
-  bindings.settings_button_press_started_at = &settings_button_press_started_at;
-  bindings.primary_button_press_mode = &primary_button_press_mode;
-  bindings.play_pause_button_press_mode = &play_pause_button_press_mode;
-  bindings.settings_button_press_mode = &settings_button_press_mode;
-  bindings.primary_button_long_press_fired = &primary_button_long_press_fired;
-  bindings.play_pause_button_long_press_fired = &play_pause_button_long_press_fired;
-  bindings.settings_button_long_press_fired = &settings_button_long_press_fired;
-  bindings.selected_weather_temperature = &selected_weather_temperature;
-  bindings.selected_weather_humidity = &selected_weather_humidity;
-  bindings.selected_weather_high_temp = &selected_weather_high_temp;
-  bindings.selected_weather_low_temp = &selected_weather_low_temp;
-  bindings.selected_weather_wind_speed = &selected_weather_wind_speed;
-  bindings.selected_weather_wind_bearing = &selected_weather_wind_bearing;
-  bindings.selected_weather_wind_gust_speed = &selected_weather_wind_gust_speed;
-  bindings.selected_weather_pressure = &selected_weather_pressure;
-  bindings.selected_weather_cloud_coverage = &selected_weather_cloud_coverage;
-  bindings.selected_weather_uv_index = &selected_weather_uv_index;
-  bindings.selected_weather_dew_point = &selected_weather_dew_point;
-  bindings.selected_weather_apparent_temperature = &selected_weather_apparent_temperature;
-  bindings.selected_weather_precipitation = &selected_weather_precipitation;
-  bindings.selected_weather_condition = &selected_weather_condition;
-  bindings.selected_sensor_unit = &selected_sensor_unit;
-  bindings.selected_setting_detail = &selected_setting_detail;
-  bindings.selected_notification_index = &selected_notification_index;
-  bindings.updated_ui = &updated_ui;
-  return bindings;
-}
+// Pointers to the ESPHome globals the C++ UI helpers read and write. Globals
+// are only reachable through id() inside YAML lambdas, so on_boot fills this in
+// once (by field name) and every script reads it from here. The pointers stay
+// valid for the life of the program.
+inline RemoteUiBindings remote_ui_bindings;
+inline bool remote_ui_bindings_bound = false;
 
 static inline RemoteUiResetState make_remote_ui_reset_state(const RemoteUiBindings &bindings) {
   RemoteUiResetState state;
@@ -200,7 +100,7 @@ static inline RemoteUiResetState make_remote_ui_reset_state(const RemoteUiBindin
   state.selected_water_heater_target_temp = bindings.selected_water_heater_target_temp;
   state.selected_climate_hvac_action = bindings.selected_climate_hvac_action;
   state.selected_climate_fan_mode = bindings.selected_climate_fan_mode;
-  state.selected_climate_hvac_mode = bindings.selected_climate_hvac_mode;
+  state.selected_climate_preset = bindings.selected_climate_preset;
   state.selected_climate_target_temp_low = bindings.selected_climate_target_temp_low;
   state.selected_climate_target_temp_high = bindings.selected_climate_target_temp_high;
   state.selected_climate_current_temp = bindings.selected_climate_current_temp;
@@ -274,8 +174,7 @@ static inline RemoteUiSyncState make_remote_ui_sync_state(const RemoteUiBindings
   state.selected_climate_target_humidity = bindings.selected_climate_target_humidity;
   state.selected_climate_hvac_action = bindings.selected_climate_hvac_action;
   state.selected_climate_fan_mode = bindings.selected_climate_fan_mode;
-  state.selected_climate_hvac_mode = bindings.selected_climate_hvac_mode;
-  state.last_climate_mode = bindings.last_climate_mode;
+  state.selected_climate_preset = bindings.selected_climate_preset;
   state.selected_water_heater_mode = bindings.selected_water_heater_mode;
   state.selected_water_heater_away = bindings.selected_water_heater_away;
   state.selected_media_volume_pct = bindings.selected_media_volume_pct;

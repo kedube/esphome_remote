@@ -19,6 +19,7 @@ script:
       - lambda: |-
           id(selected_setting_detail) = text;
           id(last_setting_interaction) = millis();
+          note_local_change();
           id(updated_ui) = true;
       - script.execute: update_display
 
@@ -48,9 +49,13 @@ script:
               if (selected_light_has_effect(id(selected_light_index))) add_option(REMOTE_SETTING_LIGHT_EFFECT);
               break;
             case REMOTE_MODE_CLIMATE:
-              if (!isnan(id(selected_climate_target_temp_low))) add_option(REMOTE_SETTING_CLIMATE_LOW);
-              if (!isnan(id(selected_climate_target_temp_high))) add_option(REMOTE_SETTING_CLIMATE_HIGH);
-              if (!isnan(id(selected_climate_target_temp)) && isnan(id(selected_climate_target_temp_low)) && isnan(id(selected_climate_target_temp_high))) add_option(REMOTE_SETTING_CLIMATE_TARGET);
+              if (remote_ui_has_dual_climate_target(id(selected_item_state), id(selected_climate_target_temp_low),
+                                                    id(selected_climate_target_temp_high))) {
+                add_option(REMOTE_SETTING_CLIMATE_LOW);
+                add_option(REMOTE_SETTING_CLIMATE_HIGH);
+              } else if (!isnan(id(selected_climate_target_temp))) {
+                add_option(REMOTE_SETTING_CLIMATE_TARGET);
+              }
               if (!selected_climate_fan_modes(id(selected_climate_index)).empty()) add_option(REMOTE_SETTING_CLIMATE_FAN);
               if (!isnan(id(selected_climate_target_humidity))) add_option(REMOTE_SETTING_CLIMATE_HUMIDITY);
               if (climate_supports_preset(id(selected_climate_index))) add_option(REMOTE_SETTING_CLIMATE_PRESETS);
@@ -429,9 +434,8 @@ script:
             lambda: 'return id(selected_setting_option) == REMOTE_SETTING_CLIMATE_FAN;'
           then:
             - lambda: |-
-                std::string next_mode = step > 0
-                    ? next_climate_fan_mode_for_index(id(selected_climate_index))
-                    : previous_climate_fan_mode_for_index(id(selected_climate_index));
+                std::string next_mode = step_delimited_option(
+                    selected_climate_fan_modes(id(selected_climate_index)), id(selected_climate_fan_mode), step);
                 if (next_mode.empty()) {
                   return;
                 }
@@ -569,10 +573,10 @@ script:
                   return;
                 }
                 id(selected_media_source) = next_source;
-                set_media_source_for_index(id(selected_media_index), next_source);
                 id(last_media_source_interaction) = millis();
                 id(last_setting_interaction) = millis();
                 id(selected_setting_detail) = next_source;
+                note_local_change();
                 id(updated_ui) = true;
             - homeassistant.service:
                 service: media_player.select_source
@@ -620,9 +624,9 @@ script:
             lambda: 'return id(selected_setting_option) == REMOTE_SETTING_WATER_HEATER_MODE;'
           then:
             - lambda: |-
-                std::string next_mode = step > 0
-                    ? next_water_heater_operation_mode_for_index(id(selected_water_heater_index))
-                    : previous_water_heater_operation_mode_for_index(id(selected_water_heater_index));
+                std::string next_mode = step_delimited_option(
+                    selected_water_heater_operation_list(id(selected_water_heater_index)),
+                    id(selected_water_heater_mode), step);
                 if (next_mode.empty()) {
                   return;
                 }
@@ -659,6 +663,7 @@ script:
                   entity_id: !lambda 'return id(selected_item_entity);'
             - lambda: |-
                 id(selected_item_state) = "off";
+                note_local_change();
                 id(updated_ui) = true;
             - script.execute: update_display
       - if:
@@ -674,10 +679,7 @@ script:
                 condition:
                   lambda: 'return id(selected_item_state) != "off";'
                 then:
-                  - script.execute: toggle_selected_climate_power
-                  - script.execute:
-                      id: set_setting_preview
-                      text: "TURNING OFF"
+                  - script.execute: turn_off_selected_climate
                 else:
                   - script.execute:
                       id: set_setting_preview
@@ -711,12 +713,16 @@ script:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_COVERS;'
           then:
-            - script.execute: close_selected_cover
+            - script.execute:
+                id: close_selected_cover
+                cover_index: !lambda 'return id(selected_cover_index);'
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS;'
           then:
-            - script.execute: unlock_selected_lock
+            - script.execute:
+                id: unlock_selected_lock
+                lock_index: !lambda 'return id(selected_lock_index);'
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_MEDIA;'
@@ -751,6 +757,7 @@ script:
             - lambda: |-
                 id(selected_item_state) = "on";
                 if (id(selected_brightness_pct) <= 0) id(selected_brightness_pct) = 100;
+                note_local_change();
                 id(updated_ui) = true;
             - script.execute: update_display
       - if:
@@ -766,10 +773,7 @@ script:
                 condition:
                   lambda: 'return id(selected_item_state) == "off";'
                 then:
-                  - script.execute: toggle_selected_climate_power
-                  - script.execute:
-                      id: set_setting_preview
-                      text: "TURNING ON"
+                  - script.execute: turn_on_selected_climate
                 else:
                   - script.execute:
                       id: set_setting_preview
@@ -803,12 +807,16 @@ script:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_COVERS;'
           then:
-            - script.execute: open_selected_cover
+            - script.execute:
+                id: open_selected_cover
+                cover_index: !lambda 'return id(selected_cover_index);'
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS;'
           then:
-            - script.execute: lock_selected_lock
+            - script.execute:
+                id: lock_selected_lock
+                lock_index: !lambda 'return id(selected_lock_index);'
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_MEDIA;'
@@ -827,7 +835,9 @@ script:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_AUTOMATION;'
           then:
-            - script.execute: trigger_selected_automation
+            - script.execute:
+                id: trigger_selected_automation
+                automation_index: !lambda 'return id(selected_automation_index);'
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_ALARMS;'
@@ -908,4 +918,9 @@ script:
       - delay: 3s
       - lambda: |-
           id(last_notification_dismiss_interaction) = 0;
-      - script.execute: update_selected_item
+      # Rebuilding while another item is selected would wipe its feedback.
+      - if:
+          condition:
+            lambda: 'return id(current_mode) == REMOTE_MODE_NOTIFICATIONS;'
+          then:
+            - script.execute: update_selected_item

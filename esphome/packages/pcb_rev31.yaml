@@ -20,21 +20,6 @@ esphome:
         # See oled_hold_release.h. Must run before the oled_power GPIOSwitch
         # sets up (HARDWARE = 800) and before the turn_on at 700.
         - lambda: 'oled_release_deep_sleep_hold(${PIN_OLED_EN});'
-    # TEMPORARY debug capture — remove with packages/debug_wake.yaml.
-    - priority: 960
-      then:
-        - lambda: |-
-            debug_capture_boot_pad(${PIN_OLED_EN});
-            ESP_LOGW("debug", "PRE-RELEASE pad=%d", debug_oled_pad_at_boot);
-    # TEMPORARY — logs AFTER the release and AFTER oled_power is on, but BEFORE
-    # the display component sets up (PROCESSOR = 400). On a failing boot the
-    # display never initializes, so nothing at priority <= 400 ever runs; this
-    # is the last point that is guaranteed to report on every boot.
-    - priority: 650
-      then:
-        - lambda: |-
-            ESP_LOGW("debug", "POST-POWER pad=%d (rail should be HIGH now)",
-                     gpio_get_level(static_cast<gpio_num_t>(${PIN_OLED_EN})));
     - priority: 700
       then:
         - switch.turn_on: oled_power
@@ -49,9 +34,6 @@ esphome:
     - priority: 400
       then:
         - script.execute: update_battery
-    - priority: 200
-      then:
-        - script.execute: debug_publish
 
 switch:
   - platform: gpio

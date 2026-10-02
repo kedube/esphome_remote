@@ -30,9 +30,6 @@ packages:
   remote_button_press_scripts: !include packages/remote_button_press_scripts.yaml
   remote_button_action_scripts: !include packages/remote_button_action_scripts.yaml
   remote_display_scripts: !include packages/remote_display_scripts.yaml
-  # TEMPORARY display-init debugging — delete this line, packages/debug_wake.yaml,
-  # debug_wake.h, and the debug blocks in pcb_rev31.yaml when resolved.
-  debug_wake: !include packages/debug_wake.yaml
 
 esphome:
   name: ${DEVICE_NAME}
@@ -69,10 +66,84 @@ esphome:
     - ../src/remote_ui_runtime.cpp
     - local_entities.h
   on_boot:
+    # Bind the C++ UI helpers to the globals before any script can use them.
+    - priority: 1000
+      then:
+        - lambda: |-
+            RemoteUiBindings &b = remote_ui_bindings;
+            b.selected_item_name = &id(selected_item_name);
+            b.selected_item_entity = &id(selected_item_entity);
+            b.selected_item_state = &id(selected_item_state);
+            b.selected_brightness_pct = &id(selected_brightness_pct);
+            b.selected_fan_speed_pct = &id(selected_fan_speed_pct);
+            b.selected_humidifier_target_humidity = &id(selected_humidifier_target_humidity);
+            b.selected_humidifier_current_humidity = &id(selected_humidifier_current_humidity);
+            b.selected_humidifier_action = &id(selected_humidifier_action);
+            b.selected_humidifier_mode = &id(selected_humidifier_mode);
+            b.selected_cover_position_pct = &id(selected_cover_position_pct);
+            b.last_switch_feedback = &id(last_switch_feedback);
+            b.last_switch_interaction = &id(last_switch_interaction);
+            b.selected_climate_target_temp = &id(selected_climate_target_temp);
+            b.selected_water_heater_target_temp = &id(selected_water_heater_target_temp);
+            b.selected_climate_hvac_action = &id(selected_climate_hvac_action);
+            b.selected_climate_fan_mode = &id(selected_climate_fan_mode);
+            b.selected_climate_preset = &id(selected_climate_preset);
+            b.selected_climate_target_temp_low = &id(selected_climate_target_temp_low);
+            b.selected_climate_target_temp_high = &id(selected_climate_target_temp_high);
+            b.selected_climate_current_temp = &id(selected_climate_current_temp);
+            b.selected_climate_target_humidity = &id(selected_climate_target_humidity);
+            b.selected_water_heater_mode = &id(selected_water_heater_mode);
+            b.selected_water_heater_away = &id(selected_water_heater_away);
+            b.climate_target_focus = &id(climate_target_focus);
+            b.climate_target_focus_value = &id(climate_target_focus_value);
+            b.last_climate_target_focus_interaction = &id(last_climate_target_focus_interaction);
+            b.selected_media_volume_pct = &id(selected_media_volume_pct);
+            b.selected_media_title = &id(selected_media_title);
+            b.selected_media_artist = &id(selected_media_artist);
+            b.selected_media_device_class = &id(selected_media_device_class);
+            b.selected_media_source = &id(selected_media_source);
+            b.selected_media_shuffle = &id(selected_media_shuffle);
+            b.selected_media_repeat = &id(selected_media_repeat);
+            b.selected_media_sound_mode = &id(selected_media_sound_mode);
+            b.last_media_power_feedback = &id(last_media_power_feedback);
+            b.last_alarm_feedback = &id(last_alarm_feedback);
+            b.last_alarm_interaction = &id(last_alarm_interaction);
+            b.last_lock_feedback = &id(last_lock_feedback);
+            b.last_lock_interaction = &id(last_lock_interaction);
+            b.last_cover_feedback = &id(last_cover_feedback);
+            b.last_cover_interaction = &id(last_cover_interaction);
+            b.last_cover_position_interaction = &id(last_cover_position_interaction);
+            b.primary_button_press_started_at = &id(primary_button_press_started_at);
+            b.play_pause_button_press_started_at = &id(play_pause_button_press_started_at);
+            b.settings_button_press_started_at = &id(settings_button_press_started_at);
+            b.primary_button_press_mode = &id(primary_button_press_mode);
+            b.play_pause_button_press_mode = &id(play_pause_button_press_mode);
+            b.settings_button_press_mode = &id(settings_button_press_mode);
+            b.primary_button_long_press_fired = &id(primary_button_long_press_fired);
+            b.play_pause_button_long_press_fired = &id(play_pause_button_long_press_fired);
+            b.settings_button_long_press_fired = &id(settings_button_long_press_fired);
+            b.selected_weather_temperature = &id(selected_weather_temperature);
+            b.selected_weather_humidity = &id(selected_weather_humidity);
+            b.selected_weather_high_temp = &id(selected_weather_high_temp);
+            b.selected_weather_low_temp = &id(selected_weather_low_temp);
+            b.selected_weather_wind_speed = &id(selected_weather_wind_speed);
+            b.selected_weather_wind_bearing = &id(selected_weather_wind_bearing);
+            b.selected_weather_wind_gust_speed = &id(selected_weather_wind_gust_speed);
+            b.selected_weather_pressure = &id(selected_weather_pressure);
+            b.selected_weather_cloud_coverage = &id(selected_weather_cloud_coverage);
+            b.selected_weather_uv_index = &id(selected_weather_uv_index);
+            b.selected_weather_dew_point = &id(selected_weather_dew_point);
+            b.selected_weather_apparent_temperature = &id(selected_weather_apparent_temperature);
+            b.selected_weather_precipitation = &id(selected_weather_precipitation);
+            b.selected_weather_condition = &id(selected_weather_condition);
+            b.selected_sensor_unit = &id(selected_sensor_unit);
+            b.selected_setting_detail = &id(selected_setting_detail);
+            b.selected_notification_index = &id(selected_notification_index);
+            b.updated_ui = &id(updated_ui);
+            remote_ui_bindings_bound = true;
     - priority: 250
       then:
         - lambda: |-
-            ensure_light_status_tracker();
             id(last_active) = millis() / 1000;
             PersistedUIStateData restored = unpack_persisted_ui_state(id(persisted_ui_state), id(persisted_ui_state_aux));
 
@@ -96,6 +167,10 @@ esphome:
             id(current_mode) = restored.current_mode >= 0 && restored.current_mode < REMOTE_MODE_COUNT
                 ? restored.current_mode
                 : REMOTE_MODE_INFO;
+
+            // Register Home Assistant subscriptions only now that the selection is
+            // restored, so the item the remote wakes into is announced first.
+            ensure_remote_status_trackers(tracker_subscription_order_for_menu(id(current_menu_index)));
             id(updated_ui) = true;
         - script.execute: update_selected_item
     - priority: -100

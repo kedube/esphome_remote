@@ -106,17 +106,19 @@ interval:
                                   then:
                                     - script.execute: api_disconnected_screen
                                   else:
+                                    # Sync once the post-navigation quiet period has
+                                    # passed, or straight away when a setting is
+                                    # selected but its detail line is still empty.
+                                    # One condition so the script runs at most once
+                                    # per tick.
                                     - if:
                                         condition:
                                           lambda: |-
                                             uint32_t now = millis();
-                                            return id(last_navigation_requested_at) == 0 ||
-                                                   (now - id(last_navigation_requested_at)) >= ${NAVIGATION_SYNC_DELAY_MS};
-                                        then:
-                                          - script.execute: sync_current_mode_status
-                                    - if:
-                                        condition:
-                                          lambda: |-
+                                            if (id(last_navigation_requested_at) == 0 ||
+                                                (now - id(last_navigation_requested_at)) >= ${NAVIGATION_SYNC_DELAY_MS}) {
+                                              return true;
+                                            }
                                             return id(selected_setting_option) != static_cast<int>(REMOTE_SETTING_NONE) &&
                                                    id(last_setting_interaction) == 0 &&
                                                    id(selected_setting_detail).empty();

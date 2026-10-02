@@ -1,83 +1,42 @@
 script:
-  - id: refresh_selected_climate_status
+  # Circle on a thermostat that is off. Restores that thermostat's own last
+  # active mode, falling back to a mode it reports supporting.
+  - id: turn_on_selected_climate
     then:
       - lambda: |-
-          request_selected_climate_status(id(selected_climate_index));
+          std::string mode = climate_turn_on_mode_for_index(id(selected_climate_index));
+          if (mode.empty()) {
+            id(set_setting_preview).execute("SYNCING");
+            return;
+          }
+          id(set_selected_climate_hvac_mode).execute(mode, "TURNING ON");
 
-  - id: refresh_selected_media_status
+  - id: turn_off_selected_climate
     then:
-      - lambda: |-
-          request_selected_media_status(id(selected_media_index));
+      - script.execute:
+          id: set_selected_climate_hvac_mode
+          mode_name: "off"
+          preview: "TURNING OFF"
 
-  - id: toggle_selected_climate_power
-    mode: queued
-    then:
-      - if:
-          condition:
-            lambda: 'return id(selected_item_state) == "off";'
-          then:
-            - homeassistant.action:
-                action: climate.set_hvac_mode
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  hvac_mode: !lambda 'return id(last_climate_mode);'
-                on_success:
-                  - script.execute: refresh_selected_climate_status
-                on_error:
-                  - script.execute: refresh_selected_climate_status
-            - lambda: |-
-                id(selected_item_state) = id(last_climate_mode);
-                id(updated_ui) = true;
-          else:
-            - lambda: |-
-                if (id(selected_item_state) != "unknown" && id(selected_item_state) != "off") {
-                  id(last_climate_mode) = id(selected_item_state);
-                }
-            - homeassistant.action:
-                action: climate.set_hvac_mode
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  hvac_mode: "off"
-                on_success:
-                  - script.execute: refresh_selected_climate_status
-                on_error:
-                  - script.execute: refresh_selected_climate_status
-            - lambda: |-
-                id(selected_item_state) = "off";
-                id(updated_ui) = true;
-      - script.execute: update_display
-
-  - id: cycle_selected_climate_mode
+  - id: set_selected_climate_hvac_mode
+    parameters:
+      mode_name: std::string
+      preview: std::string
     mode: queued
     then:
       - lambda: |-
-          std::string current = id(selected_item_state);
-          if (current == "off" || current == "unknown") {
-            current = id(last_climate_mode);
-          }
-
-          std::string next = "heat";
-          if (current == "heat") {
-            next = "cool";
-          } else if (current == "cool") {
-            next = "heat_cool";
-          } else if (current == "heat_cool") {
-            next = "heat";
-          }
-
-          id(last_climate_mode) = next;
-          id(selected_item_state) = next;
+          id(selected_item_state) = mode_name;
+          id(last_climate_interaction) = millis();
+          note_local_change();
           id(updated_ui) = true;
       - homeassistant.action:
           action: climate.set_hvac_mode
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
-            hvac_mode: !lambda 'return id(last_climate_mode);'
-          on_success:
-            - script.execute: refresh_selected_climate_status
-          on_error:
-            - script.execute: refresh_selected_climate_status
-      - script.execute: update_display
+            hvac_mode: !lambda 'return mode_name;'
+      - script.execute:
+          id: set_setting_preview
+          text: !lambda 'return preview;'
 
   - id: adjust_climate_temperature
     parameters:
@@ -86,9 +45,8 @@ script:
     mode: queued
     then:
       - lambda: |-
-          bool dual_target = id(selected_item_state) == "heat_cool" &&
-                             !isnan(id(selected_climate_target_temp_low)) &&
-                             !isnan(id(selected_climate_target_temp_high));
+          bool dual_target = remote_ui_has_dual_climate_target(
+              id(selected_item_state), id(selected_climate_target_temp_low), id(selected_climate_target_temp_high));
           bool high_focus = dual_target && target_focus == 2;
           float next = dual_target
                            ? (high_focus ? id(selected_climate_target_temp_high) : id(selected_climate_target_temp_low))
@@ -124,10 +82,13 @@ script:
 
           id(last_climate_target_focus_interaction) = millis();
           id(last_climate_interaction) = millis();
+          note_local_change();
           id(updated_ui) = true;
       - if:
           condition:
-            lambda: 'return id(selected_item_state) == "heat_cool" && !isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high));'
+            lambda: |-
+              return remote_ui_has_dual_climate_target(id(selected_item_state), id(selected_climate_target_temp_low),
+                                                       id(selected_climate_target_temp_high));
           then:
             - homeassistant.action:
                 action: climate.set_temperature
@@ -135,20 +96,12 @@ script:
                   entity_id: !lambda 'return id(selected_item_entity);'
                   target_temp_low: !lambda 'return id(selected_climate_target_temp_low);'
                   target_temp_high: !lambda 'return id(selected_climate_target_temp_high);'
-                on_success:
-                  - script.execute: refresh_selected_climate_status
-                on_error:
-                  - script.execute: refresh_selected_climate_status
           else:
             - homeassistant.action:
                 action: climate.set_temperature
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
                   temperature: !lambda 'return id(selected_climate_target_temp);'
-                on_success:
-                  - script.execute: refresh_selected_climate_status
-                on_error:
-                  - script.execute: refresh_selected_climate_status
       - script.execute: update_display
 
   - id: climate_temperature_up
@@ -183,30 +136,6 @@ script:
           target_focus: 2
           delta: -1.0
 
-  - id: cycle_selected_climate_preset
-    mode: queued
-    then:
-      - if:
-          condition:
-            lambda: 'return climate_supports_preset(id(selected_climate_index));'
-          then:
-            - lambda: |-
-                std::string next = "home";
-                if (id(selected_climate_preset) == "home") {
-                  next = "away";
-                } else if (id(selected_climate_preset) == "away") {
-                  next = "sleep";
-                }
-                id(selected_climate_preset) = next;
-                id(last_climate_interaction) = millis();
-                id(updated_ui) = true;
-            - homeassistant.service:
-                service: climate.set_preset_mode
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  preset_mode: !lambda 'return id(selected_climate_preset);'
-            - script.execute: update_display
-
   - id: cycle_selected_climate_preset_step
     parameters:
       step: int
@@ -217,9 +146,8 @@ script:
             lambda: 'return climate_supports_preset(id(selected_climate_index));'
           then:
             - lambda: |-
-                std::string next = step > 0
-                    ? next_climate_preset_for_index(id(selected_climate_index))
-                    : previous_climate_preset_for_index(id(selected_climate_index));
+                std::string next = step_delimited_option(
+                    selected_climate_preset_modes(id(selected_climate_index)), id(selected_climate_preset), step);
                 if (next.empty()) {
                   id(updated_ui) = true;
                   return;
@@ -228,6 +156,7 @@ script:
                 id(last_climate_interaction) = millis();
                 id(last_setting_interaction) = millis();
                 id(selected_setting_detail) = next;
+                note_local_change();
                 id(updated_ui) = true;
             - homeassistant.service:
                 service: climate.set_preset_mode
@@ -250,6 +179,7 @@ script:
           id(last_climate_interaction) = millis();
           id(last_setting_interaction) = millis();
           id(selected_setting_detail) = mode_name;
+          note_local_change();
           id(updated_ui) = true;
       - if:
           condition:
@@ -260,44 +190,6 @@ script:
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
                   fan_mode: !lambda 'return mode_name;'
-                on_success:
-                  - script.execute: refresh_selected_climate_status
-                on_error:
-                  - script.execute: refresh_selected_climate_status
-            - script.execute: update_display
-
-  - id: set_selected_climate_hvac_mode
-    parameters:
-      mode_name: std::string
-    mode: queued
-    then:
-      - lambda: |-
-          if (mode_name.empty()) {
-            id(updated_ui) = true;
-            return;
-          }
-          id(selected_climate_hvac_mode) = mode_name;
-          id(selected_item_state) = mode_name;
-          if (mode_name != "off") {
-            id(last_climate_mode) = mode_name;
-          }
-          id(last_climate_interaction) = millis();
-          id(last_setting_interaction) = millis();
-          id(selected_setting_detail) = mode_name;
-          id(updated_ui) = true;
-      - if:
-          condition:
-            lambda: 'return !mode_name.empty();'
-          then:
-            - homeassistant.action:
-                action: climate.set_hvac_mode
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  hvac_mode: !lambda 'return mode_name;'
-                on_success:
-                  - script.execute: refresh_selected_climate_status
-                on_error:
-                  - script.execute: refresh_selected_climate_status
             - script.execute: update_display
 
   - id: adjust_selected_climate_humidity
@@ -317,18 +209,17 @@ script:
           id(last_climate_interaction) = millis();
           id(last_setting_interaction) = millis();
           char buffer[24];
-          snprintf(buffer, sizeof(buffer), "HUMIDITY %.0f%%", next);
+          snprintf(buffer, sizeof(buffer), "TARGET: %.0f%%", next);
           id(selected_setting_detail) = buffer;
+          note_local_change();
           id(updated_ui) = true;
       - homeassistant.action:
           action: climate.set_humidity
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
-            humidity: !lambda 'return id(selected_climate_target_humidity);'
-          on_success:
-            - script.execute: refresh_selected_climate_status
-          on_error:
-            - script.execute: refresh_selected_climate_status
+            # Home Assistant coerces humidity to int; a float lambda would send
+            # "51.000000", which that coercion rejects.
+            humidity: !lambda 'return (int) lroundf(id(selected_climate_target_humidity));'
       - script.execute: update_display
 
   - id: media_set_shuffle
@@ -341,16 +232,13 @@ script:
           id(last_media_interaction) = millis();
           id(last_setting_interaction) = millis();
           id(selected_setting_detail) = enabled ? "SHUFFLE ON" : "SHUFFLE OFF";
+          note_local_change();
           id(updated_ui) = true;
       - homeassistant.action:
           action: media_player.shuffle_set
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
             shuffle: !lambda 'return enabled;'
-          on_success:
-            - script.execute: refresh_selected_media_status
-          on_error:
-            - script.execute: refresh_selected_media_status
       - script.execute: update_display
 
   - id: cycle_selected_media_repeat
@@ -371,16 +259,13 @@ script:
           id(last_media_interaction) = millis();
           id(last_setting_interaction) = millis();
           id(selected_setting_detail) = next;
+          note_local_change();
           id(updated_ui) = true;
       - homeassistant.action:
           action: media_player.repeat_set
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
             repeat: !lambda 'return id(selected_media_repeat);'
-          on_success:
-            - script.execute: refresh_selected_media_status
-          on_error:
-            - script.execute: refresh_selected_media_status
       - script.execute: update_display
 
   - id: cycle_selected_media_sound_mode
@@ -389,9 +274,8 @@ script:
     mode: queued
     then:
       - lambda: |-
-          std::string next = step > 0
-              ? next_media_sound_mode_for_index(id(selected_media_index))
-              : previous_media_sound_mode_for_index(id(selected_media_index));
+          std::string next = step_delimited_option(
+              selected_media_sound_mode_list(id(selected_media_index)), id(selected_media_sound_mode), step);
           if (next.empty()) {
             id(updated_ui) = true;
             return;
@@ -400,16 +284,13 @@ script:
           id(last_media_interaction) = millis();
           id(last_setting_interaction) = millis();
           id(selected_setting_detail) = next;
+          note_local_change();
           id(updated_ui) = true;
       - homeassistant.action:
           action: media_player.select_sound_mode
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
             sound_mode: !lambda 'return id(selected_media_sound_mode);'
-          on_success:
-            - script.execute: refresh_selected_media_status
-          on_error:
-            - script.execute: refresh_selected_media_status
       - script.execute: update_display
 
   - id: water_heater_turn_on_selected
@@ -421,6 +302,7 @@ script:
             entity_id: !lambda 'return id(selected_item_entity);'
       - lambda: |-
           id(selected_item_state) = "on";
+          note_local_change();
           id(updated_ui) = true;
       - script.execute: update_display
 
@@ -433,6 +315,7 @@ script:
             entity_id: !lambda 'return id(selected_item_entity);'
       - lambda: |-
           id(selected_item_state) = "off";
+          note_local_change();
           id(updated_ui) = true;
       - script.execute: update_display
 
@@ -462,6 +345,7 @@ script:
           char buffer[24];
           snprintf(buffer, sizeof(buffer), "TARGET %.0f°%s", next, "${TEMPERATURE_UNIT}");
           id(selected_setting_detail) = buffer;
+          note_local_change();
           id(updated_ui) = true;
       - homeassistant.service:
           service: water_heater.set_temperature
@@ -483,6 +367,7 @@ script:
           id(selected_water_heater_mode) = mode_name;
           id(last_setting_interaction) = millis();
           id(selected_setting_detail) = mode_name;
+          note_local_change();
           id(updated_ui) = true;
       - if:
           condition:
@@ -504,6 +389,7 @@ script:
           id(selected_water_heater_away) = enabled ? "on" : "off";
           id(last_setting_interaction) = millis();
           id(selected_setting_detail) = enabled ? "AWAY ON" : "AWAY OFF";
+          note_local_change();
           id(updated_ui) = true;
       - homeassistant.service:
           service: water_heater.set_away_mode
@@ -523,10 +409,6 @@ script:
                 action: media_player.media_pause
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
-                on_success:
-                  - script.execute: refresh_selected_media_status
-                on_error:
-                  - script.execute: refresh_selected_media_status
             - lambda: |-
                 id(selected_item_state) = "paused";
           else:
@@ -538,10 +420,6 @@ script:
                       action: media_player.media_play
                       data:
                         entity_id: !lambda 'return id(selected_item_entity);'
-                      on_success:
-                        - script.execute: refresh_selected_media_status
-                      on_error:
-                        - script.execute: refresh_selected_media_status
                   - lambda: |-
                       id(selected_item_state) = "playing";
                 else:
@@ -549,12 +427,9 @@ script:
                       action: media_player.media_play_pause
                       data:
                         entity_id: !lambda 'return id(selected_item_entity);'
-                      on_success:
-                        - script.execute: refresh_selected_media_status
-                      on_error:
-                        - script.execute: refresh_selected_media_status
       - lambda: |-
           id(last_media_interaction) = millis();
+          note_local_change();
           id(updated_ui) = true;
       - script.execute: update_display
 
@@ -569,26 +444,19 @@ script:
                 action: media_player.turn_on
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
-                on_success:
-                  - script.execute: refresh_selected_media_status
-                on_error:
-                  - script.execute: refresh_selected_media_status
             - lambda: |-
                 bool show_power_feedback =
                     id(selected_media_device_class) != "tv" && id(selected_media_device_class) != "receiver";
                 id(last_media_power_feedback) = show_power_feedback ? "ON" : "";
                 id(last_media_power_interaction) = show_power_feedback ? millis() : 0;
                 id(last_media_interaction) = millis();
+                note_local_change();
                 id(updated_ui) = true;
           else:
             - homeassistant.action:
                 action: media_player.turn_off
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
-                on_success:
-                  - script.execute: refresh_selected_media_status
-                on_error:
-                  - script.execute: refresh_selected_media_status
             - lambda: |-
                 id(selected_item_state) = "off";
                 bool show_power_feedback =
@@ -596,6 +464,7 @@ script:
                 id(last_media_power_feedback) = show_power_feedback ? "OFF" : "";
                 id(last_media_power_interaction) = show_power_feedback ? millis() : 0;
                 id(last_media_interaction) = millis();
+                note_local_change();
                 id(updated_ui) = true;
       - script.execute: update_display
 
@@ -631,42 +500,9 @@ script:
       - lambda: |-
           id(selected_item_state) = "idle";
           id(last_media_interaction) = millis();
+          note_local_change();
           id(updated_ui) = true;
       - script.execute: update_display
-
-  - id: select_next_media_source
-    mode: queued
-    then:
-      - if:
-          condition:
-            lambda: 'return media_source_option_count(id(selected_media_index)) > 0;'
-          then:
-            - lambda: |-
-                std::string next_source =
-                    next_media_source_for_index(id(selected_media_index), id(selected_media_source));
-                if (next_source.empty()) {
-                  id(updated_ui) = true;
-                  return;
-                }
-                id(selected_media_source) = next_source;
-                set_media_source_for_index(id(selected_media_index), next_source);
-            - homeassistant.action:
-                action: media_player.select_source
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  source: !lambda 'return id(selected_media_source);'
-                on_success:
-                  - script.execute: refresh_selected_media_status
-                on_error:
-                  - script.execute: refresh_selected_media_status
-            - lambda: |-
-                id(last_media_interaction) = millis();
-                id(last_media_source_interaction) = millis();
-                id(updated_ui) = true;
-            - script.execute: update_display
-          else:
-            - lambda: |-
-                id(updated_ui) = true;
 
   - id: adjust_media_volume
     parameters:
@@ -680,16 +516,13 @@ script:
           id(selected_media_volume_pct) = next;
           id(last_media_volume_interaction) = millis();
           id(last_media_interaction) = millis();
+          note_local_change();
           id(updated_ui) = true;
       - homeassistant.action:
           action: media_player.volume_set
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
             volume_level: !lambda 'return id(selected_media_volume_pct) / 100.0f;'
-          on_success:
-            - script.execute: refresh_selected_media_status
-          on_error:
-            - script.execute: refresh_selected_media_status
       - script.execute: update_display
 
   - id: media_volume_up

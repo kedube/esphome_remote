@@ -1,33 +1,4 @@
 script:
-  - id: refresh_selected_light_status
-    then:
-      - lambda: |-
-          request_selected_light_status(id(selected_light_index));
-
-  - id: refresh_selected_fan_status
-    then:
-      - lambda: |-
-          request_selected_fan_status(id(selected_fan_index));
-
-  - id: refresh_selected_humidifier_status
-    then:
-      - lambda: |-
-          request_selected_humidifier_status(id(selected_humidifier_index));
-
-  - id: refresh_selected_switch_status
-    then:
-      - lambda: |-
-          request_selected_switch_status(id(selected_switch_index));
-
-  - id: set_switch_feedback_and_refresh
-    parameters:
-      feedback: std::string
-    then:
-      - script.execute:
-          id: set_switch_feedback
-          feedback: !lambda 'return feedback;'
-      - script.execute: refresh_selected_switch_status
-
   - id: toggle_selected_light
     mode: queued
     then:
@@ -39,12 +10,9 @@ script:
                 action: light.turn_off
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
-                on_success:
-                  - script.execute: refresh_selected_light_status
-                on_error:
-                  - script.execute: refresh_selected_light_status
             - lambda: |-
                 id(selected_item_state) = "off";
+                note_local_change();
                 id(updated_ui) = true;
             - script.execute: update_display
           else:
@@ -57,15 +25,12 @@ script:
                       return 100;
                     }
                     return id(selected_brightness_pct);
-                on_success:
-                  - script.execute: refresh_selected_light_status
-                on_error:
-                  - script.execute: refresh_selected_light_status
             - lambda: |-
                 id(selected_item_state) = "on";
                 if (id(selected_brightness_pct) <= 0) {
                   id(selected_brightness_pct) = 100;
                 }
+                note_local_change();
                 id(updated_ui) = true;
             - script.execute: update_display
 
@@ -80,13 +45,10 @@ script:
                 action: fan.turn_off
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
-                on_success:
-                  - script.execute: refresh_selected_fan_status
-                on_error:
-                  - script.execute: refresh_selected_fan_status
             - lambda: |-
                 id(selected_item_state) = "off";
                 id(selected_fan_speed_pct) = 0;
+                note_local_change();
                 id(updated_ui) = true;
             - script.execute: update_display
           else:
@@ -103,24 +65,17 @@ script:
                             return 100;
                           }
                           return id(selected_fan_speed_pct);
-                      on_success:
-                        - script.execute: refresh_selected_fan_status
-                      on_error:
-                        - script.execute: refresh_selected_fan_status
                 else:
                   - homeassistant.action:
                       action: fan.turn_on
                       data:
                         entity_id: !lambda 'return id(selected_item_entity);'
-                      on_success:
-                        - script.execute: refresh_selected_fan_status
-                      on_error:
-                        - script.execute: refresh_selected_fan_status
             - lambda: |-
                 id(selected_item_state) = "on";
                 if (selected_fan_has_percentage(id(selected_fan_index)) && id(selected_fan_speed_pct) <= 0) {
                   id(selected_fan_speed_pct) = 100;
                 }
+                note_local_change();
                 id(updated_ui) = true;
             - script.execute: update_display
 
@@ -148,11 +103,11 @@ script:
                   entity_id: !lambda 'return id(selected_item_entity);'
                 on_success:
                   - script.execute:
-                      id: set_switch_feedback_and_refresh
+                      id: set_switch_feedback
                       feedback: "SUCCESS"
                 on_error:
                   - script.execute:
-                      id: set_switch_feedback_and_refresh
+                      id: set_switch_feedback
                       feedback: "FAILED"
 
   - id: turn_off_selected_switch
@@ -179,11 +134,11 @@ script:
                   entity_id: !lambda 'return id(selected_item_entity);'
                 on_success:
                   - script.execute:
-                      id: set_switch_feedback_and_refresh
+                      id: set_switch_feedback
                       feedback: "SUCCESS"
                 on_error:
                   - script.execute:
-                      id: set_switch_feedback_and_refresh
+                      id: set_switch_feedback
                       feedback: "FAILED"
 
   - id: increase_brightness
@@ -196,6 +151,7 @@ script:
           id(selected_brightness_pct) = next;
           id(selected_item_state) = "on";
           id(last_brightness_interaction) = millis();
+          note_local_change();
           id(updated_ui) = true;
       - homeassistant.service:
           service: light.turn_on
@@ -224,6 +180,7 @@ script:
                 id(selected_fan_speed_pct) = next;
                 id(selected_item_state) = "on";
                 id(last_fan_speed_interaction) = millis();
+                note_local_change();
                 id(updated_ui) = true;
             - homeassistant.service:
                 service: fan.set_percentage
@@ -247,6 +204,7 @@ script:
                 id(selected_brightness_pct) = 0;
                 id(selected_item_state) = "off";
                 id(last_brightness_interaction) = millis();
+                note_local_change();
                 id(updated_ui) = true;
             - script.execute: update_display
           else:
@@ -256,6 +214,7 @@ script:
                 id(selected_brightness_pct) = next;
                 id(selected_item_state) = "on";
                 id(last_brightness_interaction) = millis();
+                note_local_change();
                 id(updated_ui) = true;
             - homeassistant.service:
                 service: light.turn_on
@@ -289,6 +248,7 @@ script:
                       id(selected_fan_speed_pct) = 0;
                       id(selected_item_state) = "off";
                       id(last_fan_speed_interaction) = millis();
+                      note_local_change();
                       id(updated_ui) = true;
                   - script.execute: update_display
                 else:
@@ -298,6 +258,7 @@ script:
                       id(selected_fan_speed_pct) = next;
                       id(selected_item_state) = "on";
                       id(last_fan_speed_interaction) = millis();
+                      note_local_change();
                       id(updated_ui) = true;
                   - homeassistant.service:
                       service: fan.set_percentage
@@ -317,25 +278,19 @@ script:
                 action: humidifier.turn_on
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
-                on_success:
-                  - script.execute: refresh_selected_humidifier_status
-                on_error:
-                  - script.execute: refresh_selected_humidifier_status
             - lambda: |-
                 id(selected_item_state) = "on";
+                note_local_change();
                 id(updated_ui) = true;
           else:
             - homeassistant.action:
                 action: humidifier.turn_off
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
-                on_success:
-                  - script.execute: refresh_selected_humidifier_status
-                on_error:
-                  - script.execute: refresh_selected_humidifier_status
             - lambda: |-
                 id(selected_item_state) = "off";
                 id(selected_humidifier_action) = "off";
+                note_local_change();
                 id(updated_ui) = true;
       - script.execute: update_display
 
@@ -354,16 +309,15 @@ script:
           if (next > 100.0f) next = 100.0f;
           id(selected_humidifier_target_humidity) = next;
           id(last_humidifier_interaction) = millis();
+          note_local_change();
           id(updated_ui) = true;
       - homeassistant.action:
           action: humidifier.set_humidity
           data:
             entity_id: !lambda 'return id(selected_item_entity);'
-            humidity: !lambda 'return id(selected_humidifier_target_humidity);'
-          on_success:
-            - script.execute: refresh_selected_humidifier_status
-          on_error:
-            - script.execute: refresh_selected_humidifier_status
+            # Home Assistant coerces humidity to int; a float lambda would send
+            # "51.000000", which that coercion rejects.
+            humidity: !lambda 'return (int) lroundf(id(selected_humidifier_target_humidity));'
       - script.execute: update_display
 
   - id: humidifier_target_up
@@ -380,48 +334,21 @@ script:
           id: adjust_humidifier_target
           delta: -1.0
 
-  - id: cycle_selected_humidifier_mode
-    mode: queued
-    then:
-      - lambda: |-
-          std::string next_mode = next_humidifier_mode_for_index(id(selected_humidifier_index));
-          if (next_mode.empty()) {
-            id(updated_ui) = true;
-            return;
-          }
-          id(selected_humidifier_mode) = next_mode;
-          id(last_humidifier_mode_interaction) = millis();
-          id(updated_ui) = true;
-      - if:
-          condition:
-            lambda: 'return !id(selected_humidifier_mode).empty();'
-          then:
-            - homeassistant.action:
-                action: humidifier.set_mode
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  mode: !lambda 'return id(selected_humidifier_mode);'
-                on_success:
-                  - script.execute: refresh_selected_humidifier_status
-                on_error:
-                  - script.execute: refresh_selected_humidifier_status
-            - script.execute: update_display
-
   - id: cycle_selected_humidifier_mode_step
     parameters:
       step: int
     mode: queued
     then:
       - lambda: |-
-          std::string next_mode = step > 0
-              ? next_humidifier_mode_for_index(id(selected_humidifier_index))
-              : previous_humidifier_mode_for_index(id(selected_humidifier_index));
+          std::string next_mode = step_delimited_option(
+              humidifier_available_modes_for_index(id(selected_humidifier_index)), id(selected_humidifier_mode), step);
           if (next_mode.empty()) {
             id(updated_ui) = true;
             return;
           }
           id(selected_humidifier_mode) = next_mode;
           id(last_humidifier_mode_interaction) = millis();
+          note_local_change();
           id(updated_ui) = true;
       - if:
           condition:
@@ -432,68 +359,74 @@ script:
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
                   mode: !lambda 'return id(selected_humidifier_mode);'
-                on_success:
-                  - script.execute: refresh_selected_humidifier_status
-                on_error:
-                  - script.execute: refresh_selected_humidifier_status
             - script.execute:
                 id: set_setting_preview
                 text: !lambda 'return esphome::str_upper_case(id(selected_humidifier_mode));'
             - script.execute: update_display
 
+  # While an earlier press is still in flight the tracker holds the old value,
+  # so these step from the one this remote last sent (kept in the detail line).
   - id: adjust_light_effect
     parameters:
       step: int
+    then:
+      - lambda: |-
+          int idx = id(selected_light_index);
+          const std::string &current = local_change_hold_active(millis()) && !id(selected_setting_detail).empty()
+              ? id(selected_setting_detail)
+              : selected_light_effect(idx);
+          std::string next = step_delimited_option(selected_light_effect_list(idx), current, step);
+          if (!next.empty()) {
+            id(set_light_effect).execute(next);
+          }
+
+  - id: set_light_effect
+    parameters:
+      effect: std::string
     mode: queued
     then:
       - lambda: |-
-          std::string next_effect = step > 0
-              ? next_light_effect_for_index(id(selected_light_index))
-              : previous_light_effect_for_index(id(selected_light_index));
-          if (next_effect.empty()) {
-            id(updated_ui) = true;
-            return;
-          }
           id(last_setting_interaction) = millis();
-          id(selected_setting_detail) = next_effect;
+          id(selected_setting_detail) = effect;
+          note_local_change();
           id(updated_ui) = true;
-      - if:
-          condition:
-            lambda: 'return !id(selected_setting_detail).empty();'
-          then:
-            - homeassistant.service:
-                service: light.turn_on
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  effect: !lambda 'return id(selected_setting_detail);'
-            - script.execute: update_display
+      - homeassistant.action:
+          action: light.turn_on
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            effect: !lambda 'return effect;'
+      - script.execute: update_display
 
   - id: adjust_fan_preset
     parameters:
       step: int
+    then:
+      - lambda: |-
+          int idx = id(selected_fan_index);
+          const std::string &current = local_change_hold_active(millis()) && !id(selected_setting_detail).empty()
+              ? id(selected_setting_detail)
+              : fan_preset_mode_for_index(idx);
+          std::string next = step_delimited_option(fan_preset_modes_for_index(idx), current, step);
+          if (!next.empty()) {
+            id(set_fan_preset).execute(next);
+          }
+
+  - id: set_fan_preset
+    parameters:
+      preset: std::string
     mode: queued
     then:
       - lambda: |-
-          std::string next_preset = step > 0
-              ? next_fan_preset_for_index(id(selected_fan_index))
-              : previous_fan_preset_for_index(id(selected_fan_index));
-          if (next_preset.empty()) {
-            id(updated_ui) = true;
-            return;
-          }
           id(last_setting_interaction) = millis();
-          id(selected_setting_detail) = next_preset;
+          id(selected_setting_detail) = preset;
+          note_local_change();
           id(updated_ui) = true;
-      - if:
-          condition:
-            lambda: 'return !id(selected_setting_detail).empty();'
-          then:
-            - homeassistant.service:
-                service: fan.set_preset_mode
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  preset_mode: !lambda 'return id(selected_setting_detail);'
-            - script.execute: update_display
+      - homeassistant.action:
+          action: fan.set_preset_mode
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            preset_mode: !lambda 'return preset;'
+      - script.execute: update_display
 
   - id: set_fan_oscillation
     parameters:
@@ -503,6 +436,7 @@ script:
       - lambda: |-
           id(last_setting_interaction) = millis();
           id(selected_setting_detail) = enabled ? "ON" : "OFF";
+          note_local_change();
           id(updated_ui) = true;
       - homeassistant.service:
           service: fan.oscillate
@@ -519,6 +453,7 @@ script:
       - lambda: |-
           id(last_setting_interaction) = millis();
           id(selected_setting_detail) = direction;
+          note_local_change();
           id(updated_ui) = true;
       - homeassistant.service:
           service: fan.set_direction
