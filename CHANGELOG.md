@@ -5,7 +5,7 @@ Notable changes for each tagged release. Versions correspond to git tags and to 
 screen. Add entries under **Unreleased** as part of each change; the release workflow
 rotates that section into a version heading and publishes it as the release's Highlights.
 
-## Unreleased
+## 3.10 — 2026-10-02
 - Fixed buttons registering extra presses, which made Previous/Next skip items. Every
   button is now debounced, so contact bounce on press or release, or a brief dropout
   while a button is held, no longer counts as another tap. The new `BUTTON_DEBOUNCE_MS`
