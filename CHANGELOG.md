@@ -6,6 +6,8 @@ screen. Add entries under **Unreleased** as part of each change; the release wor
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+
+## 4.0 — 2026-10-02
 - Redesigned the screen. Every page now uses the same layout: a header with the list
   name, your position in the list, the clock and battery; the entity name; a large
   value beside an icon badge that lights up when the device is on; and a footer that
