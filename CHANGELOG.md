@@ -5,7 +5,7 @@ Notable changes for each tagged release. Versions correspond to git tags and to 
 screen. Add entries under **Unreleased** as part of each change; the release workflow
 rotates that section into a version heading and publishes it as the release's Highlights.
 
-## Unreleased
+## 3.11 — 2026-10-02
 - The OLED is now put into its sleep mode before deep sleep instead of only being
   blanked. On rev1/rev2, which have no OLED power switch, the panel previously stayed
   active through sleep and kept draining the battery.
