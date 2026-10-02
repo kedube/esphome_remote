@@ -6,6 +6,8 @@ screen. Add entries under **Unreleased** as part of each change; the release wor
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+
+## 4.1 — 2026-10-02
 - Fixed CI's firmware builds failing whenever the build cache already matched the
   code, such as after a change to only the docs or workflows, and in the weekly build.
 
