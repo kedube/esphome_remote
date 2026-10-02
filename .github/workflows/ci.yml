@@ -89,9 +89,12 @@ jobs:
 
       - name: Compile firmware
         # The restored cache can hold build folders from an earlier device name
-        # or ESPHome version; drop their firmware so only this build's is uploaded.
+        # or ESPHome version. Delete the images the next step uploads, which
+        # ESPHome writes again after every compile, so only this build's are
+        # uploaded. Leave the other .bin files: ESP-IDF tracks <name>.bin through
+        # a stamp file and won't recreate it when the cached build is up to date.
         run: |
-          rm -f esphome/.esphome/build/*/build/*.bin
+          rm -f esphome/.esphome/build/*/build/*.factory.bin esphome/.esphome/build/*/build/*.ota.bin
           esphome compile esphome/remote_control.yaml
 
       - name: Upload firmware artifact
