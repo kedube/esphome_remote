@@ -54,12 +54,18 @@ script:
     then:
       - script.stop: update_display
       - lambda: |-
+          // Blank the panel and put it in sleep mode. rev1/rev2 keep the OLED
+          // powered through deep sleep, so a blank but active panel would keep
+          // drawing current; the display turns itself back on at boot. Skipped
+          // once the panel is off, so the on_shutdown call that follows turn_off
+          // sends nothing to a panel whose power rail may already be cut.
           auto it = id(oled_display);
-          if (it->is_failed() || !it->is_ready()) {
+          if (it->is_failed() || !it->is_ready() || !it->is_on()) {
             return;
           }
           it->clear();
           it->display();
+          it->turn_off();
 
   - id: reset_mode_feedback_timers
     then:

@@ -34,6 +34,14 @@ esphome:
     - priority: 400
       then:
         - script.execute: update_battery
+  # Deep sleep forced by run_duration calls begin_sleep() directly and skips
+  # turn_off, which would leave the OLED lit and its rail powered (the pin is
+  # then held high) through sleep. Blank it and cut power here too, in that
+  # order; after a normal turn_off both steps are no-ops.
+  on_shutdown:
+    then:
+      - script.execute: clear_display_for_sleep
+      - switch.turn_off: oled_power
 
 switch:
   - platform: gpio

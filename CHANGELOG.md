@@ -5,6 +5,14 @@ Notable changes for each tagged release. Versions correspond to git tags and to 
 screen. Add entries under **Unreleased** as part of each change; the release workflow
 rotates that section into a version heading and publishes it as the release's Highlights.
 
+## Unreleased
+- The OLED is now put into its sleep mode before deep sleep instead of only being
+  blanked. On rev1/rev2, which have no OLED power switch, the panel previously stayed
+  active through sleep and kept draining the battery.
+- Deep sleep forced by `DEEP_SLEEP_DURATION` now also turns the display off (and on
+  rev3.1 cuts its power). It previously skipped the power-off sequence and left the
+  last screen lit for the whole sleep.
+
 ## 3.10 — 2026-10-02
 - Fixed buttons registering extra presses, which made Previous/Next skip items. Every
   button is now debounced, so contact bounce on press or release, or a brief dropout

@@ -1,6 +1,6 @@
 substitutions:
   BOARD: "esp32dev"
-  DEVICE_NAME: "esphome-remote"
+  DEVICE_NAME: "esphome-remote31"
   FRIENDLY_NAME: "ESPHome Remote"
   VERSION: "3.10"
   FRAMEBUFFER_WEB_DEBUG: "0" # Set to 1 to enable the framebuffer web debugging server on port 80 (see web_server: section below)
@@ -10,7 +10,7 @@ substitutions:
   SPEED_UNIT: "MPH" # Set to "KPH" when Home Assistant wind speed values are in kilometers per hour
   PRESSURE_UNIT: "hPa" # Set to "kPa" when Home Assistant pressure values are in kilopascals
   PRECIPITATION_UNIT: "in" # Set to "mm" when Home Assistant precipitation values are in millimeters
-  SLEEP_DURATION: "120" # seconds until auto-sleep
+  SLEEP_DURATION: "90" # seconds until auto-sleep
   DEEP_SLEEP_DURATION: "15min" # max awake time before forcing deep sleep. Do NOT set to 0 — ESPHome
                                # treats run_duration: 0 as "sleep immediately after boot", which makes
                                # the remote unusable and OTA nearly impossible. To disable forced deep

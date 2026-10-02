@@ -8,6 +8,12 @@ esphome:
     - priority: 400
       then:
         - script.execute: update_battery
+  # Deep sleep forced by run_duration calls begin_sleep() directly and skips
+  # turn_off, which would leave the OLED lit through sleep. Blank it here too;
+  # after a normal turn_off this is a no-op.
+  on_shutdown:
+    then:
+      - script.execute: clear_display_for_sleep
 
 sensor:
   - platform: adc
