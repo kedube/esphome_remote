@@ -6,6 +6,8 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+
+## 4.2 — 2026-10-02
 - Entity names are drawn in Arial Bold (13 px, or 12 px for long names) instead of
   Roboto Condensed, whose strokes came out uneven on the panel. The rest of the screen
   is unchanged.
