@@ -5,6 +5,13 @@ Notable changes for each tagged release. Versions correspond to git tags and to 
 screen. Add entries under **Unreleased** as part of each change; the release workflow
 rotates that section into a version heading and publishes it as the release's Highlights.
 
+## Unreleased
+- Fixed buttons registering extra presses, which made Previous/Next skip items. Every
+  button is now debounced, so contact bounce on press or release, or a brief dropout
+  while a button is held, no longer counts as another tap. The new `BUTTON_DEBOUNCE_MS`
+  setting (default 30 ms) controls the window; the wake button keeps
+  `WAKE_BUTTON_DEBOUNCE_MS` but now also ignores a brief dropout while held.
+
 ## 3.3 — 2026-08-11
 - Documented the optional media-player `sources` field on favorite entries, the ESP32
   `minimum_chip_revision` setting and the OTA failure it causes when mismatched, the

@@ -19,6 +19,7 @@ substitutions:
   LONG_PRESS_DURATION_MS: "2000" # hold time for lock/cover/automation actions
   EXTENDED_HOLD_DURATION_MS: "5000" # shared hold time for alarm trigger and wake-button reboot
   WAKE_BUTTON_DEBOUNCE_MS: "30" # debounce time for wake/power button press and release
+  BUTTON_DEBOUNCE_MS: "30" # debounce time for all other buttons; raise it if a tap still registers twice
   OLED_POWER_ON_SETTLE_MS: "150" # settle time after powering the OLED rail before the display
                                  # component probes it. The SH1106 is probed exactly once and a
                                  # no-ACK is terminal for that boot (no retry), so this must

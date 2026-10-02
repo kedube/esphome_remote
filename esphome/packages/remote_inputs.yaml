@@ -1,4 +1,8 @@
 # Hardware button inputs and their top-level wiring.
+# Every button is debounced with delayed_on_off: an edge is only published once
+# the pin has held that level for the whole window, so contact bounce on press
+# or release, or a brief dropout while held, cannot register as an extra tap.
+# (Chaining delayed_on + delayed_off does not reject a dropout while held.)
 binary_sensor:
   - platform: gpio
     id: wake_button
@@ -13,8 +17,7 @@ binary_sensor:
     internal: True
     filters:
       - invert:
-      - delayed_on: ${WAKE_BUTTON_DEBOUNCE_MS}ms
-      - delayed_off: ${WAKE_BUTTON_DEBOUNCE_MS}ms
+      - delayed_on_off: ${WAKE_BUTTON_DEBOUNCE_MS}ms
     on_press:
       then:
         - script.execute: reset_idle_timer
@@ -33,6 +36,7 @@ binary_sensor:
     internal: True
     filters:
       - invert:
+      - delayed_on_off: ${BUTTON_DEBOUNCE_MS}ms
     on_press:
       then:
         - script.execute: reset_idle_timer
@@ -48,6 +52,7 @@ binary_sensor:
     internal: True
     filters:
       - invert:
+      - delayed_on_off: ${BUTTON_DEBOUNCE_MS}ms
     on_press:
       then:
         - script.execute: reset_idle_timer
@@ -71,6 +76,7 @@ binary_sensor:
     internal: True
     filters:
       - invert:
+      - delayed_on_off: ${BUTTON_DEBOUNCE_MS}ms
     on_press:
       then:
         - script.execute: reset_idle_timer
@@ -86,6 +92,7 @@ binary_sensor:
     internal: True
     filters:
       - invert:
+      - delayed_on_off: ${BUTTON_DEBOUNCE_MS}ms
     on_press:
       then:
         - script.execute: reset_idle_timer
@@ -102,6 +109,7 @@ binary_sensor:
     internal: True
     filters:
       - invert:
+      - delayed_on_off: ${BUTTON_DEBOUNCE_MS}ms
     on_press:
       then:
         - script.execute: reset_idle_timer
@@ -121,6 +129,7 @@ binary_sensor:
     internal: True
     filters:
       - invert:
+      - delayed_on_off: ${BUTTON_DEBOUNCE_MS}ms
     on_press:
       then:
         - script.execute: reset_idle_timer
@@ -140,6 +149,7 @@ binary_sensor:
     internal: True
     filters:
       - invert:
+      - delayed_on_off: ${BUTTON_DEBOUNCE_MS}ms
     on_press:
       then:
         - script.execute: reset_idle_timer
@@ -158,6 +168,7 @@ binary_sensor:
     internal: True
     filters:
       - invert:
+      - delayed_on_off: ${BUTTON_DEBOUNCE_MS}ms
     on_press:
       then:
         - script.execute: reset_idle_timer
@@ -173,6 +184,7 @@ binary_sensor:
     internal: True
     filters:
       - invert:
+      - delayed_on_off: ${BUTTON_DEBOUNCE_MS}ms
     on_press:
       then:
         - script.execute: reset_idle_timer
