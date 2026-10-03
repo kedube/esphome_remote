@@ -6,6 +6,8 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+
+## 4.4 — 2026-10-03
 - Weather readings use the units the weather entity reports (`29.92 inHg`, `31 KM/H`), so
   `SPEED_UNIT`, `PRESSURE_UNIT` and `PRECIPITATION_UNIT` are gone; delete them from your
   `settings.yaml`. An unavailable weather entity says so. The high and low come from
