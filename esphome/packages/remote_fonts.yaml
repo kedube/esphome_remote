@@ -1,29 +1,22 @@
-# Fonts used by the renderer (src/remote_ui_renderer.cpp). Every icon the
-# renderer draws must be listed under hero_icons.
-
-# Defaults for the entity-name font. Set NAME_FONT, NAME_FONT_SIZE and
-# NAME_FONT_SMALL_SIZE in settings.yaml to change it: remote_control.yaml lists
-# settings.yaml after this package, so its values win.
-substitutions:
-  NAME_FONT: "../assets/fonts/arial-bold.ttf"
-  NAME_FONT_SIZE: "13"
-  NAME_FONT_SMALL_SIZE: "12"
-
+# Fonts used by the renderer (src/remote_ui_renderer.cpp). The text fonts and
+# their sizes are settings (the *_FONT substitutions in settings.yaml). The icon
+# font isn't: the renderer draws Material Symbols codepoints, and every icon it
+# draws must be listed under hero_icons.
 font:
   # The text fonts carry printable ASCII, Latin-1 (accented letters, ² ³ µ °)
   # and typographic quotes, dashes, • € and …, so Home Assistant names, units
   # and notifications draw without boxes for missing characters.
-  - file: "../assets/fonts/arial-bold.ttf"
+  # Header, chips and footer labels.
+  - file: "${LABEL_FONT}"
     id: tiny_font
-    size: 9
+    size: ${LABEL_FONT_SIZE}
     glyphs: &text_glyphs [' !"#$%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ‘’“”–—•€…']
-  - file: "../assets/fonts/arial-bold.ttf"
+  # Media titles, notifications, units and the weather high/low.
+  - file: "${TEXT_FONT}"
     id: small_font
-    size: 10
+    size: ${TEXT_FONT_SIZE}
     glyphs: *text_glyphs
-  # Entity names. The panel lights a pixel fully or not at all, so a font
-  # looks clean here when its hinting places each stroke on whole pixels, as
-  # Arial Bold's does. Names too wide for name_font use name_small_font, then
+  # Entity names. Names too wide for name_font use name_small_font, then
   # small_font.
   - file: "${NAME_FONT}"
     id: name_font
@@ -33,19 +26,15 @@ font:
     id: name_small_font
     size: ${NAME_FONT_SMALL_SIZE}
     glyphs: *text_glyphs
-  - file:
-      type: gfonts
-      family: Roboto Condensed
-      weight: 700
+  # State words such as UNLOCKED, setpoints, Info lines and headlines.
+  - file: "${STATE_FONT}"
     id: title_font
-    size: 14
+    size: ${STATE_FONT_SIZE}
     glyphs: *text_glyphs
-  - file:
-      type: gfonts
-      family: Roboto Condensed
-      weight: 700
+  # Large values. Anything this font can't draw falls back to title_font.
+  - file: "${VALUE_FONT}"
     id: large_font
-    size: 28
+    size: ${VALUE_FONT_SIZE}
     glyphs: ['0123456789°%.-: ONF']
   - file:
       type: gfonts

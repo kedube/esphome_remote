@@ -15,10 +15,8 @@ substitutions:
   PIN_BTN_PLUS: "18"
 
 packages:
-  # Fonts first: packages listed later win on substitutions, so settings.yaml
-  # can override the name-font defaults in remote_fonts.yaml.
-  remote_fonts: !include packages/remote_fonts.yaml
   settings: !include settings.yaml
+  remote_fonts: !include packages/remote_fonts.yaml
   remote_display_runtime_globals: !include packages/remote_display_runtime_globals.yaml
   remote_display_selection_globals: !include packages/remote_display_selection_globals.yaml
   remote_display_state_globals: !include packages/remote_display_state_globals.yaml

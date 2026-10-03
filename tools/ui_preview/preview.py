@@ -5,8 +5,8 @@ Compiles src/remote_ui_renderer.cpp together with ESPHome's own display and
 font code (taken from the installed esphome package) and the font bitmaps
 ESPHome generates from esphome/packages/remote_fonts.yaml, then draws every
 sample state in scenarios.cpp. What you see is pixel for pixel what the
-128x64 panel shows, including the entity-name font chosen in
-esphome/settings.yaml (--readme always uses the default).
+128x64 panel shows, in the fonts chosen in esphome/settings.yaml (--readme
+uses the defaults from esphome/examples/settings-example.yaml).
 
 Run it from anywhere in the repo (it re-runs itself under the Python behind
 your `esphome` command, so it uses the same ESPHome you build with):
@@ -131,29 +131,31 @@ def copy_esphome_sources(work: Path) -> None:
     (work / "esphome" / "core" / "defines.h").write_text(DEFINES_H)
 
 
-# The settings.yaml lines that choose the entity-name font.
-NAME_FONT_SETTING_RE = re.compile(
-    r"""^[ \t]+(NAME_FONT|NAME_FONT_SIZE|NAME_FONT_SMALL_SIZE):[ \t]*(?:"([^"]*)"|'([^']*)'|([^\s#]+))""",
+# The settings lines that choose the text fonts and their sizes.
+FONT_SETTING_RE = re.compile(
+    r"""^[ \t]+((?:LABEL|TEXT|NAME|STATE|VALUE)_FONT(?:_SIZE|_SMALL_SIZE)?):[ \t]*(?:"([^"]*)"|'([^']*)'|([^\s#]+))""",
     re.M,
 )
 
 
-def name_font_settings() -> dict:
-    """The entity-name font chosen in esphome/settings.yaml, if there is one.
+def font_settings(use_settings: bool) -> dict:
+    """The font substitutions remote_fonts.yaml needs.
 
-    remote_fonts.yaml holds the defaults; these override them so the preview
-    shows the font your remote uses. A local font's path is made absolute,
-    because the preview builds the fonts in another directory.
+    Read from esphome/examples/settings-example.yaml, then from
+    esphome/settings.yaml when use_settings is true, so the preview draws the
+    fonts your remote uses. Local font paths are made absolute, because the
+    preview builds the fonts in another directory.
     """
-    settings = REPO / "esphome" / "settings.yaml"
-    if not settings.is_file():
-        return {}
+    sources = [REPO / "esphome" / "examples" / "settings-example.yaml"]
+    if use_settings:
+        sources.append(REPO / "esphome" / "settings.yaml")
     found = {}
-    for match in NAME_FONT_SETTING_RE.finditer(settings.read_text(encoding="utf-8")):
-        found[match.group(1)] = next(value for value in match.groups()[1:] if value is not None)
-    font = found.get("NAME_FONT")
-    if font and not font.startswith(("gfonts://", "http://", "https://")):
-        found["NAME_FONT"] = (REPO / "esphome" / font).resolve().as_posix()
+    for path in sources:
+        for match in FONT_SETTING_RE.finditer(path.read_text(encoding="utf-8")):
+            found[match.group(1)] = next(value for value in match.groups()[1:] if value is not None)
+    for key, value in found.items():
+        if key.endswith("_FONT") and not value.startswith(("gfonts://", "http://", "https://")):
+            found[key] = (REPO / "esphome" / value).resolve().as_posix()
     return found
 
 
@@ -162,10 +164,6 @@ def generate_fonts(work: Path, substitutions: dict) -> None:
     root = CACHE / "fontgen"
     config_dir = root / "esphome"
     config_dir.mkdir(parents=True, exist_ok=True)
-    # remote_fonts.yaml refers to ../assets relative to the config directory.
-    if (root / "assets").exists():
-        shutil.rmtree(root / "assets")
-    shutil.copytree(REPO / "assets", root / "assets")
     config = config_dir / "ui_preview_fonts.yaml"
     fonts_yaml = (REPO / "esphome" / "packages" / "remote_fonts.yaml").as_posix()
     # JSON strings are valid double-quoted YAML scalars.
@@ -311,11 +309,11 @@ def main() -> None:
     (work / "frames").mkdir(parents=True)
 
     copy_esphome_sources(work)
-    # The README screenshots show the default fonts, whatever settings.yaml picks.
-    name_font = {} if args.readme else name_font_settings()
-    if name_font:
-        print("entity names: " + ", ".join(f"{key}={value}" for key, value in name_font.items()))
-    generate_fonts(work, name_font)
+    # The README screenshots show the example's fonts, whatever settings.yaml picks.
+    use_settings = not args.readme and (REPO / "esphome" / "settings.yaml").is_file()
+    if use_settings:
+        print("fonts from esphome/settings.yaml")
+    generate_fonts(work, font_settings(use_settings))
     binary = build(work, HERE / "scenarios.cpp", "ui_preview")
     output = run([str(binary), str(work / "frames")] + (["--stats"] if args.stats else []))
     if args.stats:

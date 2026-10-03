@@ -57,7 +57,7 @@ Every screen uses the same four bands, so the remote reads the same way whatever
 | Band | What it shows |
 | --- | --- |
 | Header (top row) | The list name in an inverted chip, followed by dots for your position in the list (or `3/12` for long lists). On the right: the clock, once Home Assistant has sent the time and when the list name leaves room for it, and the battery level on boards with battery monitoring. |
-| Title | The entity name, in Arial Bold unless you [choose another font](#choosing-the-name-font). Long names step down a size, then to a smaller font, before they are shortened. |
+| Title | The entity name, in the name font (`NAME_FONT`; see [Choosing fonts](#choosing-fonts)). Long names step down a size, then to a smaller font, before they are shortened. |
 | Hero | A round badge with the entity's icon on the left, and the main value in large digits beside it. A **lit badge** (icon cut out of a filled circle) means the device is on or active; an outlined badge means off. Thermostats, humidifiers and water heaters add a status chip at the top right (`HEATING`, `IDLE`, the heater's mode), filled while the device is actively working. Thermostats and humidifiers show their target as `SET 71°`; a water heater's target is its large value. Some types draw a picture instead: a toggle switch for switches, a window with its shade for covers, a weather icon for weather. |
 | Footer (bottom row) | Whatever `Settings`, `Plus` and `Minus` (or the action buttons) control right now. |
 
@@ -150,7 +150,7 @@ esphome_remote/
 ├── requirements.txt
 ├── assets/
 │   └── fonts/
-│       ├── arial-bold.ttf
+│       ├── LiberationSans-Bold.ttf
 │       └── local/             # your own fonts; gitignored
 ├── esphome/
 │   ├── .gitignore
@@ -292,7 +292,7 @@ The `esphome/packages/` folder is split by responsibility:
 - `remote_display_*.yaml`
   UI globals and the `update_display` script that fills the render context and calls the renderer.
 - `remote_fonts.yaml`
-  Fonts: Arial Bold for labels and, by default, entity names (`NAME_FONT` in `settings.yaml` changes it), Roboto Condensed Bold for state words and large values, and Material Symbols for icons. Every icon the renderer draws must be listed here.
+  Fonts. The text fonts and their sizes come from the `*_FONT` settings in `settings.yaml`; the icons are Material Symbols, and every icon the renderer draws must be listed here.
 - `remote_ui_*.yaml`
   UI setup, selection, and navigation scripts.
 - `remote_inputs.yaml` and `remote_runtime.yaml`
@@ -481,9 +481,11 @@ packages:
 | `SPEED_UNIT` | Wind speed unit label (`"MPH"` or `"KPH"`) shown in the weather wind and gust views. |
 | `PRESSURE_UNIT` | Pressure unit label (`"hPa"` or `"kPa"`) shown in the weather pressure view. |
 | `PRECIPITATION_UNIT` | Precipitation unit label (`"in"` or `"mm"`) shown in the weather precipitation view. |
-| `NAME_FONT` | Font for entity names: a `.ttf`, `.otf` or `.bdf` file (path relative to `esphome/`), or `"gfonts://Family@700"` for a Google Font. Defaults to Arial Bold; see [Choosing the name font](#choosing-the-name-font). |
-| `NAME_FONT_SIZE` | Entity-name height in pixels; for a `.bdf` bitmap font, its point size. Default `"13"`. |
-| `NAME_FONT_SMALL_SIZE` | Size for names too wide for `NAME_FONT_SIZE`. Names too wide for this too use the small text font, then are shortened. Default `"12"`. |
+| `LABEL_FONT`, `LABEL_FONT_SIZE` | Header, chips and footer labels. Liberation Sans Bold, `"9"`. Each font setting takes a font file or a Google Font; see [Choosing fonts](#choosing-fonts). |
+| `TEXT_FONT`, `TEXT_FONT_SIZE` | Media titles, notifications, units and the weather high/low. Liberation Sans Bold, `"10"`. |
+| `NAME_FONT`, `NAME_FONT_SIZE`, `NAME_FONT_SMALL_SIZE` | Entity names, and the size for names too wide for `NAME_FONT_SIZE` (longer names use `TEXT_FONT`, then are shortened). Liberation Sans Bold, `"12"` and `"11"`. |
+| `STATE_FONT`, `STATE_FONT_SIZE` | State words such as `UNLOCKED`, setpoints, Info lines and headlines. Roboto Condensed Bold, `"14"`. |
+| `VALUE_FONT`, `VALUE_FONT_SIZE` | Large values such as `70%` and `68°`. Roboto Condensed Bold, `"28"`. |
 | `SLEEP_DURATION` | Idle time before the remote sleeps, in seconds, written as a plain number (`"90"`, not `"90s"`). |
 | `DEEP_SLEEP_DURATION` | Maximum awake time before the remote enters deep sleep. **Do not set this to `0`.** ESPHome reads `0` as "sleep immediately after boot", which makes the remote unusable and OTA updates nearly impossible to land. To disable forced deep sleep, delete the `run_duration:` line from the `deep_sleep:` block in `esphome/remote_control.yaml` (keep the block: powering off uses it), or use a long duration such as `"1440min"`. |
 | `LONG_PRESS_DURATION_MS` | Hold time for protected actions. |
@@ -509,21 +511,24 @@ Notes:
 - Safe starting points:
   `NOTIFICATION_FEED_MAX_ITEMS: "16"`, `MAX_PERSISTED_FAVORITE_LISTS: "16"`, `WAKE_BUTTON_DEBOUNCE_MS: "30"`, `BUTTON_DEBOUNCE_MS: "30"`, `NAVIGATION_SYNC_DELAY_MS: "250"`, `REBOOT_MESSAGE_DURATION_MS: "2000"`, `SAFE_MODE_BOOT_IS_GOOD_AFTER: "10s"`.
 
-### Choosing the name font
+### Choosing fonts
+
+Each `*_FONT` setting takes a `.ttf`, `.otf` or `.bdf` file (path relative to `esphome/`) or `"gfonts://Family@700"` for a Google Font, and each size setting a height in pixels (for a `.bdf` bitmap font, its point size). Put fonts you add in `assets/fonts/local/`, which git ignores, for example `NAME_FONT: "../assets/fonts/local/Arial Narrow Bold.ttf"`. Fonts that come with your computer, and trial or commercial fonts, usually can't be redistributed, so keep them out of the rest of the repository.
 
 The display lights each pixel fully or not at all, so text can't be smoothed. A font looks clean on it when its hinting places every stroke on whole pixels, which suits fonts made for screens. These render well for entity names:
 
 | Font | `NAME_FONT_SIZE` / `NAME_FONT_SMALL_SIZE` | Where to get it |
 | --- | --- | --- |
-| Arial Bold (default) | `13` / `12` | `assets/fonts/arial-bold.ttf` |
+| Liberation Sans Bold (default) | `12` / `11` | `assets/fonts/LiberationSans-Bold.ttf`; free, with Arial's letter widths |
+| Arial Bold | `13` / `12` | Included with macOS and Windows |
 | Arial Narrow Bold | `15` / `14` | Included with macOS and Windows; condensed, so names can be larger |
 | Trebuchet MS Bold | `13` / `12` | Included with macOS and Windows |
 | DejaVu Sans Condensed Bold | `13` / `12` | Free, from [dejavu-fonts.github.io](https://dejavu-fonts.github.io/); wider, so long names step down sooner |
 | Helvetica Bold bitmaps (`helvB14.bdf` / `helvB12.bdf`) | `14` / `12` | Free, in X.Org's [`font-adobe-75dpi`](https://www.x.org/releases/individual/font/); wide |
 
-To use one, put its file in `assets/fonts/local/`, which git ignores, and point `NAME_FONT` at it, for example `"../assets/fonts/local/Arial Narrow Bold.ttf"`. Fonts that come with your computer, and trial or commercial fonts, usually can't be redistributed, so keep them out of the rest of the repository. Sizes from 12 to 15 fit the name line.
+Name sizes from 12 to 15 fit the name line. The other fonts sit in tighter spaces: labels fill 9- to 11-pixel bars, so keep `LABEL_FONT` capitals about 7 pixels tall (Liberation Sans Bold at 9), and a wider `VALUE_FONT` leaves less room for the setpoint beside the value.
 
-The font must include every character the remote uses (Latin-1 plus ‘ ’ “ ” – — • € …); if any are missing, the build stops and lists them. Run `python3 tools/ui_preview/preview.py` to see every screen with your font before flashing.
+Every text font must include the characters the remote uses (Latin-1 plus ‘ ’ “ ” – — • € …); if any are missing, the build stops and lists them. Run `python3 tools/ui_preview/preview.py` to see every screen in your fonts before flashing.
 
 `esphome/remote_control.yaml` includes this settings file. The pins shared by every board are in `esphome/remote_control.yaml`; the selected PCB package adds the dimmer, circle, battery and OLED-power pins.
 
@@ -584,7 +589,7 @@ The remote has to be awake while you add it: press a button first.
 
 ## Previewing the UI
 
-`tools/ui_preview/preview.py` draws every screen on your computer, pixel for pixel as the remote shows it, so you can check a UI change without flashing. It compiles the real renderer (`src/remote_ui_renderer.cpp`) together with ESPHome's own display and font code, using the fonts from `esphome/packages/remote_fonts.yaml` and the entity-name font from your `esphome/settings.yaml`, and renders the sample states in `tools/ui_preview/scenarios.cpp`. `--readme` always uses the default fonts, so the screenshots don't depend on your settings.
+`tools/ui_preview/preview.py` draws every screen on your computer, pixel for pixel as the remote shows it, so you can check a UI change without flashing. It compiles the real renderer (`src/remote_ui_renderer.cpp`) together with ESPHome's own display and font code and the fonts chosen in your `esphome/settings.yaml`, and renders the sample states in `tools/ui_preview/scenarios.cpp`. `--readme` uses the fonts in `esphome/examples/settings-example.yaml`, so the screenshots don't depend on your settings.
 
 ```bash
 python3 tools/ui_preview/preview.py              # writes tools/ui_preview/.cache/ui_preview.png

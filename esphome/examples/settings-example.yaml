@@ -12,12 +12,21 @@ substitutions:
   SPEED_UNIT: "MPH" # Set to "KPH" when Home Assistant wind speed values are in kilometers per hour
   PRESSURE_UNIT: "hPa" # Set to "kPa" when Home Assistant pressure values are in kilopascals
   PRECIPITATION_UNIT: "in" # Set to "mm" when Home Assistant precipitation values are in millimeters
-  NAME_FONT: "../assets/fonts/arial-bold.ttf" # font for entity names: a .ttf, .otf or .bdf file
-                                              # (path relative to this folder), or "gfonts://Family@700"
-                                              # for a Google Font. Keep fonts you can't share in
-                                              # assets/fonts/local/, which git ignores.
-  NAME_FONT_SIZE: "13" # entity-name height in pixels; for a .bdf font, its point size
-  NAME_FONT_SMALL_SIZE: "12" # size for names too wide for NAME_FONT_SIZE
+  # Fonts: each is a .ttf, .otf or .bdf file (path relative to this folder) or
+  # "gfonts://Family@700" for a Google Font. Sizes are heights in pixels (for a
+  # .bdf font, its point size). Keep fonts you can't share in assets/fonts/local/,
+  # which git ignores. See "Choosing fonts" in the README before changing them.
+  LABEL_FONT: "../assets/fonts/LiberationSans-Bold.ttf" # header, chips and footer labels
+  LABEL_FONT_SIZE: "9"
+  TEXT_FONT: "../assets/fonts/LiberationSans-Bold.ttf" # media titles, notifications, units, weather high/low
+  TEXT_FONT_SIZE: "10"
+  NAME_FONT: "../assets/fonts/LiberationSans-Bold.ttf" # entity names
+  NAME_FONT_SIZE: "12"
+  NAME_FONT_SMALL_SIZE: "11" # names too wide for NAME_FONT_SIZE
+  STATE_FONT: "gfonts://Roboto Condensed@700" # state words such as UNLOCKED, setpoints, headlines
+  STATE_FONT_SIZE: "14"
+  VALUE_FONT: "gfonts://Roboto Condensed@700" # large values such as 70% and 68°
+  VALUE_FONT_SIZE: "28"
   SLEEP_DURATION: "90" # seconds until auto-sleep
   DEEP_SLEEP_DURATION: "15min" # max awake time before forcing deep sleep. Do NOT set to 0 — ESPHome
                                # treats run_duration: 0 as "sleep immediately after boot", which makes

@@ -6,6 +6,15 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+- Every text font is a setting: `LABEL_FONT`, `TEXT_FONT`, `NAME_FONT`, `STATE_FONT` and
+  `VALUE_FONT`, each with a size, in `settings.yaml` (see "Choosing fonts" in the README).
+  If your `settings.yaml` is older, copy the font lines from
+  `esphome/examples/settings-example.yaml` into it: until you do, the build stops with
+  `'LABEL_FONT' is undefined`.
+- Labels, text and entity names default to Liberation Sans Bold, a free font with
+  Arial's letter widths (names at 12 px, or 11 px for long names), so the repository no
+  longer includes Arial. To keep Arial, put your copy in `assets/fonts/local/` and point
+  the font settings at it.
 
 ## 4.2 — 2026-10-02
 - Entity names are drawn in Arial Bold (13 px, or 12 px for long names) instead of

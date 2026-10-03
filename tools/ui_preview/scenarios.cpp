@@ -190,11 +190,11 @@ int main(int argc, char **argv) {
     add("26_scene", s);
   }
   {
-    auto c = base(REMOTE_MODE_ALARMS, "OUTSIDE", "Annisquam Alarm", "disarmed", 3, 4);
+    auto c = base(REMOTE_MODE_ALARMS, "OUTSIDE", "House Alarm", "disarmed", 3, 4);
     c.selected_setting_option = REMOTE_SETTING_ALARM_STATE;
     c.selected_alarm_arm_mode = ALARM_ARM_MODE_AWAY;
     add("27_alarm", c);
-    auto a = base(REMOTE_MODE_ALARMS, "OUTSIDE", "Annisquam Alarm", "armed_away", 3, 4);
+    auto a = base(REMOTE_MODE_ALARMS, "OUTSIDE", "House Alarm", "armed_away", 3, 4);
     a.hold_label = "HOLD TO DISARM";
     a.hold_progress = 35;
     add("28_alarm_hold", a);
@@ -233,7 +233,7 @@ int main(int argc, char **argv) {
     add("34_info_time", c);
     auto w = base(REMOTE_MODE_INFO, "INFO", "Wireless", "", 1, 6);
     w.info_index = 1;
-    w.info_primary_text = "SquamPoint";
+    w.info_primary_text = "HomeWiFi";
     w.info_secondary_text = "-61 dBm";
     w.wifi_rssi = -61;
     add("35_info_wifi", w);
@@ -348,11 +348,11 @@ int main(int argc, char **argv) {
     au.hold_label = "HOLD TO RUN";
     au.hold_progress = 80;
     add("68_automation_hold", au);
-    auto at = base(REMOTE_MODE_ALARMS, "OUTSIDE", "Annisquam Alarm", "triggered", 3, 4);
+    auto at = base(REMOTE_MODE_ALARMS, "OUTSIDE", "House Alarm", "triggered", 3, 4);
     at.selected_setting_option = REMOTE_SETTING_ALARM_STATE;
     at.selected_alarm_arm_mode = ALARM_ARM_MODE_NIGHT;
     add("69_alarm_triggered", at);
-    auto ar = base(REMOTE_MODE_ALARMS, "OUTSIDE", "Annisquam Alarm", "arming", 3, 4);
+    auto ar = base(REMOTE_MODE_ALARMS, "OUTSIDE", "House Alarm", "arming", 3, 4);
     ar.last_alarm_feedback = S("arming...");
     ar.last_alarm_interaction = NOW - 1500;
     add("70_alarm_arming", ar);
