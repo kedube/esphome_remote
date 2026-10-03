@@ -477,10 +477,7 @@ packages:
 | `FRIENDLY_NAME` | Human-readable device name shown in Home Assistant. |
 | `NOTIFICATION_FEED_MAX_ITEMS` | Maximum number of notification messages cached and exposed in Notifications mode. |
 | `MAX_PERSISTED_FAVORITE_LISTS` | Compile-time capacity limit for configured favorite lists. This must be at least as large as your configured favorite list count. |
-| `TEMPERATURE_UNIT` | Set to `"F"` or `"C"` to match your Home Assistant climate values. |
-| `SPEED_UNIT` | Wind speed unit label (`"MPH"` or `"KPH"`) shown in the weather wind and gust views. |
-| `PRESSURE_UNIT` | Pressure unit label (`"hPa"` or `"kPa"`) shown in the weather pressure view. |
-| `PRECIPITATION_UNIT` | Precipitation unit label (`"in"` or `"mm"`) shown in the weather precipitation view. |
+| `TEMPERATURE_UNIT` | Set to `"F"` or `"C"` to match your Home Assistant climate and water heater values. Weather screens use the units the weather entity reports. |
 | `LABEL_FONT`, `LABEL_FONT_SIZE` | Header, chips and footer labels. Liberation Sans Bold, `"9"`. Each font setting takes a font file or a Google Font; see [Choosing fonts](#choosing-fonts). |
 | `TEXT_FONT`, `TEXT_FONT_SIZE` | Media titles, notifications, units and the weather high/low. Liberation Sans Bold, `"10"`. |
 | `NAME_FONT`, `NAME_FONT_SIZE`, `NAME_FONT_SMALL_SIZE` | Entity names, and the size for names too wide for `NAME_FONT_SIZE` (longer names use `TEXT_FONT`, then are shortened). Liberation Sans Bold, `"12"` and `"11"`. |
@@ -494,7 +491,7 @@ packages:
 | `BUTTON_DEBOUNCE_MS` | Debounce time for every other button. A press or release only counts once the button has held that state this long. Raise it if a single tap still registers twice; lower it only if fast repeated taps are being dropped. |
 | `NAVIGATION_SYNC_DELAY_MS` | Short quiet period after navigation before subscription-backed state sync resumes. |
 | `REBOOT_MESSAGE_DURATION_MS` | How long the `REBOOTING...` message stays on screen before the remote restarts. |
-| `ALARM_STATUS_UPDATE_DELAY_MS` | How long `ARMING...` / `DISARMING...` feedback waits before being replaced by the reported alarm state. |
+| `ALARM_STATUS_UPDATE_DELAY_MS` | How long an alarm panel has to reach the requested state, or start its exit or entry delay, before the remote shows `FAILED`. |
 | `SAFE_MODE_BOOT_IS_GOOD_AFTER` | How long a new boot must survive before ESPHome considers it successful for safe mode and OTA rollback. |
 | `LOW_BATTERY_VOLTAGE` | Battery warning threshold for battery-monitoring boards. |
 | `BATTERY_DIVIDER_MULTIPLIER` | Voltage divider scaling factor for battery-monitoring boards. |
@@ -680,24 +677,24 @@ Long-press protection:
 - Locks and covers require holding either action button for `LONG_PRESS_DURATION_MS`.
 - Automations, scripts and scenes require holding `Circle` for `LONG_PRESS_DURATION_MS`. `Square` has no action in automation mode.
 - Alarm arming and disarming also use long-press protection.
-- Alarm trigger on the Settings button and wake-button reboot both use `EXTENDED_HOLD_DURATION_MS`.
+- Alarm trigger on the Settings button (on panels that support it) and wake-button reboot both use `EXTENDED_HOLD_DURATION_MS`.
 
 ## Mode Map
 
 | Mode | Primary actions |
 | --- | --- |
-| Favorites: Lights | `Circle` on (at its last brightness), `Square` off. `Settings` picks `BRIGHTNESS` or `EFFECT`; `Plus` / `Minus` adjust it, brightness in 10% steps (`Minus` at 10% turns the light off). While the light is off, `Plus` turns it on. |
+| Favorites: Lights | `Circle` on (at its last brightness), `Square` off. `Settings` picks `BRIGHTNESS` or `EFFECT`; `Plus` / `Minus` adjust it, brightness in 10% steps (`Minus` at 10% turns the light off). While the light is off, `Plus` turns it on. A light that can't dim shows `ON` / `OFF`. |
 | Favorites: Switches | `Circle` on, `Square` off. |
 | Favorites: Climate | `Circle` on (in the thermostat's last active mode), `Square` off. `Settings` cycles `TARGET` (or `LOW` and `HIGH` in heat/cool), `FAN`, `HUMIDITY`, `PRESET`, `STATUS` and `MODE`; `STATUS` and `MODE` are read-only. |
 | Favorites: Humidifiers | `Circle` on, `Square` off. `Settings` cycles `TARGET` humidity, `MODE`, `STATUS` and `POWER`; `STATUS` and `POWER` are read-only. |
-| Favorites: Fans | `Circle` on (at its last speed), `Square` off. `Settings` cycles `SPEED`, `PRESET`, `OSCILLATE` and `DIRECTION`; `Plus` / `Minus` step the speed by the fan's own speed increments. While the fan is off, `Plus` turns it on. |
+| Favorites: Fans | `Circle` on (at its last speed), `Square` off. `Settings` cycles `SPEED`, `PRESET`, `OSCILLATE` and `DIRECTION`; `Plus` / `Minus` step the speed by the fan's own speed increments, and `Minus` below the lowest speed turns it off. While the fan is off, `Plus` turns it on at its last speed. |
 | Favorites: Covers | `Circle` open, `Square` close (both held). `Settings` selects `POSITION` or `TILT` when the cover has them; `Plus` / `Minus` move it 10% at a time, and `Minus` at 10% or less closes the cover. |
-| Favorites: Locks | `Circle` lock, `Square` unlock (both held). |
-| Favorites: Media | `Circle` play/pause, `Square` stop. `Settings` cycles `TRACK` (`CHANNEL` on TVs), `VOLUME`, `SOURCE`, `SHUFFLE`, `REPEAT`, `SOUND` and `STATE`; on `TRACK` / `CHANNEL`, `Plus` / `Minus` skip. |
-| Favorites: Water Heaters | `Circle` on, `Square` off. `Settings` cycles `TARGET`, `MODE` and `AWAY`; `Plus` / `Minus` adjust the target within the heater's own minimum and maximum. |
-| Favorites: Sensors | Read-only: the value and its unit, or `ON` / `OFF` for binary sensors. |
+| Favorites: Locks | `Circle` lock, `Square` unlock (both held). A lock that is `OPEN` (unlatched) counts as unlocked. |
+| Favorites: Media | `Circle` play/pause, or turns on a player that is off or in standby. `Square` stops, or turns off a TV or receiver. `Settings` cycles `TRACK` (`CHANNEL` on TVs), `VOLUME`, `SOURCE`, `SHUFFLE`, `REPEAT`, `SOUND` and `STATE`; on `TRACK` / `CHANNEL`, `Plus` / `Minus` skip. |
+| Favorites: Water Heaters | `Circle` on, `Square` off (through the heater's operation modes when it has no on/off of its own). `Settings` cycles `TARGET`, `MODE` and `AWAY`; `Plus` / `Minus` adjust the target within the heater's own minimum and maximum. |
+| Favorites: Sensors | Read-only: the value, rounded to the decimals it needs, and its unit, or `ON` / `OFF` for binary sensors. Timestamp sensors show the local time. |
 | Favorites: Automation / Script / Scene | `Circle` (held) runs it. |
-| Favorites: Alarms | `Circle` arm, `Square` disarm (both held); hold `Settings` to trigger. `Plus` / `Minus` pick the arm mode highlighted in the footer. |
+| Favorites: Alarms | `Circle` arm, `Square` disarm (both held); hold `Settings` to trigger. `Plus` / `Minus` pick the arm mode highlighted in the footer, out of those the panel supports. |
 | Favorites: Weather | `Plus` / `Minus` (or `Settings`) step through the weather details. |
 | Notifications | `Plus` / `Minus` move between notifications; `Circle` dismisses the one shown. |
 | Info | Read-only status screens for time/date, wireless, network, device name, battery, and version. |
@@ -707,11 +704,12 @@ Settings and details only appear when Home Assistant reports them: a light witho
 Mode-specific details:
 
 - Lights: `Circle` turns the light on at its last brightness, and `Square` turns it off. `Plus` on an off light turns it on at 10%.
-- Climate: `Circle` restores the thermostat's last active mode (or the first of heat/cool, heat, cool and auto it supports); the HVAC mode itself can't be changed from the remote. Celsius setpoints step by whole degrees and show half degrees as `21.5°`.
+- Climate: `Circle` restores the thermostat's last active mode (or the first of heat/cool, heat, cool and auto it supports); the HVAC mode itself can't be changed from the remote, and `Square` shows `NO OFF MODE` on a thermostat without one. Setpoints and humidity stay within the thermostat's own limits. Celsius setpoints step by whole degrees and show half degrees as `21.5°`.
 - Fans: on a 3-speed fan, `Plus` / `Minus` move between low, medium and high (33% steps).
 - Media: on a player that reports no volume (for example one that is off), `VOLUME` shows `--`, and `Plus` / `Minus` ask the player to step its volume up or down.
 - Notifications: `Circle` dismisses the selected notification; `◀▶ MORE` shows when there is more than one.
-- Weather: the details are conditions (`NOW`), humidity, wind (with a compass), wind direction, gusts, pressure, precipitation, cloud cover, UV, dew point, feels-like, and the day's high and low; only those Home Assistant reports appear. The high, low and precipitation come from Home Assistant's `weather.get_forecasts` (daily), which the remote asks once per wake when it first shows a weather entity.
+- Weather: the details are conditions (`NOW`), humidity, wind (with a compass), wind direction, gusts, pressure, precipitation, cloud cover, UV, dew point, feels-like, and the day's high and low; only those Home Assistant reports appear, in the units the weather entity reports (`29.92 inHg`, `12 MPH`). The high, low and precipitation come from Home Assistant's `weather.get_forecasts`, which the remote asks once per wake when it first shows a weather entity (and again if Home Assistant doesn't answer): today's entry in the daily forecast, or, from an integration with only twice-daily forecasts, the high and low of the next day and night periods (no precipitation). Night icons follow `sun.sun` when Home Assistant has it.
+- Unknown states: an entity Home Assistant reports as `unknown` shows `UNKNOWN` (`SYNCING` means nothing has arrived yet), and `Circle` and `Square` still work on it.
 
 ## UI Notes
 
@@ -719,13 +717,13 @@ Mode-specific details:
 - Empty favorite lists are skipped automatically.
 - Holding the wake/power button for `EXTENDED_HOLD_DURATION_MS` reboots the remote. The screen shows `HOLD TO REBOOT` with a bar that fills while you hold, then `REBOOTING` briefly before restart. Releasing before the bar is full puts the remote to sleep.
 - Lock, cover, automation, script and scene actions use long-press protection: the footer's hold bar fills while you hold, and the action fires when it is full. A tap that is too short leaves a `HOLD TO …` reminder in the footer. In automation mode only `Circle` runs the automation; `Square` does nothing.
-- When a favorite entry resolves to a lock, circle locks and square unlocks. The footer shows feedback such as `LOCKING...`, `UNLOCKING...`, `LOCKED`, `UNLOCKED`, `JAMMED`, `ALREADY LOCKED`, and `ALREADY UNLOCKED`, or `LOCK FAILED` / `UNLOCK FAILED` if the lock hasn't changed within 15 seconds. (Home Assistant doesn't report a device's own errors back, so the remote watches the lock's state.)
-- When a favorite entry resolves to a cover, circle opens and square closes. The footer shows feedback such as `OPENING...`, `CLOSING...`, `OPENED`, `CLOSED`, and `OPEN xx%`, or `OPEN FAILED` / `CLOSE FAILED` if the cover hasn't moved within 20 seconds.
-- When a favorite entry resolves to an automation, script, or scene, the remote shows temporary feedback such as `TRIGGERING...`, `ACTIVATING...`, `RUNNING...`, `TRIGGERED`, `ACTIVATED`, `STARTED`, and `COMPLETED`. A script shows `RUNNING` while it runs. An automation shows `TRIGGERED` a moment after the request goes out; the remote doesn't wait for it to finish.
+- When a favorite entry resolves to a lock, circle locks and square unlocks. The footer shows feedback such as `LOCKING...`, `UNLOCKING...`, `OPENING...`, `LOCKED`, `UNLOCKED`, `OPENED`, `JAMMED`, `ALREADY LOCKED`, `ALREADY UNLOCKED`, and `ALREADY OPEN`, or `LOCK FAILED` / `UNLOCK FAILED` if the lock hasn't changed within 15 seconds. (Home Assistant doesn't report a device's own errors back, so the remote watches the lock's state.)
+- When a favorite entry resolves to a cover, circle opens and square closes. The footer shows feedback such as `OPENING...`, `CLOSING...`, `OPENED`, `CLOSED`, and `OPEN xx%` (moved, then stopped part-way), or `OPEN FAILED` / `CLOSE FAILED` if the cover hasn't moved within 20 seconds. A cover without state feedback, which Home Assistant reports as `unknown`, shows `SENT`.
+- When a favorite entry resolves to an automation, script, or scene, the remote shows temporary feedback such as `TRIGGERING...`, `ACTIVATING...`, `RUNNING...`, `TRIGGERED`, `ACTIVATED`, `STARTED`, and `COMPLETED`. A script shows `RUNNING` while it runs, and a running script in single mode shows `ALREADY RUNNING` instead of starting again. An automation shows `TRIGGERED` once Home Assistant records the run (the remote doesn't wait for it to finish), or `NOT RUN` if that hasn't happened within 5 seconds: a single-mode automation that is already running ignores the request. A scene or script request Home Assistant doesn't answer within 10 seconds shows `NO RESPONSE`. Home Assistant ignores every request when the remote may not perform actions (see [A Home Assistant entity does not respond](#a-home-assistant-entity-does-not-respond)).
 - When a favorite entry resolves to a switch, the screen shows `TURNING ON` / `TURNING OFF` until Home Assistant confirms, and `FAILED` if the switch hasn't changed within 5 seconds.
-- When a favorite entry resolves to an alarm, the footer shows the arm modes `AWAY`, `HOME`, `NIGHT`, and `VAC` with the selected one highlighted. `Plus` and `Minus` move the highlight; circle long-press arms with that mode, and square long-press disarms. If the panel is already armed in the selected mode, the footer shows `ALREADY ARMED`.
-- When a favorite entry resolves to an alarm, the Settings button must be held for `EXTENDED_HOLD_DURATION_MS` to call `alarm_trigger`. The footer shows a `HOLD TO TRIGGER` bar while held.
-- Alarm actions show `ARMING...`, `DISARMING...` or `TRIGGERING...` in the footer, then `SUCCESS` or `FAILED` once Home Assistant is checked after `ALARM_STATUS_UPDATE_DELAY_MS`, or `ALREADY ARMED`, `ALREADY DISARMED` or `SYNCING` when nothing is sent. The panel's own state (`ARMED HOME`, `DISARMED`) shows in large text.
+- When a favorite entry resolves to an alarm, the footer shows the arm modes the panel supports (`AWAY`, `HOME`, `NIGHT`, `VAC`) with the selected one highlighted. `Plus` and `Minus` move the highlight; circle long-press arms with that mode, and square long-press disarms. If the panel is already armed in the selected mode, the footer shows `ALREADY ARMED`.
+- When a favorite entry resolves to an alarm that supports triggering, the Settings button must be held for `EXTENDED_HOLD_DURATION_MS` to call `alarm_trigger`. The footer shows a `HOLD TO TRIGGER` bar while held.
+- Alarm actions show `ARMING...`, `DISARMING...` or `TRIGGERING...` in the footer for as long as the panel's exit or entry delay runs (up to 3 minutes), then `SUCCESS`, or `FAILED` if the panel hasn't started within `ALARM_STATUS_UPDATE_DELAY_MS`; `ALREADY ARMED`, `ALREADY DISARMED` or `SYNCING` when nothing is sent. The panel's own state (`ARMED HOME`, `DISARMED`) shows in large text.
 - Info mode includes Time & Date (a large clock with the date as its title), Wireless (signal bars and dBm), Network, Device Name, Battery (a battery gauge and voltage), and Version screens.
 - Notifications reads from `NOTIFICATION_FEED_ENTITY` in `esphome/local_entities.h`. A notification wraps over up to three lines; an empty feed shows `ALL CAUGHT UP`.
 - System screens: `WI-FI` and then `HOME ASSISTANT` with `CONNECTING…` (and the firmware version) after a wake, `WI-FI LOST` or `HOME ASSISTANT` with `RECONNECTING…` if a connection drops, `LOW BATTERY` / `PLEASE CHARGE` with the voltage for 10 seconds when the battery is below `LOW_BATTERY_VOLTAGE` at wake, and `GOODBYE` / `POWERING OFF` before sleep.

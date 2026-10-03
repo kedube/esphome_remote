@@ -51,7 +51,8 @@ script:
           }
           auto prompt = describe_remote_button_prompt(
               static_cast<RemoteMode>(id(current_mode)), action, id(selected_item_state), id(selected_alarm_arm_mode),
-              ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS});
+              ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS},
+              alarm_supported_features_for_index(id(selected_alarm_index)));
           switch (prompt.feedback_target) {
             case REMOTE_INPUT_FEEDBACK_LOCK:
               id(set_lock_feedback).execute(prompt.feedback);
@@ -124,7 +125,8 @@ script:
       - lambda: |-
           auto prompt = describe_remote_button_prompt(
               static_cast<RemoteMode>(id(current_mode)), 0, id(selected_item_state), id(selected_alarm_arm_mode),
-              ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS});
+              ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS},
+              alarm_supported_features_for_index(id(selected_alarm_index)));
           if (!prompt.requires_long_press) {
             id(primary_button_press_started_at) = 0;
             id(primary_button_press_mode) = -1;
@@ -169,7 +171,8 @@ script:
       - lambda: |-
           auto prompt = describe_remote_button_prompt(
               static_cast<RemoteMode>(id(current_mode)), 2, id(selected_item_state), id(selected_alarm_arm_mode),
-              ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS});
+              ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS},
+              alarm_supported_features_for_index(id(selected_alarm_index)));
           if (!prompt.requires_long_press) {
             id(play_pause_button_press_started_at) = 0;
             id(play_pause_button_press_mode) = -1;
@@ -214,7 +217,8 @@ script:
       - lambda: |-
           auto prompt = describe_remote_button_prompt(
               static_cast<RemoteMode>(id(current_mode)), 1, id(selected_item_state), id(selected_alarm_arm_mode),
-              ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS});
+              ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS},
+              alarm_supported_features_for_index(id(selected_alarm_index)));
           if (!prompt.requires_long_press) {
             id(settings_button_press_started_at) = 0;
             id(settings_button_press_mode) = -1;

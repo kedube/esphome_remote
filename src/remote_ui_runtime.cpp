@@ -3,7 +3,7 @@
 namespace esphome {
 
 void reset_remote_ui_state(RemoteUiResetState &state) {
-  *state.selected_item_state = "unknown";
+  state.selected_item_state->clear();  // SYNCING until Home Assistant reports
   *state.selected_brightness_pct = 0;
   *state.selected_fan_speed_pct = 0;
   *state.selected_humidifier_target_humidity = NAN;
@@ -64,7 +64,7 @@ void reset_remote_ui_state(RemoteUiResetState &state) {
   *state.selected_weather_dew_point = NAN;
   *state.selected_weather_apparent_temperature = NAN;
   *state.selected_weather_precipitation = NAN;
-  *state.selected_weather_condition = "unknown";
+  state.selected_weather_condition->clear();
   state.selected_sensor_unit->clear();
   state.selected_setting_detail->clear();
   *state.updated_ui = true;

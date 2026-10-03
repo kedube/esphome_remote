@@ -24,6 +24,19 @@ script:
           id(updated_ui) = true;
       - script.execute: update_display
 
+  # Re-picks the setting once a command has changed what the item offers (a
+  # light or fan turned on or off). Deferred to the next loop pass: it is
+  # called from inside adjust_selected_setting, which must finish with the
+  # setting it started with.
+  - id: refresh_setting_options
+    mode: restart
+    then:
+      - delay: 0ms
+      - script.execute:
+          id: cycle_setting_option
+          step: 0
+          quiet: true
+
   # step +1/-1: Settings (or Plus/Minus in Weather) moves to the next/previous
   # setting, which becomes the preferred one. step 0: a new item was selected, or
   # with quiet, Home Assistant sent new values; show the preferred setting if
@@ -53,11 +66,12 @@ script:
           switch (mode) {
             case REMOTE_MODE_LIGHTS: {
               // While a light is off the footer shows the on/off hints and only
-              // the dimmer applies: Plus turns it on (Home Assistant drops the
-              // brightness for lights that can't dim). An off light reports no
-              // brightness, so don't wait for one.
+              // the dimmer applies: Plus turns it on (just on, for a light that
+              // can't dim). A light that dims keeps the dimmer while it waits
+              // for Home Assistant to report its brightness; one that can't dim
+              // has none.
               bool off = id(selected_item_state) == "off";
-              if (off || selected_light_has_brightness(id(selected_light_index))) add_option(REMOTE_SETTING_LIGHT_DIMMER);
+              if (off || selected_light_dimmable(id(selected_light_index)) != 0) add_option(REMOTE_SETTING_LIGHT_DIMMER);
               if (!off && selected_light_has_effect(id(selected_light_index))) add_option(REMOTE_SETTING_LIGHT_EFFECT);
               break;
             }
@@ -84,7 +98,7 @@ script:
             case REMOTE_MODE_FANS: {
               // As with lights: while off, only Plus turning it on applies.
               bool off = id(selected_item_state) == "off";
-              if (off || selected_fan_has_percentage(id(selected_fan_index))) add_option(REMOTE_SETTING_FAN_SPEED);
+              if (off || selected_fan_supports_speed(id(selected_fan_index))) add_option(REMOTE_SETTING_FAN_SPEED);
               if (!off) {
                 if (!fan_preset_modes_for_index(id(selected_fan_index)).empty()) add_option(REMOTE_SETTING_FAN_PRESETS);
                 if (!fan_oscillating_for_index(id(selected_fan_index)).empty()) add_option(REMOTE_SETTING_FAN_OSCILLATE);
@@ -317,7 +331,8 @@ script:
               detail = esphome::str_upper_case(id(selected_item_state));
               break;
             case REMOTE_SETTING_ALARM_STATE:
-              detail = std::string(alarm_arm_mode_selection_label(clamp_alarm_arm_mode(id(selected_alarm_arm_mode))));
+              detail = std::string(alarm_arm_mode_selection_label(alarm_effective_arm_mode(
+                  id(selected_alarm_arm_mode), alarm_supported_features_for_index(id(selected_alarm_index)))));
               break;
             case REMOTE_SETTING_WATER_HEATER_TARGET:
               if (!isnan(id(selected_water_heater_target_temp))) {
@@ -341,7 +356,7 @@ script:
               break;
             case REMOTE_SETTING_WEATHER_WIND_SPEED:
               if (!isnan(id(selected_weather_wind_speed))) {
-                snprintf(buf, sizeof(buf), "%.0f ${SPEED_UNIT}", id(selected_weather_wind_speed));
+                snprintf(buf, sizeof(buf), "%.1f", id(selected_weather_wind_speed));
                 detail = buf;
               }
               break;
@@ -353,19 +368,19 @@ script:
               break;
             case REMOTE_SETTING_WEATHER_WIND_GUST:
               if (!isnan(id(selected_weather_wind_gust_speed))) {
-                snprintf(buf, sizeof(buf), "%.0f ${SPEED_UNIT}", id(selected_weather_wind_gust_speed));
+                snprintf(buf, sizeof(buf), "%.1f", id(selected_weather_wind_gust_speed));
                 detail = buf;
               }
               break;
             case REMOTE_SETTING_WEATHER_PRESSURE:
               if (!isnan(id(selected_weather_pressure))) {
-                snprintf(buf, sizeof(buf), "%.0f ${PRESSURE_UNIT}", id(selected_weather_pressure));
+                snprintf(buf, sizeof(buf), "%.2f", id(selected_weather_pressure));
                 detail = buf;
               }
               break;
             case REMOTE_SETTING_WEATHER_PRECIPITATION:
               if (!isnan(id(selected_weather_precipitation))) {
-                snprintf(buf, sizeof(buf), "%.1f ${PRECIPITATION_UNIT}", id(selected_weather_precipitation));
+                snprintf(buf, sizeof(buf), "%.2f", id(selected_weather_precipitation));
                 detail = buf;
               }
               break;
@@ -706,20 +721,14 @@ script:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS;'
           then:
-            - homeassistant.service:
-                service: light.turn_off
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-            - lambda: |-
-                id(selected_item_state) = "off";
-                note_local_change();
-                id(updated_ui) = true;
-            - script.execute: update_display
+            - script.execute: turn_off_selected_light
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES;'
           then:
-            - script.execute: turn_off_selected_switch
+            - script.execute:
+                id: turn_off_selected_switch
+                switch_index: !lambda 'return id(selected_switch_index);'
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
@@ -741,7 +750,7 @@ script:
                 condition:
                   lambda: 'return id(selected_item_state) != "off";'
                 then:
-                  - script.execute: toggle_selected_humidifier_power
+                  - script.execute: turn_off_selected_humidifier
                   - script.execute:
                       id: show_toast
                       text: "TURNING OFF"
@@ -755,9 +764,9 @@ script:
           then:
             - if:
                 condition:
-                  lambda: 'return id(selected_item_state) == "on";'
+                  lambda: 'return id(selected_item_state) != "off";'
                 then:
-                  - script.execute: toggle_selected_fan
+                  - script.execute: turn_off_selected_fan
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_COVERS;'
@@ -776,7 +785,7 @@ script:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_MEDIA;'
           then:
-            - script.execute: media_play_stop
+            - script.execute: media_square_action
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_WATER_HEATERS;'
@@ -798,29 +807,21 @@ script:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_LIGHTS;'
           then:
-            - homeassistant.service:
-                service: light.turn_on
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  brightness_pct: !lambda 'return id(selected_brightness_pct) > 0 ? id(selected_brightness_pct) : 100;'
-            - lambda: |-
-                id(selected_item_state) = "on";
-                if (id(selected_brightness_pct) <= 0) id(selected_brightness_pct) = 100;
-                note_local_change();
-                id(updated_ui) = true;
-            - script.execute: update_display
+            - script.execute: turn_on_selected_light
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES;'
           then:
-            - script.execute: turn_on_selected_switch
+            - script.execute:
+                id: turn_on_selected_switch
+                switch_index: !lambda 'return id(selected_switch_index);'
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_CLIMATE;'
           then:
             - if:
                 condition:
-                  lambda: 'return id(selected_item_state) == "off";'
+                  lambda: 'return id(selected_item_state) == "off" || id(selected_item_state) == "unknown";'
                 then:
                   - script.execute: turn_on_selected_climate
                 else:
@@ -833,9 +834,9 @@ script:
           then:
             - if:
                 condition:
-                  lambda: 'return id(selected_item_state) == "off";'
+                  lambda: 'return id(selected_item_state) != "on";'
                 then:
-                  - script.execute: toggle_selected_humidifier_power
+                  - script.execute: turn_on_selected_humidifier
                   - script.execute:
                       id: show_toast
                       text: "TURNING ON"
@@ -851,7 +852,7 @@ script:
                 condition:
                   lambda: 'return id(selected_item_state) != "on";'
                 then:
-                  - script.execute: toggle_selected_fan
+                  - script.execute: turn_on_selected_fan
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_COVERS;'
@@ -870,14 +871,14 @@ script:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_MEDIA;'
           then:
-            - script.execute: media_play_pause
+            - script.execute: media_circle_action
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_WATER_HEATERS;'
           then:
             - if:
                 condition:
-                  lambda: 'return id(selected_item_state) == "off";'
+                  lambda: 'return id(selected_item_state) == "off" || id(selected_item_state) == "unknown";'
                 then:
                   - script.execute: water_heater_turn_on_selected
       - if:

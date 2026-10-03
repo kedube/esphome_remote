@@ -6,6 +6,43 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+- Weather readings use the units the weather entity reports (`29.92 inHg`, `31 KM/H`), so
+  `SPEED_UNIT`, `PRESSURE_UNIT` and `PRECIPITATION_UNIT` are gone; delete them from your
+  `settings.yaml`. An unavailable weather entity says so. The high and low come from
+  today's forecast entry, or from the next day and night periods for integrations with
+  only twice-daily forecasts (the US National Weather Service), and a request Home
+  Assistant drops is sent again. Night icons follow `sun.sun`.
+- Sensor readings are rounded to the decimals they need: an ESPHome sensor at 23.6
+  arrived as `23.6000003814697` and lost its unit. Units with `μ` display, timestamp
+  sensors show local time, and enum states read as words (`NOT CHARGING`).
+- Lights: `Circle` turns a light on at its last brightness again (it sent 100%). A light
+  that can't dim shows `ON`, and `Plus` just turns it on. `Minus` leaves an off light alone.
+- Fans: `Plus` turns an off fan on at its last speed, and `Minus` no longer turns an off
+  fan on. Each press sends the speed on screen, so quick presses don't step from a stale
+  value; just after the fan comes on, Home Assistant steps from its real speed.
+- Thermostats and humidifiers stay within their own temperature and humidity limits,
+  which Home Assistant enforces; in heat/cool, `LOW` and `HIGH` no longer move the wrong
+  way when they are close. `Square` on a thermostat without an off mode shows
+  `NO OFF MODE`.
+- Water heaters without on/off support turn on and off through their operation modes.
+- Media: `Circle` turns on a player that is off or in standby, and `Square` turns off a
+  TV or receiver.
+- Covers: one that doesn't move from part-open reports `OPEN FAILED` / `CLOSE FAILED`;
+  one without state feedback shows `SENT`.
+- Locks: `open` counts as unlocked, a retry on a jammed lock waits for the real result,
+  and a jammed or unknown lock no longer shows an open padlock.
+- Alarms: only the arm modes, and the trigger, the panel supports are offered.
+  `ARMING...` stays up through an exit delay and ends in `SUCCESS`; disarming right after
+  arming is sent rather than refused as `ALREADY DISARMED`.
+- Automations show `TRIGGERED` once Home Assistant records the run, or `NOT RUN`; a scene
+  or script request Home Assistant doesn't answer shows `NO RESPONSE`, and a running
+  single-mode script shows `ALREADY RUNNING`.
+- Switches show their new state as soon as Home Assistant confirms it.
+- An entity Home Assistant reports as `unknown` shows `UNKNOWN` instead of `SYNCING`, and
+  `Circle` and `Square` still work on it.
+- An answer from Home Assistant that arrives after you move on no longer lands on another
+  item, and the remote works around an ESPHome 2026.9 bug that could give one action
+  another's answer.
 
 ## 4.3 — 2026-10-03
 - Every text font is a setting: `LABEL_FONT`, `TEXT_FONT`, `NAME_FONT`, `STATE_FONT` and

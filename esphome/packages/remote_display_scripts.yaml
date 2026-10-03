@@ -53,6 +53,11 @@ script:
                   ctx.clock_month = current_time.month;
                   ctx.weather_is_night = current_time.hour < 6 || current_time.hour >= 18;
                 }
+                // sun.sun knows better than the clock when it is dark.
+                int sun_below_horizon = mode == REMOTE_MODE_WEATHER ? weather_sun_below_horizon() : -1;
+                if (sun_below_horizon >= 0) {
+                  ctx.weather_is_night = sun_below_horizon == 1;
+                }
                 ctx.battery_monitoring_available = id(battery_monitoring_available);
                 ctx.battery_percentage = id(battery_percentage);
                 ctx.battery_voltage = id(battery_voltage);
@@ -70,9 +75,10 @@ script:
                     {id(play_pause_button_press_started_at), id(play_pause_button_press_mode), id(play_pause_button_long_press_fired)},
                 };
                 std::string hold_label;
+                int alarm_features = mode == REMOTE_MODE_ALARMS ? alarm_supported_features_for_index(idx) : -1;
                 if (describe_active_hold(mode, now, holds, id(selected_item_state), id(selected_alarm_arm_mode),
                                          ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS}, hold_label,
-                                         ctx.hold_progress)) {
+                                         ctx.hold_progress, alarm_features)) {
                   ctx.hold_label = hold_label.c_str();
                 }
 
@@ -119,6 +125,7 @@ script:
                 ctx.last_automation_feedback = &id(last_automation_feedback);
                 ctx.last_automation_interaction = id(last_automation_interaction);
                 ctx.selected_alarm_arm_mode = id(selected_alarm_arm_mode);
+                ctx.alarm_supported_features = alarm_features;
                 ctx.last_alarm_feedback = &id(last_alarm_feedback);
                 ctx.last_alarm_interaction = id(last_alarm_interaction);
                 ctx.last_notification_dismiss_interaction = id(last_notification_dismiss_interaction);
@@ -137,9 +144,6 @@ script:
                 ctx.selected_weather_dew_point = id(selected_weather_dew_point);
                 ctx.selected_weather_apparent_temperature = id(selected_weather_apparent_temperature);
                 ctx.temperature_unit = "${TEMPERATURE_UNIT}";
-                ctx.speed_unit = "${SPEED_UNIT}";
-                ctx.pressure_unit = "${PRESSURE_UNIT}";
-                ctx.precipitation_unit = "${PRECIPITATION_UNIT}";
 
                 // Values that live in the trackers rather than in globals.
                 switch (mode) {
@@ -162,6 +166,14 @@ script:
                   }
                   case REMOTE_MODE_AUTOMATION:
                     ctx.automation_kind = automation_kind(idx);
+                    break;
+                  case REMOTE_MODE_WEATHER:
+                    // The units this weather entity reports its readings in.
+                    ctx.weather_temperature_unit =
+                        temperature_unit_letter(weather_temperature_unit_for_index(idx), "${TEMPERATURE_UNIT}");
+                    ctx.weather_speed_unit = weather_wind_speed_unit_for_index(idx).c_str();
+                    ctx.weather_pressure_unit = weather_pressure_unit_for_index(idx).c_str();
+                    ctx.weather_precipitation_unit = weather_precipitation_unit_for_index(idx).c_str();
                     break;
                   case REMOTE_MODE_INFO:
                     ctx.info_index = id(selected_info_index);

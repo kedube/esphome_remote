@@ -16,12 +16,12 @@ class Font;
 
 // Fonts the renderer draws with. Filled in once at boot (see remote_control.yaml).
 struct RemoteUiFonts {
-  font::Font *tiny = nullptr;   // Arial Bold 9: header, chips, footer text
-  font::Font *small = nullptr;  // Arial Bold 10: secondary lines, notification text
-  font::Font *name = nullptr;   // Arial Bold 13: entity names
-  font::Font *name_small = nullptr;  // Arial Bold 12: names too wide for `name`
-  font::Font *title = nullptr;  // Roboto Condensed Bold 14: state words, setpoints, headlines
-  font::Font *large = nullptr;  // Roboto Condensed Bold 28 (digits, ON/OFF): hero values
+  font::Font *tiny = nullptr;   // LABEL_FONT: header, chips, footer text
+  font::Font *small = nullptr;  // TEXT_FONT: secondary lines, notification text
+  font::Font *name = nullptr;   // NAME_FONT: entity names
+  font::Font *name_small = nullptr;  // NAME_FONT at NAME_FONT_SMALL_SIZE: names too wide for `name`
+  font::Font *title = nullptr;  // STATE_FONT: state words, setpoints, headlines
+  font::Font *large = nullptr;  // VALUE_FONT (digits, ON/OFF): hero values
   font::Font *hero = nullptr;   // Material Symbols 24: hero badges and weather
 };
 
@@ -134,8 +134,9 @@ struct RemoteRenderContext {
   const std::string *last_automation_feedback = nullptr;
   uint32_t last_automation_interaction = 0;
 
-  // Alarm panels.
+  // Alarm panels. supported_features is -1 until Home Assistant has sent it.
   int selected_alarm_arm_mode = ALARM_ARM_MODE_AWAY;
+  int alarm_supported_features = -1;
   const std::string *last_alarm_feedback = nullptr;
   uint32_t last_alarm_interaction = 0;
 
@@ -168,11 +169,14 @@ struct RemoteRenderContext {
   int clock_day = 0;
   int clock_month = 0;
 
-  // Units.
+  // Units. temperature_unit is TEMPERATURE_UNIT ("F" or "C"), for thermostats
+  // and water heaters. A weather entity reports its own units; empty until
+  // they arrive, and its temperature unit then falls back to temperature_unit.
   const char *temperature_unit = "F";
-  const char *speed_unit = "MPH";
-  const char *pressure_unit = "hPa";
-  const char *precipitation_unit = "in";
+  const char *weather_temperature_unit = nullptr;
+  const char *weather_speed_unit = "";
+  const char *weather_pressure_unit = "";
+  const char *weather_precipitation_unit = "";
 };
 
 void render_remote_ui(display::Display *it, const RemoteUiFonts &fonts, const RemoteRenderContext &ctx);

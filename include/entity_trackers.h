@@ -55,6 +55,26 @@ inline void ha_track_float(const char *entity_id, const char *attribute, float &
   ha_subscribe(entity_id, attribute, [target](esphome::StringRef state) { *target = ha_parse_float(state); });
 }
 
+// Stores an integer attribute such as supported_features. The slot keeps its
+// default until Home Assistant sends a number.
+inline void ha_track_int(const char *entity_id, const char *attribute, int &slot) {
+  int *target = &slot;
+  ha_subscribe(entity_id, attribute, [target](esphome::StringRef state) {
+    if (ha_state_missing(state)) {
+      return;
+    }
+    char buffer[16];
+    size_t len = state.size() < sizeof(buffer) - 1 ? state.size() : sizeof(buffer) - 1;
+    memcpy(buffer, state.c_str(), len);
+    buffer[len] = '\0';
+    char *end = nullptr;
+    long value = strtol(buffer, &end, 10);
+    if (end != buffer) {
+      *target = static_cast<int>(value);
+    }
+  });
+}
+
 // Common base: binds a tracker to its domain's entity list and provides
 // bounds-checked accessors. Subclasses implement subscribe(idx), which
 // registers every subscription for one entity.
@@ -97,10 +117,14 @@ class LightStatusTracker : public EntityTracker<LIGHT_LIST_COUNT> {
  public:
   LightStatusTracker() : EntityTracker(LIGHT_LIST) {}
 
+  // supported_color_modes is the only reliable sign of a light that can't dim:
+  // brightness is missing from every light that is off, and from one that
+  // hasn't synced yet.
   void subscribe(int idx) {
     const char *entity_id = this->entity_id(idx);
     ha_track_state(entity_id, nullptr, this->state_[idx]);
     ha_track_float(entity_id, "brightness", this->brightness_[idx]);
+    ha_track_list(entity_id, "supported_color_modes", this->color_modes_[idx]);
     ha_track_text(entity_id, "effect", this->effect_[idx]);
     ha_track_list(entity_id, "effect_list", this->effect_list_[idx]);
   }
@@ -108,12 +132,15 @@ class LightStatusTracker : public EntityTracker<LIGHT_LIST_COUNT> {
   const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
   float brightness(int idx) const { return at_(this->brightness_, idx); }
   bool has_brightness(int idx) const { return !std::isnan(this->brightness(idx)); }
+  // -1 until the color modes arrive, 0 for an on/off-only light, 1 if it dims.
+  int dimmable(int idx) const { return light_modes_dimmable(at_(this->color_modes_, idx)); }
   const std::string &effect(int idx) const { return at_(this->effect_, idx); }
   const std::string &effect_list(int idx) const { return at_(this->effect_list_, idx); }
   bool has_effect(int idx) const { return !this->effect_list(idx).empty(); }
 
  protected:
   std::array<std::string, LIGHT_LIST_COUNT> state_{};
+  std::array<std::string, LIGHT_LIST_COUNT> color_modes_{};
   std::array<std::string, LIGHT_LIST_COUNT> effect_{};
   std::array<std::string, LIGHT_LIST_COUNT> effect_list_{};
   std::array<float, LIGHT_LIST_COUNT> brightness_ = filled_array<float, LIGHT_LIST_COUNT>(NAN);
@@ -140,6 +167,10 @@ class FanStatusTracker : public EntityTracker<FAN_LIST_COUNT> {
   float percentage(int idx) const { return at_(this->percentage_, idx); }
   bool has_percentage(int idx) const { return !std::isnan(this->percentage(idx)); }
   float percentage_step(int idx) const { return at_(this->percentage_step_, idx); }
+  // Home Assistant reports percentage and percentage_step for every fan with
+  // speeds, but many report the percentage as None while off: the step says
+  // the fan has speeds before a percentage arrives.
+  bool supports_speed(int idx) const { return this->has_percentage(idx) || !std::isnan(this->percentage_step(idx)); }
   const std::string &preset_mode(int idx) const { return at_(this->preset_mode_, idx); }
   const std::string &preset_modes(int idx) const { return at_(this->preset_modes_, idx); }
   const std::string &oscillating(int idx) const { return at_(this->oscillating_, idx); }
@@ -167,6 +198,9 @@ class HumidifierStatusTracker : public EntityTracker<HUMIDIFIER_LIST_COUNT> {
     ha_track_float(entity_id, "humidity", this->target_humidity_[idx]);
     ha_track_float(entity_id, "current_humidity", this->current_humidity_[idx]);
     ha_track_state(entity_id, "action", this->action_[idx]);
+    // Home Assistant rejects a target outside these.
+    ha_track_float(entity_id, "min_humidity", this->min_humidity_[idx]);
+    ha_track_float(entity_id, "max_humidity", this->max_humidity_[idx]);
   }
 
   const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
@@ -175,6 +209,8 @@ class HumidifierStatusTracker : public EntityTracker<HUMIDIFIER_LIST_COUNT> {
   const std::string &available_modes(int idx) const { return at_(this->available_modes_, idx); }
   float target_humidity(int idx) const { return at_(this->target_humidity_, idx); }
   float current_humidity(int idx) const { return at_(this->current_humidity_, idx); }
+  float min_humidity(int idx) const { return at_(this->min_humidity_, idx); }
+  float max_humidity(int idx) const { return at_(this->max_humidity_, idx); }
 
  protected:
   std::array<std::string, HUMIDIFIER_LIST_COUNT> state_{};
@@ -183,6 +219,8 @@ class HumidifierStatusTracker : public EntityTracker<HUMIDIFIER_LIST_COUNT> {
   std::array<std::string, HUMIDIFIER_LIST_COUNT> action_{};
   std::array<float, HUMIDIFIER_LIST_COUNT> target_humidity_ = filled_array<float, HUMIDIFIER_LIST_COUNT>(NAN);
   std::array<float, HUMIDIFIER_LIST_COUNT> current_humidity_ = filled_array<float, HUMIDIFIER_LIST_COUNT>(NAN);
+  std::array<float, HUMIDIFIER_LIST_COUNT> min_humidity_ = filled_array<float, HUMIDIFIER_LIST_COUNT>(NAN);
+  std::array<float, HUMIDIFIER_LIST_COUNT> max_humidity_ = filled_array<float, HUMIDIFIER_LIST_COUNT>(NAN);
 };
 
 class ClimateStatusTracker : public EntityTracker<CLIMATE_LIST_COUNT> {
@@ -212,6 +250,11 @@ class ClimateStatusTracker : public EntityTracker<CLIMATE_LIST_COUNT> {
     ha_track_float(entity_id, "humidity", this->target_humidity_[idx]);
     ha_track_text(entity_id, "preset_mode", this->preset_mode_[idx]);
     ha_track_list(entity_id, "preset_modes", this->preset_modes_[idx]);
+    // Home Assistant rejects a setpoint outside these.
+    ha_track_float(entity_id, "min_temp", this->min_temperature_[idx]);
+    ha_track_float(entity_id, "max_temp", this->max_temperature_[idx]);
+    ha_track_float(entity_id, "min_humidity", this->min_humidity_[idx]);
+    ha_track_float(entity_id, "max_humidity", this->max_humidity_[idx]);
   }
 
   const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
@@ -229,6 +272,10 @@ class ClimateStatusTracker : public EntityTracker<CLIMATE_LIST_COUNT> {
   float target_temperature_low(int idx) const { return at_(this->target_temperature_low_, idx); }
   float target_temperature_high(int idx) const { return at_(this->target_temperature_high_, idx); }
   float current_temperature(int idx) const { return at_(this->current_temperature_, idx); }
+  float min_temperature(int idx) const { return at_(this->min_temperature_, idx); }
+  float max_temperature(int idx) const { return at_(this->max_temperature_, idx); }
+  float min_humidity(int idx) const { return at_(this->min_humidity_, idx); }
+  float max_humidity(int idx) const { return at_(this->max_humidity_, idx); }
 
  protected:
   void store_state_(int idx, esphome::StringRef state) {
@@ -252,6 +299,10 @@ class ClimateStatusTracker : public EntityTracker<CLIMATE_LIST_COUNT> {
   std::array<float, CLIMATE_LIST_COUNT> target_temperature_high_ = filled_array<float, CLIMATE_LIST_COUNT>(NAN);
   std::array<float, CLIMATE_LIST_COUNT> current_temperature_ = filled_array<float, CLIMATE_LIST_COUNT>(NAN);
   std::array<float, CLIMATE_LIST_COUNT> target_humidity_ = filled_array<float, CLIMATE_LIST_COUNT>(NAN);
+  std::array<float, CLIMATE_LIST_COUNT> min_temperature_ = filled_array<float, CLIMATE_LIST_COUNT>(NAN);
+  std::array<float, CLIMATE_LIST_COUNT> max_temperature_ = filled_array<float, CLIMATE_LIST_COUNT>(NAN);
+  std::array<float, CLIMATE_LIST_COUNT> min_humidity_ = filled_array<float, CLIMATE_LIST_COUNT>(NAN);
+  std::array<float, CLIMATE_LIST_COUNT> max_humidity_ = filled_array<float, CLIMATE_LIST_COUNT>(NAN);
 };
 
 using LockStatusTracker = SingleStateTracker<LOCK_LIST_COUNT>;
@@ -262,9 +313,13 @@ class SensorStatusTracker : public SingleStateTracker<SENSOR_LIST_COUNT> {
 
   // suggested_unit_of_measurement is an entity-registry option, not a state
   // attribute, so Home Assistant never sends it; unit_of_measurement already
-  // reflects any unit override.
+  // reflects any unit override. Binary sensors have no unit, so they don't
+  // spend a subscription on one.
   void subscribe(int idx) {
     SingleStateTracker<SENSOR_LIST_COUNT>::subscribe(idx);
+    if (entity_id_matches_domain(this->entity_id(idx), "binary_sensor")) {
+      return;
+    }
     std::string *unit = &this->unit_[idx];
     ha_subscribe(this->entity_id(idx), "unit_of_measurement", [unit](esphome::StringRef state) {
       const char *begin = state.c_str();
@@ -273,6 +328,7 @@ class SensorStatusTracker : public SingleStateTracker<SENSOR_LIST_COUNT> {
       while (end > begin && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n')) end--;
       if (!ha_state_missing(begin, end - begin)) {
         unit->assign(begin, end - begin);
+        normalize_unit_text(*unit);
       }
     });
   }
@@ -292,21 +348,7 @@ class CoverStatusTracker : public EntityTracker<COVER_LIST_COUNT> {
     ha_track_state(entity_id, nullptr, this->state_[idx]);
     ha_track_float(entity_id, "current_position", this->position_[idx]);
     ha_track_float(entity_id, "current_tilt_position", this->tilt_[idx]);
-    int *supported_features = &this->supported_features_[idx];
-    ha_subscribe(entity_id, "supported_features", [supported_features](esphome::StringRef state) {
-      if (ha_state_missing(state)) {
-        return;
-      }
-      char buffer[16];
-      size_t len = state.size() < sizeof(buffer) - 1 ? state.size() : sizeof(buffer) - 1;
-      memcpy(buffer, state.c_str(), len);
-      buffer[len] = '\0';
-      char *end = nullptr;
-      long value = strtol(buffer, &end, 10);
-      if (end != buffer) {
-        *supported_features = static_cast<int>(value);
-      }
-    });
+    ha_track_int(entity_id, "supported_features", this->supported_features_[idx]);
   }
 
   const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
@@ -354,10 +396,12 @@ class MediaStatusTracker : public EntityTracker<MEDIA_PLAYER_LIST_COUNT> {
   const std::string &sound_mode_list(int idx) const { return at_(this->sound_mode_list_, idx); }
 
  protected:
-  // Home Assistant drops a player's media attributes when it stops or turns
-  // off, and sends nothing for a dropped attribute, so clear them here or the
-  // last track and volume stay on screen. They come back with new values once
-  // the player has something to report.
+  // Home Assistant drops a player's attributes when it stops or turns off, and
+  // sends nothing for a dropped attribute, so clear them here or the last
+  // track, volume and playback settings stay on screen. They come back once the
+  // player reports them again. (A player that keeps its track while idle
+  // doesn't resend it when that track resumes; that can't be told apart from
+  // one that dropped it, and a blank title beats a wrong one.)
   void store_state_(int idx, esphome::StringRef state) {
     ha_assign_state_or_unknown(this->state_[idx], state);
     const std::string &current = this->state_[idx];
@@ -366,6 +410,9 @@ class MediaStatusTracker : public EntityTracker<MEDIA_PLAYER_LIST_COUNT> {
       this->artist_[idx].clear();
     }
     if (current == "off" || ha_state_missing(current)) {
+      this->shuffle_[idx].clear();
+      this->repeat_[idx].clear();
+      this->sound_mode_[idx].clear();
       this->volume_[idx] = NAN;
     }
   }
@@ -404,7 +451,7 @@ class WaterHeaterStatusTracker : public EntityTracker<WATER_HEATER_LIST_COUNT> {
 
   void subscribe(int idx) {
     const char *entity_id = this->entity_id(idx);
-    ha_track_state(entity_id, nullptr, this->state_[idx]);
+    ha_subscribe(entity_id, nullptr, [this, idx](esphome::StringRef state) { this->store_state_(idx, state); });
     ha_track_float(entity_id, "temperature", this->target_temperature_[idx]);
     // Home Assistant doesn't range-check water_heater.set_temperature, so the
     // remote clamps to the heater's own limits.
@@ -413,18 +460,34 @@ class WaterHeaterStatusTracker : public EntityTracker<WATER_HEATER_LIST_COUNT> {
     ha_track_text(entity_id, "operation_mode", this->operation_mode_[idx]);
     ha_track_list(entity_id, "operation_list", this->operation_list_[idx]);
     ha_track_text(entity_id, "away_mode", this->away_mode_[idx]);
+    // water_heater.turn_on/turn_off only work on heaters with the on/off feature.
+    ha_track_int(entity_id, "supported_features", this->supported_features_[idx]);
   }
 
   const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
+  // The last operation other than "off" this heater reported since boot.
+  const std::string &last_active_mode(int idx) const { return at_(this->last_active_mode_, idx); }
   float target_temperature(int idx) const { return at_(this->target_temperature_, idx); }
   float min_temperature(int idx) const { return at_(this->min_temperature_, idx); }
   float max_temperature(int idx) const { return at_(this->max_temperature_, idx); }
   const std::string &operation_mode(int idx) const { return at_(this->operation_mode_, idx); }
   const std::string &operation_list(int idx) const { return at_(this->operation_list_, idx); }
   const std::string &away_mode(int idx) const { return at_(this->away_mode_, idx); }
+  // -1 until Home Assistant has sent the heater's features.
+  int supported_features(int idx) const { return in_range_(idx) ? this->supported_features_[idx] : -1; }
 
  protected:
+  void store_state_(int idx, esphome::StringRef state) {
+    std::string &value = this->state_[idx];
+    ha_assign_state_or_unknown(value, state);
+    if (!ha_state_missing(value) && value != "off") {
+      this->last_active_mode_[idx] = value;
+    }
+  }
+
   std::array<std::string, WATER_HEATER_LIST_COUNT> state_{};
+  std::array<std::string, WATER_HEATER_LIST_COUNT> last_active_mode_{};
+  std::array<int, WATER_HEATER_LIST_COUNT> supported_features_ = filled_array<int, WATER_HEATER_LIST_COUNT>(-1);
   std::array<std::string, WATER_HEATER_LIST_COUNT> operation_mode_{};
   std::array<std::string, WATER_HEATER_LIST_COUNT> operation_list_{};
   std::array<std::string, WATER_HEATER_LIST_COUNT> away_mode_{};
@@ -433,20 +496,87 @@ class WaterHeaterStatusTracker : public EntityTracker<WATER_HEATER_LIST_COUNT> {
   std::array<float, WATER_HEATER_LIST_COUNT> max_temperature_ = filled_array<float, WATER_HEATER_LIST_COUNT>(NAN);
 };
 
-using AutomationStatusTracker = SingleStateTracker<AUTOMATION_LIST_COUNT>;
-using AlarmStatusTracker = SingleStateTracker<ALARM_LIST_COUNT>;
+// Automations report on/off for enabled/disabled, scripts "on" while they
+// run, and a scene the time it was last activated.
+class AutomationStatusTracker : public SingleStateTracker<AUTOMATION_LIST_COUNT> {
+ public:
+  AutomationStatusTracker() : SingleStateTracker(AUTOMATION_LIST) {}
+
+  // Home Assistant answers automation.trigger only once the whole run ends, so
+  // last_triggered is what shows it ran. A script's mode says whether starting
+  // it again while it runs does anything ("single" ignores it).
+  void subscribe(int idx) {
+    SingleStateTracker<AUTOMATION_LIST_COUNT>::subscribe(idx);
+    const char *entity_id = this->entity_id(idx);
+    if (entity_id_matches_domain(entity_id, "automation")) {
+      ha_track_text(entity_id, "last_triggered", this->last_triggered_[idx]);
+    } else if (entity_id_matches_domain(entity_id, "script")) {
+      ha_track_text(entity_id, "mode", this->mode_[idx]);
+    }
+  }
+
+  const std::string &last_triggered(int idx) const { return at_(this->last_triggered_, idx); }
+  const std::string &mode(int idx) const { return at_(this->mode_, idx); }
+
+ protected:
+  std::array<std::string, AUTOMATION_LIST_COUNT> last_triggered_{};
+  std::array<std::string, AUTOMATION_LIST_COUNT> mode_{};
+};
+
+class AlarmStatusTracker : public SingleStateTracker<ALARM_LIST_COUNT> {
+ public:
+  AlarmStatusTracker() : SingleStateTracker(ALARM_LIST) {}
+
+  // Which arm modes the panel supports, and whether it can be triggered.
+  void subscribe(int idx) {
+    SingleStateTracker<ALARM_LIST_COUNT>::subscribe(idx);
+    ha_track_int(this->entity_id(idx), "supported_features", this->supported_features_[idx]);
+  }
+
+  // -1 until Home Assistant has sent them.
+  int supported_features(int idx) const { return in_range_(idx) ? this->supported_features_[idx] : -1; }
+
+ protected:
+  std::array<int, ALARM_LIST_COUNT> supported_features_ = filled_array<int, ALARM_LIST_COUNT>(-1);
+};
+
+// sun.sun says whether it is night, for the weather icons that have a night
+// form. Subscribed only when there is a weather favorite.
+class SunStateTracker {
+ public:
+  void subscribe() { ha_track_state("sun.sun", nullptr, this->state_); }
+
+  // 1 below the horizon, 0 above it, -1 unknown (no sun integration).
+  int below_horizon() const {
+    return this->state_ == "below_horizon" ? 1 : this->state_ == "above_horizon" ? 0 : -1;
+  }
+
+ private:
+  std::string state_;
+};
 
 class WeatherStatusTracker : public EntityTracker<WEATHER_LIST_COUNT> {
  public:
   WeatherStatusTracker() : EntityTracker(WEATHER_LIST) {}
 
+  // The unit attributes come first: every value below is in the unit the
+  // weather entity reports, which Home Assistant can set per entity.
   void subscribe(int idx) {
     const char *entity_id = this->entity_id(idx);
     ha_track_state(entity_id, nullptr, this->state_[idx]);
+    ha_track_text(entity_id, "temperature_unit", this->temperature_unit_[idx]);
+    ha_track_text(entity_id, "wind_speed_unit", this->wind_speed_unit_[idx]);
+    ha_track_text(entity_id, "pressure_unit", this->pressure_unit_[idx]);
+    ha_track_text(entity_id, "precipitation_unit", this->precipitation_unit_[idx]);
     ha_track_float(entity_id, "temperature", this->temperature_[idx]);
     ha_track_float(entity_id, "humidity", this->humidity_[idx]);
     ha_track_float(entity_id, "wind_speed", this->wind_speed_[idx]);
-    ha_track_float(entity_id, "wind_bearing", this->wind_bearing_[idx]);
+    // Degrees, or a compass point ("NW") from some integrations.
+    float *bearing = &this->wind_bearing_[idx];
+    ha_subscribe(entity_id, "wind_bearing", [bearing](esphome::StringRef state) {
+      float value = ha_parse_float(state);
+      *bearing = std::isnan(value) ? compass_point_degrees(state.c_str(), state.size()) : value;
+    });
     ha_track_float(entity_id, "wind_gust_speed", this->wind_gust_speed_[idx]);
     ha_track_float(entity_id, "pressure", this->pressure_[idx]);
     ha_track_float(entity_id, "cloud_coverage", this->cloud_coverage_[idx]);
@@ -469,14 +599,49 @@ class WeatherStatusTracker : public EntityTracker<WEATHER_LIST_COUNT> {
   float dew_point(int idx) const { return at_(this->dew_point_, idx); }
   float apparent_temperature(int idx) const { return at_(this->apparent_temperature_, idx); }
   float precipitation(int idx) const { return at_(this->precipitation_, idx); }
+  const std::string &temperature_unit(int idx) const { return at_(this->temperature_unit_, idx); }
+  const std::string &wind_speed_unit(int idx) const { return at_(this->wind_speed_unit_, idx); }
+  const std::string &pressure_unit(int idx) const { return at_(this->pressure_unit_, idx); }
+  const std::string &precipitation_unit(int idx) const { return at_(this->precipitation_unit_, idx); }
 
   // Today's high, low and precipitation come from weather.get_forecasts
   // (fetch_weather_forecast): Home Assistant dropped the forecast attribute
-  // from weather entities in 2024.3. Asked for once per wake.
-  bool forecast_requested(int idx) const { return in_range_(idx) && this->forecast_requested_[idx]; }
-  void mark_forecast_requested(int idx) {
+  // from weather entities in 2024.3. Asked for once per wake: the daily
+  // forecast, or the twice-daily one from an integration without a daily
+  // forecast (the US National Weather Service). A request Home Assistant
+  // drops, so never answers, is sent again after a while.
+  static constexpr uint32_t FORECAST_ANSWER_WAIT_MS = 20000;
+  static constexpr uint8_t FORECAST_MAX_REQUESTS = 4;
+
+  bool forecast_due(int idx, uint32_t now) const {
+    if (!in_range_(idx)) {
+      return false;
+    }
+    const ForecastRequest &request = this->forecast_[idx];
+    return !request.done && request.sent < FORECAST_MAX_REQUESTS &&
+           (request.sent_at == 0 || now - request.sent_at >= FORECAST_ANSWER_WAIT_MS);
+  }
+  const char *forecast_type(int idx) const {
+    return in_range_(idx) && this->forecast_[idx].twice_daily ? "twice_daily" : "daily";
+  }
+  void mark_forecast_sent(int idx, uint32_t now) {
     if (in_range_(idx)) {
-      this->forecast_requested_[idx] = true;
+      this->forecast_[idx].sent_at = now | 1;  // 0 means "not sent"
+      this->forecast_[idx].sent++;
+    }
+  }
+  // Home Assistant refused the request: one for daily forecasts from an
+  // integration without them is asked again for twice-daily ones.
+  void forecast_failed(int idx) {
+    if (!in_range_(idx)) {
+      return;
+    }
+    ForecastRequest &request = this->forecast_[idx];
+    if (request.twice_daily) {
+      request.done = true;
+    } else {
+      request.twice_daily = true;
+      request.sent_at = 0;
     }
   }
   void store_forecast(int idx, float high, float low, float precipitation) {
@@ -484,12 +649,24 @@ class WeatherStatusTracker : public EntityTracker<WEATHER_LIST_COUNT> {
       this->high_temperature_[idx] = high;
       this->low_temperature_[idx] = low;
       this->precipitation_[idx] = precipitation;
+      this->forecast_[idx].done = true;
     }
   }
 
  protected:
-  std::array<bool, WEATHER_LIST_COUNT> forecast_requested_{};
+  struct ForecastRequest {
+    uint32_t sent_at = 0;
+    uint8_t sent = 0;
+    bool twice_daily = false;
+    bool done = false;
+  };
+
+  std::array<ForecastRequest, WEATHER_LIST_COUNT> forecast_{};
   std::array<std::string, WEATHER_LIST_COUNT> state_{};
+  std::array<std::string, WEATHER_LIST_COUNT> temperature_unit_{};
+  std::array<std::string, WEATHER_LIST_COUNT> wind_speed_unit_{};
+  std::array<std::string, WEATHER_LIST_COUNT> pressure_unit_{};
+  std::array<std::string, WEATHER_LIST_COUNT> precipitation_unit_{};
   std::array<float, WEATHER_LIST_COUNT> temperature_ = filled_array<float, WEATHER_LIST_COUNT>(NAN);
   std::array<float, WEATHER_LIST_COUNT> humidity_ = filled_array<float, WEATHER_LIST_COUNT>(NAN);
   std::array<float, WEATHER_LIST_COUNT> high_temperature_ = filled_array<float, WEATHER_LIST_COUNT>(NAN);

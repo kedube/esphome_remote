@@ -40,6 +40,11 @@ static RemoteRenderContext base(RemoteMode mode, const char *list, const char *n
   c.selected_item_name = S(name);
   c.selected_item_state = S(state);
   c.selected_setting_detail = S("");
+  // A weather entity in a US Home Assistant reports these.
+  c.weather_temperature_unit = "F";
+  c.weather_speed_unit = "mph";
+  c.weather_pressure_unit = "inHg";
+  c.weather_precipitation_unit = "in";
   return c;
 }
 
@@ -256,7 +261,7 @@ int main(int argc, char **argv) {
     add("39_contrast", k);
   }
   {  // Edge cases
-    auto c = base(REMOTE_MODE_LIGHTS, "UPSTAIRS", "Upstairs Hallway Ceiling Light Group", "unknown", 2, 12);
+    auto c = base(REMOTE_MODE_LIGHTS, "UPSTAIRS", "Upstairs Hallway Ceiling Light Group", "", 2, 12);
     add("50_light_syncing_longname", c);
     auto n = base(REMOTE_MODE_LIGHTS, "PORCH", "Porch Light", "on", 0, 1);
     n.battery_monitoring_available = false;
@@ -284,7 +289,7 @@ int main(int argc, char **argv) {
     a.selected_setting_option = REMOTE_SETTING_CLIMATE_PRESETS;
     a.selected_climate_preset = S("comfort");
     add("54_climate_auto_preset", a);
-    auto u = base(REMOTE_MODE_CLIMATE, "BASEMENT", "Mini Split", "unknown", 0, 3);
+    auto u = base(REMOTE_MODE_CLIMATE, "BASEMENT", "Mini Split", "", 0, 3);
     u.selected_setting_option = REMOTE_SETTING_CLIMATE_STATE;
     add("55_climate_syncing", u);
     auto w = base(REMOTE_MODE_WATER_HEATERS, "UTILITY", "Water Heater", "electric", 0, 2);
@@ -367,7 +372,7 @@ int main(int argc, char **argv) {
     wr.weather_is_night = true;
     wr.selected_weather_temperature = -4;
     wr.selected_setting_option = REMOTE_SETTING_WEATHER_PRESSURE;
-    wr.selected_weather_pressure = 1013;
+    wr.selected_weather_pressure = 29.92f;
     add("73_weather_rain_pressure", wr);
     auto wu = base(REMOTE_MODE_WEATHER, "OUTSIDE", "Home Forecast", "sunny", 0, 1);
     wu.selected_weather_condition = S("sunny");
@@ -381,7 +386,7 @@ int main(int argc, char **argv) {
     wb.selected_setting_option = REMOTE_SETTING_WEATHER_WIND_BEARING;
     wb.selected_weather_wind_bearing = 30;
     add("75_weather_bearing", wb);
-    auto ws = base(REMOTE_MODE_WEATHER, "OUTSIDE", "Home Forecast", "unknown", 0, 1);
+    auto ws = base(REMOTE_MODE_WEATHER, "OUTSIDE", "Home Forecast", "", 0, 1);
     add("76_weather_syncing", ws);
     auto dev = base(REMOTE_MODE_INFO, "INFO", "Device Name", "", 3, 6);
     dev.info_index = 3;
@@ -396,7 +401,7 @@ int main(int argc, char **argv) {
     // States behind fixed display bugs.
     auto ton = base(REMOTE_MODE_SWITCHES, "KITCHEN", "Coffee Maker", "turning_on", 0, 3);
     add("79_switch_turning_on", ton);
-    auto tvs = base(REMOTE_MODE_MEDIA, "DEN", "Living Room TV", "unknown", 0, 2);
+    auto tvs = base(REMOTE_MODE_MEDIA, "DEN", "Living Room TV", "", 0, 2);
     tvs.selected_media_device_class = S("tv");
     add("80_tv_syncing", tvs);
     auto hn = base(REMOTE_MODE_HUMIDIFIERS, "NURSERY", "Humidifier", "on", 0, 1);
@@ -447,6 +452,49 @@ int main(int argc, char **argv) {
     toast.toast_text = S("UNAVAILABLE");
     toast.toast_at = NOW - 500;
     add("92_unavailable_toast", toast);
+
+    // States Home Assistant reports that the remote used to show badly.
+    auto sf = base(REMOTE_MODE_SENSORS, "LOFT", "Office Temperature", "23.6000003814697", 0, 3);
+    sf.selected_sensor_unit = S("°C");  // an ESPHome sensor's float, as Home Assistant writes it
+    add("93_sensor_float", sf);
+    auto sm = base(REMOTE_MODE_SENSORS, "OUTSIDE", "Air Quality PM2.5", "12.4000000953674", 1, 3);
+    sm.selected_sensor_unit = S("\xC2\xB5g/m\xC2\xB3");  // Home Assistant's "μg/m³", normalized
+    add("94_sensor_micro", sm);
+    auto su2 = base(REMOTE_MODE_SENSORS, "PEOPLE", "Last Motion", "unknown", 2, 3);
+    add("95_sensor_unknown", su2);
+    auto se2 = base(REMOTE_MODE_SENSORS, "POWER", "Car Charger", "not_charging", 1, 3);
+    add("96_sensor_enum", se2);
+    auto lo = base(REMOTE_MODE_LOCKS, "ENTRY", "Front Door", "open", 0, 2);
+    add("97_lock_open", lo);
+    auto wun = base(REMOTE_MODE_WEATHER, "OUTSIDE", "Home Forecast", "unavailable", 0, 1);
+    wun.selected_weather_condition = S("unavailable");
+    add("98_weather_unavailable", wun);
+    auto wk = base(REMOTE_MODE_WEATHER, "OUTSIDE", "Home Forecast", "unknown", 0, 1);
+    wk.selected_weather_condition = S("unknown");
+    wk.selected_weather_temperature = 61;
+    add("99_weather_unknown_condition", wk);
+    auto am = base(REMOTE_MODE_ALARMS, "OUTSIDE", "House Alarm", "disarmed", 3, 4);
+    am.selected_setting_option = REMOTE_SETTING_ALARM_STATE;
+    am.selected_alarm_arm_mode = ALARM_ARM_MODE_NIGHT;  // picked on another panel
+    am.alarm_supported_features = 3;                    // home and away only
+    add("9a_alarm_home_away_only", am);
+    auto wh = base(REMOTE_MODE_WATER_HEATERS, "UTILITY", "Water Heater", "", 0, 2);
+    add("9b_water_heater_syncing", wh);
+    auto cm = base(REMOTE_MODE_CLIMATE, "LOFT", "Hallway Thermostat", "unknown", 0, 2);
+    cm.selected_climate_current_temp = 70;
+    cm.selected_setting_option = REMOTE_SETTING_CLIMATE_STATE;
+    add("9c_climate_unknown_mode", cm);
+    auto cu2 = base(REMOTE_MODE_COVERS, "GARAGE", "Awning", "unknown", 1, 2);
+    add("9d_cover_unknown", cu2);
+    auto ww = base(REMOTE_MODE_WEATHER, "OUTSIDE", "Home Forecast", "windy", 0, 1);
+    ww.selected_weather_condition = S("windy");
+    ww.selected_weather_temperature = -0.3f;
+    ww.weather_temperature_unit = "C";
+    ww.weather_speed_unit = "km/h";
+    ww.selected_weather_wind_speed = 31;
+    ww.selected_weather_wind_bearing = 315;
+    ww.selected_setting_option = REMOTE_SETTING_WEATHER_WIND_SPEED;
+    add("9e_weather_metric_wind", ww);
   }
   {
     RemoteSystemScreenInfo info;

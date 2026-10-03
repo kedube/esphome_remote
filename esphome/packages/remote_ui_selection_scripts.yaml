@@ -17,7 +17,7 @@ script:
           if (selection.count <= 0) {
             id(selected_item_name) = "NO ITEMS";
             id(selected_item_entity) = "";
-            id(selected_item_state) = "unknown";
+            id(selected_item_state) = "";
             id(updated_ui) = true;
             return;
           }
@@ -51,9 +51,7 @@ script:
             const std::string &source = media_source_for_index(selection.resolved_index);
             float volume = selected_media_volume(selection.resolved_index);
 
-            if (state != "unknown") {
-              id(selected_item_state) = state;
-            }
+            id(selected_item_state) = state;
             id(selected_media_device_class) = device_class;
             id(selected_media_title) = title;
             id(selected_media_artist) = artist;
@@ -84,27 +82,52 @@ script:
   # Today's high, low and precipitation for a weather entity. Home Assistant
   # dropped the forecast attribute from weather entities in 2024.3, so ask
   # weather.get_forecasts, and have Home Assistant shrink the reply to those
-  # three numbers before sending it.
+  # three numbers before sending it. The daily forecast's entry for today
+  # (an integration can still list yesterday); an integration without daily
+  # forecasts (the US National Weather Service) is asked for twice-daily ones,
+  # whose next day and night periods give the high and the low. Takes only the
+  # entity's index, like every script whose action waits for an answer (see
+  # lock_selected_lock).
   - id: fetch_weather_forecast
     mode: queued
     parameters:
       weather_index: int
     then:
-      - lambda: 'mark_weather_forecast_requested(weather_index);'
       - homeassistant.action:
           action: weather.get_forecasts
           data:
             entity_id: !lambda 'return std::string(weather_entity_id_for_index(weather_index));'
-            type: daily
+            type: !lambda 'return std::string(weather_forecast_type_for_index(weather_index));'
           capture_response: true
           response_template: >-
-            {% set ns = namespace(today={}) %}
-            {% for data in response.values() %}{% if data.get('forecast') %}{% set ns.today = data.get('forecast')[0] %}{% endif %}{% endfor %}
-            {{ {'high': ns.today.get('temperature'), 'low': ns.today.get('templow'), 'precipitation': ns.today.get('precipitation')} }}
+            {%- set ns = namespace(high=none, low=none, precipitation=none, day=false, night=false) -%}
+            {%- set today = now().date() -%}
+            {%- for data in response.values() -%}
+            {%- for entry in data.get('forecast', []) -%}
+            {%- set date = as_local(as_datetime(entry.get('datetime'))).date() -%}
+            {%- if 'is_daytime' in entry -%}
+            {%- if date >= today and entry.get('is_daytime') and not ns.day -%}
+            {%- set ns.high = entry.get('temperature') -%}
+            {%- set ns.day = true -%}
+            {%- elif date >= today and not entry.get('is_daytime') and not ns.night -%}
+            {%- set ns.low = entry.get('templow') if entry.get('templow') is not none else entry.get('temperature') -%}
+            {%- set ns.night = true -%}
+            {%- endif -%}
+            {%- elif date == today and not ns.day -%}
+            {%- set ns.high = entry.get('temperature') -%}
+            {%- set ns.low = entry.get('templow') -%}
+            {%- set ns.precipitation = entry.get('precipitation') -%}
+            {%- set ns.day = true -%}
+            {%- endif -%}
+            {%- endfor -%}
+            {%- endfor -%}
+            {{ {'high': ns.high, 'low': ns.low, 'precipitation': ns.precipitation} }}
           on_success:
             - lambda: |-
                 store_weather_forecast(weather_index, response);
                 id(updated_ui) = true;
+          on_error:
+            - lambda: 'weather_forecast_failed(weather_index);'
 
   - id: sync_current_mode_status
     mode: restart
@@ -130,16 +153,19 @@ script:
           sync_remote_ui_state(selection.mode, selection.resolved_index, ui);
           bool synced = id(updated_ui);
           id(updated_ui) = redraw_pending || synced;
-          if (synced) {
-            // New values can change which settings the item offers: most arrive
-            // after a wake, and a light only has a brightness while it is on.
-            id(cycle_setting_option).execute(0, true);
-          }
+          // Which settings the item offers follows what Home Assistant has sent:
+          // most of it arrives after a wake, a light only has a brightness while
+          // it is on, and an attribute such as a light's effect list can arrive
+          // without anything on screen changing. Quiet: only a setting that
+          // changes is redrawn.
+          id(cycle_setting_option).execute(0, true);
           // Today's forecast, once per wake for each weather entity. Only once
-          // Home Assistant is connected: it drops requests sent before.
-          if (selection.mode == REMOTE_MODE_WEATHER && !weather_forecast_requested(selection.resolved_index) &&
+          // Home Assistant is connected: it drops requests sent before, and a
+          // request it never answered is sent again.
+          if (selection.mode == REMOTE_MODE_WEATHER && weather_forecast_due(selection.resolved_index, millis()) &&
               esphome::api::global_api_server != nullptr &&
               esphome::api::global_api_server->is_connected_with_state_subscription()) {
+            mark_weather_forecast_sent(selection.resolved_index, millis());
             id(fetch_weather_forecast).execute(selection.resolved_index);
           }
           if (static_cast<RemoteSettingOption>(id(selected_setting_option)) == REMOTE_SETTING_LIGHT_DIMMER
@@ -183,7 +209,7 @@ script:
                 break;
               case REMOTE_SETTING_WEATHER_WIND_SPEED:
                 if (!isnan(id(selected_weather_wind_speed))) {
-                  snprintf(buf, sizeof(buf), "%.0f ${SPEED_UNIT}", id(selected_weather_wind_speed));
+                  snprintf(buf, sizeof(buf), "%.1f", id(selected_weather_wind_speed));
                 }
                 break;
               case REMOTE_SETTING_WEATHER_WIND_BEARING:
@@ -193,17 +219,17 @@ script:
                 break;
               case REMOTE_SETTING_WEATHER_WIND_GUST:
                 if (!isnan(id(selected_weather_wind_gust_speed))) {
-                  snprintf(buf, sizeof(buf), "%.0f ${SPEED_UNIT}", id(selected_weather_wind_gust_speed));
+                  snprintf(buf, sizeof(buf), "%.1f", id(selected_weather_wind_gust_speed));
                 }
                 break;
               case REMOTE_SETTING_WEATHER_PRESSURE:
                 if (!isnan(id(selected_weather_pressure))) {
-                  snprintf(buf, sizeof(buf), "%.0f ${PRESSURE_UNIT}", id(selected_weather_pressure));
+                  snprintf(buf, sizeof(buf), "%.2f", id(selected_weather_pressure));
                 }
                 break;
               case REMOTE_SETTING_WEATHER_PRECIPITATION:
                 if (!isnan(id(selected_weather_precipitation))) {
-                  snprintf(buf, sizeof(buf), "%.1f ${PRECIPITATION_UNIT}", id(selected_weather_precipitation));
+                  snprintf(buf, sizeof(buf), "%.2f", id(selected_weather_precipitation));
                 }
                 break;
               case REMOTE_SETTING_WEATHER_CLOUD_COVERAGE:
@@ -383,7 +409,8 @@ script:
           if (selection.mode == REMOTE_MODE_ALARMS) {
             auto opt = static_cast<RemoteSettingOption>(id(selected_setting_option));
             if (opt == REMOTE_SETTING_ALARM_STATE) {
-              const char *next_detail = alarm_arm_mode_selection_label(clamp_alarm_arm_mode(id(selected_alarm_arm_mode)));
+              const char *next_detail = alarm_arm_mode_selection_label(alarm_effective_arm_mode(
+                  id(selected_alarm_arm_mode), alarm_supported_features_for_index(selection.resolved_index)));
               if (id(selected_setting_detail) != next_detail) {
                 id(selected_setting_detail) = next_detail;
                 id(updated_ui) = true;

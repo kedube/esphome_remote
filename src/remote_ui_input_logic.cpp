@@ -2,7 +2,7 @@
 
 RemoteButtonPrompt describe_remote_button_prompt(
     RemoteMode mode, int action, const std::string &selected_item_state, int selected_alarm_arm_mode,
-    uint32_t default_hold_ms, uint32_t extended_hold_ms) {
+    uint32_t default_hold_ms, uint32_t extended_hold_ms, int alarm_features) {
   RemoteButtonPrompt prompt;
 
   switch (mode) {
@@ -34,16 +34,18 @@ RemoteButtonPrompt describe_remote_button_prompt(
       }
       break;
     case REMOTE_MODE_ALARMS:
-      if (action == 0 || action == 1 || action == 2) {
+      // Holding Settings triggers the alarm, on a panel that can be triggered;
+      // on any other a tap or hold just cycles settings.
+      if (action == 0 || action == 2 || (action == 1 && alarm_trigger_supported(alarm_features))) {
         prompt.requires_long_press = true;
         prompt.hold_duration_ms = action == 1 ? extended_hold_ms : default_hold_ms;
         prompt.feedback_target = REMOTE_INPUT_FEEDBACK_ALARM;
         if (action == 1) {
           prompt.feedback = "HOLD TO TRIGGER";
         } else if (action == 2) {
-          prompt.feedback = alarm_arm_mode_hold_label(clamp_alarm_arm_mode(selected_alarm_arm_mode));
-        } else if (ha_state_missing(selected_item_state)) {
-          prompt.feedback = selected_item_state == "unavailable" ? "UNAVAILABLE" : "SYNCING";
+          prompt.feedback = alarm_arm_mode_hold_label(alarm_effective_arm_mode(selected_alarm_arm_mode, alarm_features));
+        } else if (selected_item_state.empty() || selected_item_state == "unavailable") {
+          prompt.feedback = missing_state_word(selected_item_state);
         } else {
           prompt.feedback = "HOLD TO DISARM";
         }
@@ -59,14 +61,14 @@ RemoteButtonPrompt describe_remote_button_prompt(
 bool describe_active_hold(
     RemoteMode mode, uint32_t now, const RemoteHoldButton (&buttons)[3], const std::string &selected_item_state,
     int selected_alarm_arm_mode, uint32_t default_hold_ms, uint32_t extended_hold_ms, std::string &label,
-    int &progress) {
+    int &progress, int alarm_features) {
   for (int action = 0; action < 3; action++) {
     const RemoteHoldButton &button = buttons[action];
     if (button.started_at == 0 || button.fired || button.mode != static_cast<int>(mode)) {
       continue;
     }
     RemoteButtonPrompt prompt = describe_remote_button_prompt(
-        mode, action, selected_item_state, selected_alarm_arm_mode, default_hold_ms, extended_hold_ms);
+        mode, action, selected_item_state, selected_alarm_arm_mode, default_hold_ms, extended_hold_ms, alarm_features);
     if (!prompt.requires_long_press || prompt.hold_duration_ms == 0) {
       continue;
     }

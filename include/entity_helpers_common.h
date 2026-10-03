@@ -409,56 +409,6 @@ inline int clamp_percent_value(float value, float scale = 1.0f, int min_value = 
   return (int) scaled;
 }
 
-inline std::string lock_operation_feedback_for_state(const std::string &state) {
-  if (state == "jammed") {
-    return "JAMMED";
-  }
-  if (state == "locking") {
-    return "LOCKING...";
-  }
-  if (state == "unlocking") {
-    return "UNLOCKING...";
-  }
-  return "";
-}
-
-inline bool cover_state_matches_expected(const std::string &state, float position, const std::string &expected_state) {
-  // Home Assistant reports "open" for any cover that isn't fully closed, so a
-  // cover that reports its position is only open once that position says so.
-  const bool has_position = !std::isnan(position);
-  const bool reached_open = has_position ? position >= 99.0f : state == "open";
-  const bool reached_closed = state == "closed" || (has_position && position <= 1.0f);
-  return (expected_state == "open" && reached_open) || (expected_state == "closed" && reached_closed);
-}
-
-inline std::string cover_operation_feedback_for_state(const std::string &state, float position) {
-  if (state == "opening") {
-    return "OPENING...";
-  }
-  if (state == "closing") {
-    return "CLOSING...";
-  }
-  if (!std::isnan(position) && position > 0.0f && position < 100.0f) {
-    char buffer[16];
-    snprintf(buffer, sizeof(buffer), "OPEN %d%%", (int) roundf(position));
-    return std::string(buffer);
-  }
-  return "";
-}
-
-inline std::string alarm_operation_feedback_for_state(const std::string &state) {
-  if (state == "arming" || state == "pending") {
-    return "ARMING...";
-  }
-  if (state == "disarming") {
-    return "DISARMING...";
-  }
-  if (state == "triggered") {
-    return "TRIGGERED";
-  }
-  return "";
-}
-
 // Visits each trimmed, non-empty '|'-separated item as (offset, length) into
 // source_list without allocating. The callback returns false to stop early.
 template <typename Fn>
@@ -661,6 +611,7 @@ inline void validate_remote_configuration() {
   validate_entity_list("LIGHT_LIST", LIGHT_LIST, LIGHT_LIST_COUNT, "light");
   validate_entity_list("SWITCH_LIST", SWITCH_LIST, SWITCH_LIST_COUNT, "switch");
   validate_entity_list("CLIMATE_LIST", CLIMATE_LIST, CLIMATE_LIST_COUNT, "climate");
+  validate_entity_list("WATER_HEATER_LIST", WATER_HEATER_LIST, WATER_HEATER_LIST_COUNT, "water_heater");
   validate_entity_list("HUMIDIFIER_LIST", HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, "humidifier");
   validate_entity_list("FAN_LIST", FAN_LIST, FAN_LIST_COUNT, "fan");
   validate_entity_list("COVER_LIST", COVER_LIST, COVER_LIST_COUNT, "cover");
@@ -1022,21 +973,6 @@ inline std::string mode_item_entity(RemoteMode mode, int idx) {
   }
   const char *entity = mode_item_entity_cstr(mode, idx);
   return entity != nullptr ? std::string(entity) : std::string();
-}
-
-inline const char *alarm_expected_armed_state(AlarmArmMode mode) {
-  switch (mode) {
-    case ALARM_ARM_MODE_HOME: return "armed_home";
-    case ALARM_ARM_MODE_NIGHT: return "armed_night";
-    case ALARM_ARM_MODE_VACATION: return "armed_vacation";
-    case ALARM_ARM_MODE_AWAY:
-    default: return "armed_away";
-  }
-}
-
-inline bool alarm_action_is_arm(const std::string &state, AlarmArmMode arm_mode) {
-  if (ha_state_missing(state)) return false;
-  return state != alarm_expected_armed_state(arm_mode);
 }
 
 struct ModeSelectionStateRefs {

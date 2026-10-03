@@ -20,9 +20,11 @@ struct RemoteButtonPrompt {
   std::string feedback;
 };
 
+// alarm_features: the selected alarm panel's supported_features, -1 until
+// Home Assistant has sent them.
 RemoteButtonPrompt describe_remote_button_prompt(
     RemoteMode mode, int action, const std::string &selected_item_state, int selected_alarm_arm_mode,
-    uint32_t default_hold_ms, uint32_t extended_hold_ms);
+    uint32_t default_hold_ms, uint32_t extended_hold_ms, int alarm_features = -1);
 
 // Press state of one of the three action buttons, indexed by action:
 // 0 square (primary), 1 settings, 2 circle (play/pause).
@@ -37,4 +39,4 @@ struct RemoteHoldButton {
 bool describe_active_hold(
     RemoteMode mode, uint32_t now, const RemoteHoldButton (&buttons)[3], const std::string &selected_item_state,
     int selected_alarm_arm_mode, uint32_t default_hold_ms, uint32_t extended_hold_ms, std::string &label,
-    int &progress);
+    int &progress, int alarm_features = -1);

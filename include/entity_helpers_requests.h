@@ -12,10 +12,11 @@ inline LockStatusTracker lock_status_tracker_storage(LOCK_LIST);
 inline CoverStatusTracker cover_status_tracker_storage;
 inline MediaStatusTracker media_status_tracker_storage;
 inline SensorStatusTracker sensor_status_tracker_storage;
-inline AutomationStatusTracker automation_status_tracker_storage(AUTOMATION_LIST);
-inline AlarmStatusTracker alarm_status_tracker_storage(ALARM_LIST);
+inline AutomationStatusTracker automation_status_tracker_storage;
+inline AlarmStatusTracker alarm_status_tracker_storage;
 inline NotificationFeedTracker notification_feed_tracker_storage;
 inline WeatherStatusTracker weather_status_tracker_storage;
+inline SunStateTracker sun_state_tracker_storage;
 inline bool remote_status_trackers_initialized = false;
 
 // Order in which entities announce their subscriptions. Home Assistant answers
@@ -104,6 +105,9 @@ inline void ensure_remote_status_trackers(const TrackerSubscriptionOrder &order 
     }
     subscribe_tracker_rank(weather_status_tracker_storage, order, rank);
   }
+  if (WEATHER_LIST_COUNT > 0) {
+    sun_state_tracker_storage.subscribe();
+  }
   remote_status_trackers_initialized = true;
 }
 
@@ -137,6 +141,13 @@ inline const std::string &selected_light_effect_list(int idx) {
   return light_status_tracker_storage.effect_list(idx);
 }
 
+// -1 until Home Assistant has sent the light's color modes, 0 for an on/off
+// light, 1 for one that dims.
+inline int selected_light_dimmable(int idx) {
+  ensure_remote_status_trackers();
+  return light_status_tracker_storage.dimmable(idx);
+}
+
 inline const std::string &selected_switch_state(int idx) {
   ensure_remote_status_trackers();
   return switch_status_tracker_storage.state(idx);
@@ -150,6 +161,12 @@ inline const std::string &selected_fan_state(int idx) {
 inline bool selected_fan_has_percentage(int idx) {
   ensure_remote_status_trackers();
   return fan_status_tracker_storage.has_percentage(idx);
+}
+
+// Whether the fan has speeds, even before it reports one (see the tracker).
+inline bool selected_fan_supports_speed(int idx) {
+  ensure_remote_status_trackers();
+  return fan_status_tracker_storage.supports_speed(idx);
 }
 
 // The fan's speed increment (33.3 for a 3-speed fan); 10 until it has synced.
@@ -212,6 +229,17 @@ inline float humidifier_target_humidity_for_index(int idx) {
 inline float humidifier_current_humidity_for_index(int idx) {
   ensure_remote_status_trackers();
   return humidifier_status_tracker_storage.current_humidity(idx);
+}
+
+// A humidity target within the humidifier's own limits, which Home Assistant
+// enforces. 0-100 until those have synced.
+inline float clamp_humidifier_target(int idx, float target) {
+  ensure_remote_status_trackers();
+  float low = humidifier_status_tracker_storage.min_humidity(idx);
+  float high = humidifier_status_tracker_storage.max_humidity(idx);
+  low = std::isnan(low) ? 0.0f : low;
+  high = std::isnan(high) || high < low ? 100.0f : high;
+  return target < low ? low : target > high ? high : target;
 }
 
 inline const std::string &selected_climate_state(int idx) {
@@ -311,6 +339,48 @@ inline float selected_climate_current_temperature(int idx) {
   return climate_status_tracker_storage.current_temperature(idx);
 }
 
+// A setpoint within the thermostat's min_temp/max_temp, which Home Assistant
+// enforces. Unclamped until those have synced.
+inline float clamp_climate_temperature(int idx, float target) {
+  ensure_remote_status_trackers();
+  float low = climate_status_tracker_storage.min_temperature(idx);
+  float high = climate_status_tracker_storage.max_temperature(idx);
+  if (!std::isnan(low) && target < low) {
+    return low;
+  }
+  if (!std::isnan(high) && target > high) {
+    return high;
+  }
+  return target;
+}
+
+// A humidity target within the thermostat's own limits; Home Assistant's
+// defaults (30-99%) until those have synced.
+inline float clamp_climate_humidity(int idx, float target) {
+  ensure_remote_status_trackers();
+  float low = climate_status_tracker_storage.min_humidity(idx);
+  float high = climate_status_tracker_storage.max_humidity(idx);
+  low = std::isnan(low) ? 30.0f : low;
+  high = std::isnan(high) || high < low ? 99.0f : high;
+  return target < low ? low : target > high ? high : target;
+}
+
+// Whether the thermostat can be switched off: hvac_modes includes "off", or
+// hasn't synced yet.
+inline bool climate_supports_off(int idx) {
+  ensure_remote_status_trackers();
+  const std::string &modes = climate_status_tracker_storage.hvac_modes(idx);
+  if (modes.empty()) {
+    return true;
+  }
+  bool found = false;
+  for_each_delimited_option(modes, [&](size_t offset, size_t len) {
+    found = modes.compare(offset, len, "off") == 0;
+    return !found;
+  });
+  return found;
+}
+
 inline const std::string &selected_water_heater_state(int idx) {
   ensure_remote_status_trackers();
   return water_heater_status_tracker_storage.state(idx);
@@ -344,6 +414,46 @@ inline const std::string &selected_water_heater_operation_list(int idx) {
 inline const std::string &selected_water_heater_away_mode(int idx) {
   ensure_remote_status_trackers();
   return water_heater_status_tracker_storage.away_mode(idx);
+}
+
+// water_heater.turn_on/turn_off only work on a heater with the on/off feature
+// (8). Until its features sync, assume it has it.
+inline bool water_heater_supports_on_off(int idx) {
+  ensure_remote_status_trackers();
+  int features = water_heater_status_tracker_storage.supported_features(idx);
+  return features < 0 || (features & 8) != 0;
+}
+
+inline bool water_heater_has_operation(int idx, const char *operation) {
+  ensure_remote_status_trackers();
+  const std::string &modes = water_heater_status_tracker_storage.operation_list(idx);
+  bool found = false;
+  for_each_delimited_option(modes, [&](size_t offset, size_t len) {
+    found = modes.compare(offset, len, operation) == 0;
+    return !found;
+  });
+  return found;
+}
+
+// The operation that turns a heater without the on/off feature back on: its
+// last one other than "off", else the first such operation it lists. Empty
+// when there is none.
+inline std::string water_heater_turn_on_operation(int idx) {
+  ensure_remote_status_trackers();
+  const std::string &last_active = water_heater_status_tracker_storage.last_active_mode(idx);
+  if (!last_active.empty()) {
+    return last_active;
+  }
+  const std::string &modes = water_heater_status_tracker_storage.operation_list(idx);
+  std::string first;
+  for_each_delimited_option(modes, [&](size_t offset, size_t len) {
+    if (modes.compare(offset, len, "off") == 0) {
+      return true;
+    }
+    first = modes.substr(offset, len);
+    return false;
+  });
+  return first;
 }
 
 inline const std::string &selected_lock_state(int idx) {
@@ -446,9 +556,42 @@ inline const std::string &automation_state_for_index(int idx) {
   return automation_status_tracker_storage.state(idx);
 }
 
+inline const std::string &automation_last_triggered_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return automation_status_tracker_storage.last_triggered(idx);
+}
+
+// Whether an automation has run since the remote asked it to at requested_at
+// (seconds since 1970 by the clock Home Assistant sets; 0 if that wasn't set):
+// its last_triggered is that recent. Home Assistant writes it as
+// "2026-10-02 21:30:00.123456+00:00". Without a clock, whether it changed
+// from before, which only works once it has synced.
+inline bool automation_ran_since(int idx, uint32_t requested_at, const std::string &before) {
+  const std::string &last = automation_last_triggered_for_index(idx);
+  int64_t epoch = 0;
+  bool date_only = false;
+  if (requested_at != 0 && parse_ha_timestamp(last, &epoch, &date_only) && !date_only) {
+    return epoch + 1 >= static_cast<int64_t>(requested_at);
+  }
+  return !before.empty() && last != before;
+}
+
+// A script that ignores a start while it runs ("single", the default mode).
+inline bool script_ignores_restart(int idx) {
+  ensure_remote_status_trackers();
+  const std::string &mode = automation_status_tracker_storage.mode(idx);
+  return mode.empty() || mode == "single";
+}
+
 inline const std::string &alarm_state_for_index(int idx) {
   ensure_remote_status_trackers();
   return alarm_status_tracker_storage.state(idx);
+}
+
+// -1 until Home Assistant has sent the panel's features.
+inline int alarm_supported_features_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return alarm_status_tracker_storage.supported_features(idx);
 }
 
 inline int notification_mode_item_count() {
@@ -513,14 +656,26 @@ inline const char *weather_entity_id_for_index(int idx) {
   return idx >= 0 && idx < WEATHER_LIST_COUNT ? WEATHER_LIST[idx].entity_id : "";
 }
 
-inline bool weather_forecast_requested(int idx) {
+// Whether fetch_weather_forecast should ask now: once per wake, again if Home
+// Assistant never answered, and once more for twice-daily forecasts.
+inline bool weather_forecast_due(int idx, uint32_t now) {
   ensure_remote_status_trackers();
-  return weather_status_tracker_storage.forecast_requested(idx);
+  return weather_status_tracker_storage.forecast_due(idx, now);
 }
 
-inline void mark_weather_forecast_requested(int idx) {
+inline void mark_weather_forecast_sent(int idx, uint32_t now) {
   ensure_remote_status_trackers();
-  weather_status_tracker_storage.mark_forecast_requested(idx);
+  weather_status_tracker_storage.mark_forecast_sent(idx, now);
+}
+
+inline const char *weather_forecast_type_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.forecast_type(idx);
+}
+
+inline void weather_forecast_failed(int idx) {
+  ensure_remote_status_trackers();
+  weather_status_tracker_storage.forecast_failed(idx);
 }
 
 // The reply fetch_weather_forecast's response_template shapes:
@@ -534,6 +689,32 @@ inline void store_weather_forecast(int idx, JsonObjectConst reply) {
     return value.is<float>() ? value.as<float>() : NAN;
   };
   weather_status_tracker_storage.store_forecast(idx, number("high"), number("low"), number("precipitation"));
+}
+
+inline const std::string &weather_temperature_unit_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.temperature_unit(idx);
+}
+
+inline const std::string &weather_wind_speed_unit_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.wind_speed_unit(idx);
+}
+
+inline const std::string &weather_pressure_unit_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.pressure_unit(idx);
+}
+
+inline const std::string &weather_precipitation_unit_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return weather_status_tracker_storage.precipitation_unit(idx);
+}
+
+// 1 when sun.sun is below the horizon, 0 above it, -1 when unknown.
+inline int weather_sun_below_horizon() {
+  ensure_remote_status_trackers();
+  return sun_state_tracker_storage.below_horizon();
 }
 
 inline const std::string &weather_state_for_index(int idx) {

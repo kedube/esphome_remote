@@ -27,22 +27,7 @@ struct RemoteFeedbackState {
   bool updated_ui = false;
 };
 
-struct RemoteVerificationResult {
-  std::string feedback;
-  bool complete = false;
-};
-
 void apply_remote_feedback(
     RemoteFeedbackTarget target, const std::string &feedback, uint32_t now, RemoteFeedbackState &state);
-
-RemoteVerificationResult evaluate_lock_verification(
-    const std::string &state, const std::string &expected_state, const std::string &success_feedback);
-
-RemoteVerificationResult evaluate_cover_verification(
-    const std::string &state, float position, const std::string &expected_state, const std::string &success_feedback);
-
-RemoteVerificationResult evaluate_alarm_verification(
-    const std::string &state, const std::string &expected_state, const std::string &success_feedback,
-    const std::string &failure_feedback, bool use_failure_fallback);
 
 }  // namespace esphome

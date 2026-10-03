@@ -11,12 +11,21 @@ script:
           }
           id(set_selected_climate_hvac_mode).execute(mode, "TURNING ON");
 
+  # Square. A thermostat without an "off" mode can't be switched off.
   - id: turn_off_selected_climate
     then:
-      - script.execute:
-          id: set_selected_climate_hvac_mode
-          mode_name: "off"
-          preview: "TURNING OFF"
+      - if:
+          condition:
+            lambda: 'return climate_supports_off(id(selected_climate_index));'
+          then:
+            - script.execute:
+                id: set_selected_climate_hvac_mode
+                mode_name: "off"
+                preview: "TURNING OFF"
+          else:
+            - script.execute:
+                id: show_toast
+                text: "NO OFF MODE"
 
   - id: set_selected_climate_hvac_mode
     parameters:
@@ -52,22 +61,32 @@ script:
                            ? (high_focus ? id(selected_climate_target_temp_high) : id(selected_climate_target_temp_low))
                            : id(selected_climate_target_temp);
 
+          id(climate_adjust_pending) = false;
           if (isnan(next)) {
             return;
           }
 
-          next += delta;
+          // Home Assistant rejects a setpoint outside the thermostat's
+          // min_temp/max_temp, and a LOW at or above HIGH: at a limit the
+          // setpoint stays where it is and nothing is sent.
+          const float before = next;
+          next = clamp_climate_temperature(id(selected_climate_index), next + delta);
+          if (dual_target) {
+            float low = id(selected_climate_target_temp_low);
+            float high = id(selected_climate_target_temp_high);
+            if (high_focus ? (!isnan(low) && next <= low) : (!isnan(high) && next >= high)) {
+              next = before;
+            }
+          }
+          if (next == before) {
+            return;
+          }
+          id(climate_adjust_pending) = true;
 
           if (dual_target) {
             if (high_focus) {
-              if (!isnan(id(selected_climate_target_temp_low)) && next <= id(selected_climate_target_temp_low)) {
-                next = id(selected_climate_target_temp_low) + 1.0f;
-              }
               id(selected_climate_target_temp_high) = next;
             } else {
-              if (!isnan(id(selected_climate_target_temp_high)) && next >= id(selected_climate_target_temp_high)) {
-                next = id(selected_climate_target_temp_high) - 1.0f;
-              }
               id(selected_climate_target_temp_low) = next;
             }
             id(climate_target_focus_value) = next;
@@ -87,7 +106,8 @@ script:
       - if:
           condition:
             lambda: |-
-              return remote_ui_has_dual_climate_target(id(selected_item_state), id(selected_climate_target_temp_low),
+              return id(climate_adjust_pending) &&
+                     remote_ui_has_dual_climate_target(id(selected_item_state), id(selected_climate_target_temp_low),
                                                        id(selected_climate_target_temp_high));
           then:
             - homeassistant.action:
@@ -102,7 +122,7 @@ script:
             # thermostat is off and reports none).
             - if:
                 condition:
-                  lambda: 'return !isnan(id(selected_climate_target_temp));'
+                  lambda: 'return id(climate_adjust_pending) && !isnan(id(selected_climate_target_temp));'
                 then:
                   - homeassistant.action:
                       action: climate.set_temperature
@@ -209,9 +229,8 @@ script:
           if (isnan(next)) {
             next = 50.0f;
           }
-          next += delta;
-          if (next < 0.0f) next = 0.0f;
-          if (next > 100.0f) next = 100.0f;
+          // Home Assistant rejects a target outside the thermostat's limits.
+          next = clamp_climate_humidity(id(selected_climate_index), next + delta);
           id(selected_climate_target_humidity) = next;
           id(last_climate_interaction) = millis();
           id(last_setting_interaction) = millis();
@@ -300,31 +319,61 @@ script:
             sound_mode: !lambda 'return id(selected_media_sound_mode);'
       - script.execute: update_display
 
+  # Circle on a heater that is off. water_heater.turn_on only works on a heater
+  # with the on/off feature; any other is turned on by going back to its last
+  # operation (or the first one it lists other than "off").
   - id: water_heater_turn_on_selected
     mode: queued
     then:
-      - homeassistant.service:
-          service: water_heater.turn_on
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-      - lambda: |-
-          id(selected_item_state) = "on";
-          note_local_change();
-          id(updated_ui) = true;
-      - script.execute: update_display
+      - if:
+          condition:
+            lambda: 'return water_heater_supports_on_off(id(selected_water_heater_index));'
+          then:
+            - homeassistant.service:
+                service: water_heater.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "on";
+                note_local_change();
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - lambda: |-
+                std::string operation = water_heater_turn_on_operation(id(selected_water_heater_index));
+                if (operation.empty()) {
+                  id(show_toast).execute("NO ON MODE");
+                  return;
+                }
+                id(selected_item_state) = operation;
+                id(set_water_heater_operation_mode).execute(operation);
 
+  # Square. Without the on/off feature a heater is switched off through its
+  # "off" operation, if it has one.
   - id: water_heater_turn_off_selected
     mode: queued
     then:
-      - homeassistant.service:
-          service: water_heater.turn_off
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-      - lambda: |-
-          id(selected_item_state) = "off";
-          note_local_change();
-          id(updated_ui) = true;
-      - script.execute: update_display
+      - if:
+          condition:
+            lambda: 'return water_heater_supports_on_off(id(selected_water_heater_index));'
+          then:
+            - homeassistant.service:
+                service: water_heater.turn_off
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: |-
+                id(selected_item_state) = "off";
+                note_local_change();
+                id(updated_ui) = true;
+            - script.execute: update_display
+          else:
+            - lambda: |-
+                if (!water_heater_has_operation(id(selected_water_heater_index), "off")) {
+                  id(show_toast).execute("NO OFF MODE");
+                  return;
+                }
+                id(selected_item_state) = "off";
+                id(set_water_heater_operation_mode).execute("off");
 
   - id: adjust_water_heater_target
     parameters:
@@ -445,39 +494,70 @@ script:
           id(updated_ui) = true;
       - script.execute: update_display
 
-  - id: media_toggle_power
-    mode: queued
+  # Circle: a player that is off or in standby is turned on; any other plays
+  # or pauses.
+  - id: media_circle_action
     then:
       - if:
           condition:
-            lambda: 'return id(selected_item_state) == "off";'
+            lambda: 'return id(selected_item_state) == "off" || id(selected_item_state) == "standby";'
           then:
-            - homeassistant.action:
-                action: media_player.turn_on
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-            - lambda: |-
-                bool show_power_feedback =
-                    id(selected_media_device_class) != "tv" && id(selected_media_device_class) != "receiver";
-                id(last_media_power_feedback) = show_power_feedback ? "ON" : "";
-                id(last_media_power_interaction) = show_power_feedback ? millis() : 0;
-                id(last_media_interaction) = millis();
-                note_local_change();
-                id(updated_ui) = true;
+            - script.execute: media_turn_on
           else:
-            - homeassistant.action:
-                action: media_player.turn_off
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-            - lambda: |-
-                id(selected_item_state) = "off";
-                bool show_power_feedback =
-                    id(selected_media_device_class) != "tv" && id(selected_media_device_class) != "receiver";
-                id(last_media_power_feedback) = show_power_feedback ? "OFF" : "";
-                id(last_media_power_interaction) = show_power_feedback ? millis() : 0;
-                id(last_media_interaction) = millis();
-                note_local_change();
-                id(updated_ui) = true;
+            - script.execute: media_play_pause
+
+  # Square: a TV or receiver is turned off, since they seldom support stop;
+  # any other player stops.
+  - id: media_square_action
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(selected_media_device_class) == "tv" || id(selected_media_device_class) == "receiver";
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(selected_item_state) == "off" || id(selected_item_state) == "standby";'
+                then:
+                  - script.execute:
+                      id: show_toast
+                      text: "ALREADY OFF"
+                else:
+                  - script.execute: media_turn_off
+          else:
+            - script.execute: media_play_stop
+
+  # A TV shows ON/OFF in large text; other players get a footer note.
+  - id: media_turn_on
+    mode: queued
+    then:
+      - homeassistant.action:
+          action: media_player.turn_on
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(selected_item_state) = "on";
+          bool show_power_feedback =
+              id(selected_media_device_class) != "tv" && id(selected_media_device_class) != "receiver";
+          id(last_media_power_feedback) = show_power_feedback ? "TURNING ON" : "";
+          id(last_media_power_interaction) = show_power_feedback ? millis() : 0;
+          id(last_media_interaction) = millis();
+          note_local_change();
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: media_turn_off
+    mode: queued
+    then:
+      - homeassistant.action:
+          action: media_player.turn_off
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(selected_item_state) = "off";
+          id(last_media_interaction) = millis();
+          note_local_change();
+          id(updated_ui) = true;
       - script.execute: update_display
 
   - id: media_previous_track

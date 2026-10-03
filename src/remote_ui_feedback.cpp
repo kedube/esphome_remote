@@ -31,49 +31,4 @@ void apply_remote_feedback(
   state.updated_ui = true;
 }
 
-RemoteVerificationResult evaluate_lock_verification(
-    const std::string &state, const std::string &expected_state, const std::string &success_feedback) {
-  RemoteVerificationResult result;
-  if (state == expected_state) {
-    result.feedback = success_feedback;
-    result.complete = true;
-    return result;
-  }
-
-  result.feedback = lock_operation_feedback_for_state(state);
-  result.complete = result.feedback == "JAMMED";
-  return result;
-}
-
-RemoteVerificationResult evaluate_cover_verification(
-    const std::string &state, float position, const std::string &expected_state, const std::string &success_feedback) {
-  RemoteVerificationResult result;
-  if (cover_state_matches_expected(state, position, expected_state)) {
-    result.feedback = success_feedback;
-    result.complete = true;
-    return result;
-  }
-
-  result.feedback = cover_operation_feedback_for_state(state, position);
-  return result;
-}
-
-RemoteVerificationResult evaluate_alarm_verification(
-    const std::string &state, const std::string &expected_state, const std::string &success_feedback,
-    const std::string &failure_feedback, bool use_failure_fallback) {
-  RemoteVerificationResult result;
-  if (state == expected_state) {
-    result.feedback = success_feedback;
-    result.complete = true;
-    return result;
-  }
-
-  result.feedback = alarm_operation_feedback_for_state(state);
-  if (result.feedback.empty() && use_failure_fallback) {
-    result.feedback = failure_feedback;
-    result.complete = true;
-  }
-  return result;
-}
-
 }  // namespace esphome

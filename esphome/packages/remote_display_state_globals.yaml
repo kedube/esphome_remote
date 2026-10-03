@@ -10,7 +10,7 @@ globals:
 
   - id: selected_item_state
     type: std::string
-    initial_value: '"unknown"'
+    initial_value: '""'
 
   - id: selected_brightness_pct
     type: int
@@ -209,7 +209,7 @@ globals:
 
   - id: selected_weather_condition
     type: std::string
-    initial_value: '"unknown"'
+    initial_value: '""'
 
   - id: selected_sensor_unit
     type: std::string

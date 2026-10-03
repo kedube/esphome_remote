@@ -89,6 +89,7 @@ const char *const INFO = "\ue88e";
 const char *const RESTART = "\uf053";
 const char *const CLOUD_OFF = "\ue2c1";
 const char *const HOME = "\ue9b2";
+const char *const ALERT = "\ue000";  // error: a jammed lock
 }  // namespace icon
 
 const std::string &str(const std::string *value) {
@@ -568,19 +569,19 @@ void format_temp(char *buf, size_t size, float value) {
   if (std::isnan(value)) {
     snprintf(buf, size, "--°");
   } else {
-    snprintf(buf, size, "%.0f°", value);
+    snprintf(buf, size, "%.0f°", display_rounded(value, 0));
   }
 }
 
 // The large text for an item without a usable state: Home Assistant reports
-// it unavailable, or hasn't sent it yet.
-const char *missing_word(const std::string &state) { return state == "unavailable" ? "UNAVAILABLE" : "SYNCING"; }
+// it unavailable or unknown, or hasn't sent it yet.
+const char *missing_word(const std::string &state) { return missing_state_word(state); }
 
 // A setpoint's number. Celsius thermostats step by 0.5, so a half degree stays
 // ("21.5"); whole degrees print as "71".
 const char *setpoint_number(char *buf, size_t size, float value) {
   bool whole = std::fabs(value - std::round(value)) < 0.05f;
-  snprintf(buf, size, whole ? "%.0f" : "%.1f", value);
+  snprintf(buf, size, whole ? "%.0f" : "%.1f", display_rounded(value, whole ? 0 : 1));
   return buf;
 }
 
@@ -710,8 +711,9 @@ void draw_setting_footer(Display *it, const RemoteUiFonts &f, const RemoteRender
       footer_info(it, f, "POWER", label(str(ctx.selected_item_state), upper, sizeof(upper), "SYNCING"));
       break;
     case REMOTE_SETTING_FAN_SPEED:
+      // 0 while on: just turned on, at a speed Home Assistant hasn't reported yet.
       snprintf(value, sizeof(value), "%d%%", ctx.selected_fan_speed_pct);
-      footer_range(it, f, "SPEED", ctx.selected_fan_speed_pct, value);
+      footer_range(it, f, "SPEED", ctx.selected_fan_speed_pct, ctx.selected_fan_speed_pct > 0 ? value : "--");
       break;
     case REMOTE_SETTING_FAN_PRESETS:
       footer_options(it, f, "PRESET", label(pending_or(ctx.fan_preset), upper, sizeof(upper), "NONE"));
@@ -758,8 +760,26 @@ void draw_setting_footer(Display *it, const RemoteUiFonts &f, const RemoteRender
       footer_info(it, f, "STATE", label(str(ctx.selected_item_state), upper, sizeof(upper), "SYNCING"));
       break;
     case REMOTE_SETTING_ALARM_STATE: {
-      static const char *const MODES[] = {"AWAY", "HOME", "NIGHT", "VAC"};
-      footer_segments(it, f, MODES, ALARM_ARM_MODE_COUNT, clamp_alarm_arm_mode(ctx.selected_alarm_arm_mode));
+      // Only the arm modes this panel supports.
+      const char *names[ALARM_ARM_MODE_COUNT];
+      int count = 0;
+      int selected = 0;
+      AlarmArmMode effective = alarm_effective_arm_mode(ctx.selected_alarm_arm_mode, ctx.alarm_supported_features);
+      for (int i = 0; i < ALARM_ARM_MODE_COUNT; i++) {
+        auto mode = static_cast<AlarmArmMode>(i);
+        if (!alarm_arm_mode_supported(ctx.alarm_supported_features, mode)) {
+          continue;
+        }
+        if (mode == effective) {
+          selected = count;
+        }
+        names[count++] = alarm_arm_mode_short_label(mode);
+      }
+      if (count == 0) {
+        footer_hints(it, f, "DISARM", nullptr, true);
+      } else {
+        footer_segments(it, f, names, count, selected);
+      }
       break;
     }
     case REMOTE_SETTING_WATER_HEATER_TARGET: {
@@ -801,8 +821,8 @@ void render_light(Display *it, const RemoteUiFonts &f, const RemoteRenderContext
   // The active effect, when it fits beside the value and is not already the
   // footer's subject.
   const std::string &effect = str(ctx.light_effect);
-  if (value_right > 0 && !effect.empty() && effect != "none" && effect != "None" &&
-      ctx.selected_setting_option != REMOTE_SETTING_LIGHT_EFFECT) {
+  bool no_effect = effect.empty() || strcasecmp(effect.c_str(), "none") == 0 || strcasecmp(effect.c_str(), "off") == 0;
+  if (value_right > 0 && !no_effect && ctx.selected_setting_option != REMOTE_SETTING_LIGHT_EFFECT) {
     char buf[32];
     label(effect, buf, sizeof(buf));
     if (text_width(f.tiny, buf) <= SCREEN_W - value_right - 4) {
@@ -890,9 +910,15 @@ void render_climate(Display *it, const RemoteUiFonts &f, const RemoteRenderConte
     char high_text[12];
     snprintf(target, sizeof(target), "%s-%s°", setpoint_number(low_text, sizeof(low_text), low),
              setpoint_number(high_text, sizeof(high_text), high));
-    // Half degrees can make a range too wide to sit beside the reading.
+    // Half degrees can make a range too wide to sit beside the reading: drop
+    // the degree sign, then round to whole degrees (half up, so 21.5-22.5
+    // doesn't print as 22-22).
     if (text_width(f.title, target) > SCREEN_W - value_right - 4) {
-      snprintf(target, sizeof(target), "%.0f-%.0f°", low, high);
+      snprintf(target, sizeof(target), "%s-%s", low_text, high_text);
+    }
+    if (text_width(f.title, target) > SCREEN_W - value_right - 4) {
+      snprintf(target, sizeof(target), "%.0f-%.0f°", display_rounded(std::floor(low + 0.5f), 0),
+               display_rounded(std::floor(high + 0.5f), 0));
     }
   } else {
     float value = focus ? ctx.climate_target_focus_value : ctx.selected_climate_target_temp;
@@ -921,7 +947,7 @@ void render_water_heater(Display *it, const RemoteUiFonts &f, const RemoteRender
     value_right = hero_value(it, f, target);
   }
   char mode[24];
-  label(str(ctx.selected_water_heater_mode), mode, sizeof(mode), on ? "ON" : "OFF");
+  label(str(ctx.selected_water_heater_mode), mode, sizeof(mode), ha_state_missing(state) ? "" : on ? "ON" : "OFF");
   hero_status_chip(it, f, mode, on, value_right + 3);
   if (truthy(str(ctx.selected_water_heater_away))) {
     hero_caption(it, f, HERO_BASELINE, "AWAY", 90);
@@ -1054,7 +1080,9 @@ void render_cover(Display *it, const RemoteUiFonts &f, const RemoteRenderContext
 void render_lock(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
   const std::string &state = str(ctx.selected_item_state);
   bool locked = state == "locked";
-  draw_badge(it, f, locked || state == "locking" ? icon::LOCK : icon::LOCK_OPEN, locked);
+  bool jammed = state == "jammed";
+  bool unlocked = lock_state_unlocked(state) || state == "unlocking" || state == "opening";
+  draw_badge(it, f, jammed ? icon::ALERT : unlocked ? icon::LOCK_OPEN : icon::LOCK, locked || jammed);
   char word[16];
   hero_word(it, f, label(state, word, sizeof(word), "SYNCING"));
   char buf[32];
@@ -1086,7 +1114,8 @@ void render_media(Display *it, const RemoteUiFonts &f, const RemoteRenderContext
     draw_badge(it, f, badge, state == "playing");
     const std::string &title = str(ctx.selected_media_title);
     const std::string &artist = str(ctx.selected_media_artist);
-    if (!title.empty()) {
+    bool loaded = state == "playing" || state == "paused" || state == "buffering" || state == "on";
+    if (loaded && !title.empty()) {
       text_fit(it, f.small, HERO_X, 36, TextAlign::BASELINE_LEFT, title.c_str(), SCREEN_W - HERO_X);
       if (!artist.empty()) {
         text_fit(it, f.tiny, HERO_X, 47, TextAlign::BASELINE_LEFT, artist.c_str(), SCREEN_W - HERO_X);
@@ -1107,28 +1136,59 @@ void render_media(Display *it, const RemoteUiFonts &f, const RemoteRenderContext
   draw_setting_footer(it, f, ctx);
 }
 
+// A value too wide for the large font, in the title font: the value is
+// shortened, never its unit.
+void hero_word_with_unit(Display *it, const RemoteUiFonts &f, const char *value, const char *unit) {
+  char unit_text[24];
+  snprintf(unit_text, sizeof(unit_text), " %s", unit);
+  int unit_w = unit[0] != '\0' ? text_width(f.title, unit_text) : 0;
+  int room = SCREEN_W - HERO_X - unit_w;
+  if (unit_w == 0 || room < 24) {
+    hero_word(it, f, value);
+    return;
+  }
+  char buf[64];
+  const char *shown = fit_text(f.title, value, room, buf, sizeof(buf));
+  text(it, f.title, HERO_X, HERO_WORD_BASELINE, TextAlign::BASELINE_LEFT, shown);
+  text(it, f.title, HERO_X + text_width(f.title, shown), HERO_WORD_BASELINE, TextAlign::BASELINE_LEFT, unit_text);
+}
+
+// An enum sensor reports a key such as "not_charging": shown as words.
+bool is_state_key(const std::string &state) {
+  for (char c : state) {
+    if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')) {
+      return false;
+    }
+  }
+  return !state.empty();
+}
+
 void render_sensor(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
   const std::string &state = str(ctx.selected_item_state);
   const std::string &unit = str(ctx.selected_sensor_unit);
   bool binary = state == "on" || state == "off";
   draw_badge(it, f, icon::SENSOR, state == "on");
+  double number = 0;
   if (ha_state_missing(state)) {
     hero_word(it, f, missing_word(state));
   } else if (binary) {
     hero_value(it, f, state == "on" ? "ON" : "OFF");
-  } else {
-    // Numbers go big when they fit beside the unit; anything else is a word.
-    bool numeric = strspn(state.c_str(), "0123456789.-") == state.size();
+  } else if (parse_ha_number(state, &number)) {
+    // Rounded: Home Assistant keeps 15 significant digits of a float, so
+    // "23.6000003814697" is 23.6. Numbers go big when they fit beside the unit.
+    char value[32];
+    format_ha_number(number, value, sizeof(value));
     int unit_w = text_width(f.small, unit.c_str());
     int room = SCREEN_W - HERO_X - (unit_w > 0 ? unit_w + 2 : 0);
-    if (numeric && text_width(f.large, state.c_str()) <= room) {
-      int right = hero_value(it, f, state.c_str());
+    if (has_glyphs(f.large, value) && text_width(f.large, value) <= room) {
+      int right = hero_value(it, f, value);
       text(it, f.small, right + 2, HERO_BASELINE, TextAlign::BASELINE_LEFT, unit.c_str());
     } else {
-      char value[48];
-      snprintf(value, sizeof(value), "%s%s%s", state.c_str(), unit.empty() ? "" : " ", unit.c_str());
-      hero_word(it, f, value);
+      hero_word_with_unit(it, f, value, unit.c_str());
     }
+  } else {
+    char word[48];
+    hero_word_with_unit(it, f, is_state_key(state) ? label(state, word, sizeof(word)) : state.c_str(), unit.c_str());
   }
   draw_footer_overlay(it, f, ctx, nullptr);
 }
@@ -1312,12 +1372,32 @@ const char *compass_point(float bearing) {
   return POINTS[static_cast<int>(sector / 45.0f) % 8];
 }
 
+// A weather entity's wind speed unit as the footer prints it: "MPH", "KM/H".
+const char *wind_unit_label(const char *unit, char *buf, size_t size) {
+  if (strcmp(unit, "Beaufort") == 0) {
+    return "BFT";
+  }
+  size_t i = 0;
+  for (; unit[i] != '\0' && i + 1 < size; i++) {
+    buf[i] = (unit[i] >= 'a' && unit[i] <= 'z') ? static_cast<char>(unit[i] - 'a' + 'A') : unit[i];
+  }
+  buf[i] = '\0';
+  return buf;
+}
+
 // Weather details: +/- step through them, so they use the options footer, with
-// a meter or a compass where a picture says more than the number.
+// a meter or a compass where a picture says more than the number. Each reading
+// is in the unit the weather entity reports, with the decimals that unit needs
+// ("29.92 inHg", "1013 hPa").
 void draw_weather_footer(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
   auto option = static_cast<RemoteSettingOption>(ctx.selected_setting_option);
   char value[32];
-  const char *t = ctx.temperature_unit;
+  const char *t = ctx.weather_temperature_unit != nullptr && ctx.weather_temperature_unit[0] != '\0'
+                      ? ctx.weather_temperature_unit
+                      : ctx.temperature_unit;
+  char speed_unit[12];
+  wind_unit_label(ctx.weather_speed_unit, speed_unit, sizeof(speed_unit));
+  const int speed_decimals = weather_speed_decimals(ctx.weather_speed_unit);
   switch (option) {
     case REMOTE_SETTING_WEATHER_HUMIDITY:
       snprintf(value, sizeof(value), "%.0f%%", ctx.selected_weather_humidity);
@@ -1352,12 +1432,14 @@ void draw_weather_footer(Display *it, const RemoteUiFonts &f, const RemoteRender
       }
       if (bearing_only) {
         snprintf(value, sizeof(value), "%s %.0f°", compass_point(ctx.selected_weather_wind_bearing),
-                 ctx.selected_weather_wind_bearing);
+                 display_rounded(ctx.selected_weather_wind_bearing, 0));
       } else if (has_bearing) {
-        snprintf(value, sizeof(value), "%.0f %s %s", ctx.selected_weather_wind_speed, ctx.speed_unit,
+        snprintf(value, sizeof(value), "%.*f %s %s", speed_decimals,
+                 display_rounded(ctx.selected_weather_wind_speed, speed_decimals), speed_unit,
                  compass_point(ctx.selected_weather_wind_bearing));
       } else {
-        snprintf(value, sizeof(value), "%.0f %s", ctx.selected_weather_wind_speed, ctx.speed_unit);
+        snprintf(value, sizeof(value), "%.*f %s", speed_decimals,
+                 display_rounded(ctx.selected_weather_wind_speed, speed_decimals), speed_unit);
       }
       text_fit(it, f.tiny, (x + SCREEN_W - 6) / 2, FOOTER_Y + 9, TextAlign::BASELINE_CENTER,
                or_dash(bearing_only ? ctx.selected_weather_wind_bearing : ctx.selected_weather_wind_speed, value),
@@ -1366,33 +1448,39 @@ void draw_weather_footer(Display *it, const RemoteUiFonts &f, const RemoteRender
       return;
     }
     case REMOTE_SETTING_WEATHER_WIND_GUST:
-      snprintf(value, sizeof(value), "%.0f %s", ctx.selected_weather_wind_gust_speed, ctx.speed_unit);
+      snprintf(value, sizeof(value), "%.*f %s", speed_decimals,
+               display_rounded(ctx.selected_weather_wind_gust_speed, speed_decimals), speed_unit);
       footer_options(it, f, "GUSTS", or_dash(ctx.selected_weather_wind_gust_speed, value));
       return;
-    case REMOTE_SETTING_WEATHER_PRESSURE:
-      snprintf(value, sizeof(value), "%.0f %s", ctx.selected_weather_pressure, ctx.pressure_unit);
+    case REMOTE_SETTING_WEATHER_PRESSURE: {
+      int decimals = weather_pressure_decimals(ctx.weather_pressure_unit);
+      snprintf(value, sizeof(value), "%.*f %s", decimals, display_rounded(ctx.selected_weather_pressure, decimals),
+               ctx.weather_pressure_unit);
       footer_options(it, f, "PRESSURE", or_dash(ctx.selected_weather_pressure, value));
       return;
-    case REMOTE_SETTING_WEATHER_PRECIPITATION:
+    }
+    case REMOTE_SETTING_WEATHER_PRECIPITATION: {
       // Rain in inches needs two decimals ("0.04 in"); millimetres one.
-      snprintf(value, sizeof(value), strcmp(ctx.precipitation_unit, "in") == 0 ? "%.2f %s" : "%.1f %s",
-               ctx.selected_weather_precipitation, ctx.precipitation_unit);
+      int decimals = weather_precipitation_decimals(ctx.weather_precipitation_unit);
+      snprintf(value, sizeof(value), "%.*f %s", decimals,
+               display_rounded(ctx.selected_weather_precipitation, decimals), ctx.weather_precipitation_unit);
       footer_options(it, f, "PRECIP", or_dash(ctx.selected_weather_precipitation, value));
       return;
+    }
     case REMOTE_SETTING_WEATHER_DEW_POINT:
-      snprintf(value, sizeof(value), "%.0f°%s", ctx.selected_weather_dew_point, t);
+      snprintf(value, sizeof(value), "%.0f°%s", display_rounded(ctx.selected_weather_dew_point, 0), t);
       footer_options(it, f, "DEW POINT", or_dash(ctx.selected_weather_dew_point, value));
       return;
     case REMOTE_SETTING_WEATHER_APPARENT_TEMP:
-      snprintf(value, sizeof(value), "%.0f°%s", ctx.selected_weather_apparent_temperature, t);
+      snprintf(value, sizeof(value), "%.0f°%s", display_rounded(ctx.selected_weather_apparent_temperature, 0), t);
       footer_options(it, f, "FEELS LIKE", or_dash(ctx.selected_weather_apparent_temperature, value));
       return;
     case REMOTE_SETTING_WEATHER_HIGH_TEMP:
-      snprintf(value, sizeof(value), "%.0f°%s", ctx.selected_weather_high_temp, t);
+      snprintf(value, sizeof(value), "%.0f°%s", display_rounded(ctx.selected_weather_high_temp, 0), t);
       footer_options(it, f, "HIGH", or_dash(ctx.selected_weather_high_temp, value));
       return;
     case REMOTE_SETTING_WEATHER_LOW_TEMP:
-      snprintf(value, sizeof(value), "%.0f°%s", ctx.selected_weather_low_temp, t);
+      snprintf(value, sizeof(value), "%.0f°%s", display_rounded(ctx.selected_weather_low_temp, 0), t);
       footer_options(it, f, "LOW", or_dash(ctx.selected_weather_low_temp, value));
       return;
     case REMOTE_SETTING_WEATHER_CONDITIONS:
@@ -1407,11 +1495,21 @@ void draw_weather_footer(Display *it, const RemoteUiFonts &f, const RemoteRender
 
 void render_weather(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
   const std::string &condition = str(ctx.selected_weather_condition);
-  if (condition.empty() || ha_state_missing(condition) || std::isnan(ctx.selected_weather_temperature)) {
+  bool known_condition = !ha_state_missing(condition);
+  bool has_temperature = !std::isnan(ctx.selected_weather_temperature);
+  if (condition == "unavailable" || (!known_condition && !has_temperature)) {
     draw_icon(it, f.hero, HERO_CX, HERO_CY, icon::CLOUD);
     hero_word(it, f, missing_word(condition));
-  } else {
+  } else if (!has_temperature) {
+    // An entity that reports conditions but no temperature.
     draw_icon(it, f.hero, HERO_CX, HERO_CY, weather_icon(condition, ctx.weather_is_night));
+    char word[24];
+    weather_condition_label(condition, word, sizeof(word));
+    hero_word(it, f, word);
+  } else {
+    // A temperature with an unknown condition still shows, under a cloud.
+    draw_icon(it, f.hero, HERO_CX, HERO_CY,
+              known_condition ? weather_icon(condition, ctx.weather_is_night) : icon::CLOUD);
     char temp[12];
     format_temp(temp, sizeof(temp), ctx.selected_weather_temperature);
     hero_value(it, f, temp);

@@ -28,11 +28,96 @@ script:
                       feedback: "COMPLETED"
                   - script.stop: verify_selected_script_result
 
+  # Home Assistant answers automation.trigger only once the whole run has
+  # finished, which can be minutes away (even after the remote has slept and
+  # woken, when the answer could be taken for another request's), so the
+  # remote doesn't wait for that answer: the automation's last_triggered says
+  # it ran. TRIGGERED once that is as recent as the press, NOT RUN if it isn't
+  # after 5 s: a single-mode automation that is already running ignores the
+  # request, and Home Assistant ignores every request when the remote may not
+  # perform actions.
+  - id: verify_selected_automation_trigger
+    mode: restart
+    parameters:
+      automation_index: int
+    then:
+      - repeat:
+          count: 10
+          then:
+            - delay: 500ms
+            - if:
+                condition:
+                  lambda: |-
+                    return id(current_mode) != REMOTE_MODE_AUTOMATION ||
+                           id(selected_automation_index) != automation_index ||
+                           id(last_automation_feedback) != "TRIGGERING...";
+                then:
+                  - script.stop: verify_selected_automation_trigger
+            - if:
+                condition:
+                  lambda: |-
+                    return automation_ran_since(automation_index, id(automation_trigger_requested_at),
+                                                id(automation_last_triggered_before));
+                then:
+                  - script.execute:
+                      id: set_automation_feedback
+                      feedback: "TRIGGERED"
+                  - script.stop: verify_selected_automation_trigger
+      - script.execute:
+          id: set_automation_feedback
+          feedback: "NOT RUN"
+
+  # A scene or script request Home Assistant never answers (it doesn't when
+  # the remote may not perform actions) shows NO RESPONSE after 10 s. Until
+  # then ACTIVATING... or RUNNING... is kept on screen.
+  - id: expire_automation_request
+    mode: restart
+    parameters:
+      automation_index: int
+      pending: std::string
+    then:
+      - repeat:
+          count: 4
+          then:
+            - delay: 2500ms
+            - if:
+                condition:
+                  lambda: |-
+                    return id(current_mode) != REMOTE_MODE_AUTOMATION ||
+                           id(selected_automation_index) != automation_index || id(last_automation_feedback) != pending;
+                then:
+                  - script.stop: expire_automation_request
+            - script.execute:
+                id: set_automation_feedback
+                feedback: !lambda 'return pending;'
+      - if:
+          condition:
+            lambda: |-
+              return id(current_mode) == REMOTE_MODE_AUTOMATION &&
+                     id(selected_automation_index) == automation_index && id(last_automation_feedback) == pending;
+          then:
+            - script.execute:
+                id: set_automation_feedback
+                feedback: "NO RESPONSE"
+
+  # Takes only the item's index, like every script whose Home Assistant action
+  # waits for an answer (see lock_selected_lock).
   - id: trigger_selected_automation
     mode: queued
     parameters:
       automation_index: int
     then:
+      - if:
+          condition:
+            # A script in "single" mode ignores a start while it runs.
+            lambda: |-
+              return automation_kind(automation_index) == AUTOMATION_KIND_SCRIPT &&
+                     automation_state_for_index(automation_index) == "on" && script_ignores_restart(automation_index);
+          then:
+            - script.execute:
+                id: set_automation_feedback
+                feedback: "ALREADY RUNNING"
+            - script.stop: trigger_selected_automation
       - lambda: |-
           AutomationKind kind = automation_kind(automation_index);
           if (kind == AUTOMATION_KIND_SCRIPT) {
@@ -40,35 +125,22 @@ script:
           } else if (kind == AUTOMATION_KIND_SCENE) {
             id(set_automation_feedback).execute("ACTIVATING...");
           } else {
+            id(automation_last_triggered_before) = automation_last_triggered_for_index(automation_index);
+            time_t now = ::time(nullptr);
+            id(automation_trigger_requested_at) = now > 1600000000 ? static_cast<uint32_t>(now) : 0;
             id(set_automation_feedback).execute("TRIGGERING...");
           }
       - if:
           condition:
             lambda: 'return automation_kind(automation_index) == AUTOMATION_KIND_AUTOMATION;'
           then:
-            # Home Assistant answers automation.trigger only once the whole run has
-            # finished, which can be minutes away and land on whatever is selected
-            # by then. A rejected request is answered at once, so report it as
-            # triggered after a moment unless that happened.
             - homeassistant.action:
                 action: automation.trigger
                 data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                on_error:
-                  - script.execute:
-                      id: set_automation_feedback
-                      feedback: "FAILED"
-            - delay: 1s
-            - if:
-                condition:
-                  lambda: |-
-                    return id(current_mode) == REMOTE_MODE_AUTOMATION &&
-                           id(selected_automation_index) == automation_index &&
-                           id(last_automation_feedback) == "TRIGGERING...";
-                then:
-                  - script.execute:
-                      id: set_automation_feedback
-                      feedback: "TRIGGERED"
+                  entity_id: !lambda 'return std::string(mode_item_entity_cstr(REMOTE_MODE_AUTOMATION, automation_index));'
+            - script.execute:
+                id: verify_selected_automation_trigger
+                automation_index: !lambda 'return automation_index;'
           else:
             - if:
                 condition:
@@ -77,28 +149,60 @@ script:
                   - homeassistant.action:
                       action: scene.turn_on
                       data:
-                        entity_id: !lambda 'return id(selected_item_entity);'
+                        entity_id: !lambda 'return std::string(mode_item_entity_cstr(REMOTE_MODE_AUTOMATION, automation_index));'
                       on_success:
-                        - script.execute:
-                            id: set_automation_feedback
-                            feedback: "ACTIVATED"
+                        - if:
+                            condition:
+                              lambda: |-
+                                return id(current_mode) == REMOTE_MODE_AUTOMATION &&
+                                       id(selected_automation_index) == automation_index;
+                            then:
+                              - script.execute:
+                                  id: set_automation_feedback
+                                  feedback: "ACTIVATED"
                       on_error:
-                        - script.execute:
-                            id: set_automation_feedback
-                            feedback: "FAILED"
+                        - if:
+                            condition:
+                              lambda: |-
+                                return id(current_mode) == REMOTE_MODE_AUTOMATION &&
+                                       id(selected_automation_index) == automation_index;
+                            then:
+                              - script.execute:
+                                  id: set_automation_feedback
+                                  feedback: "FAILED"
+                  - script.execute:
+                      id: expire_automation_request
+                      automation_index: !lambda 'return automation_index;'
+                      pending: "ACTIVATING..."
                 else:
                   - homeassistant.action:
                       action: script.turn_on
                       data:
-                        entity_id: !lambda 'return id(selected_item_entity);'
+                        entity_id: !lambda 'return std::string(mode_item_entity_cstr(REMOTE_MODE_AUTOMATION, automation_index));'
                       on_success:
-                        - script.execute:
-                            id: set_automation_feedback
-                            feedback: "STARTED"
-                        - script.execute:
-                            id: verify_selected_script_result
-                            automation_index: !lambda 'return automation_index;'
+                        - if:
+                            condition:
+                              lambda: |-
+                                return id(current_mode) == REMOTE_MODE_AUTOMATION &&
+                                       id(selected_automation_index) == automation_index;
+                            then:
+                              - script.execute:
+                                  id: set_automation_feedback
+                                  feedback: "STARTED"
+                              - script.execute:
+                                  id: verify_selected_script_result
+                                  automation_index: !lambda 'return automation_index;'
                       on_error:
-                        - script.execute:
-                            id: set_automation_feedback
-                            feedback: "FAILED"
+                        - if:
+                            condition:
+                              lambda: |-
+                                return id(current_mode) == REMOTE_MODE_AUTOMATION &&
+                                       id(selected_automation_index) == automation_index;
+                            then:
+                              - script.execute:
+                                  id: set_automation_feedback
+                                  feedback: "FAILED"
+                  - script.execute:
+                      id: expire_automation_request
+                      automation_index: !lambda 'return automation_index;'
+                      pending: "RUNNING..."

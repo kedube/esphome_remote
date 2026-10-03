@@ -1,5 +1,9 @@
 #include "remote_ui_sync.h"
 
+#include <ctime>
+
+#include "esphome/core/time.h"
+
 namespace esphome {
 
 static inline bool assign_string_if_changed(std::string *target, const std::string &value) {
@@ -36,24 +40,29 @@ static inline bool assign_float_if_changed(float *target, float value) {
   return true;
 }
 
+// The trackers hold "" until Home Assistant has sent a state, which leaves the
+// screen on SYNCING. Anything else, "unknown" included, is what Home Assistant
+// reports and goes on screen.
 static inline void sync_simple_state(RemoteUiSyncState &ui, const std::string &state) {
-  if (ha_state_missing(state)) {
+  if (state.empty()) {
     return;
   }
   *ui.updated_ui = assign_string_if_changed(ui.selected_item_state, state) || *ui.updated_ui;
 }
 
 // Shared LIGHTS/FANS sync: an on/off state plus an optional percentage.
-// zero_when_missing selects the fan behavior (no percentage support -> 0)
-// versus the light behavior (brightness unavailable while on -> assume 100).
+// zero_when_missing: a missing value means none at all (a fan without speeds,
+// a light that can't dim), so the screen says ON; otherwise it hasn't arrived
+// yet and the light is assumed to be at full brightness.
 static inline void sync_toggle_percent_mode(
     RemoteUiSyncState &ui, const std::string &state, bool has_value, float value, float scale,
     int *pct_field, bool zero_when_missing) {
-  const char *next_state;
+  if (state.empty()) {
+    return;
+  }
   int next_pct = *pct_field;
 
   if (state == "on") {
-    next_state = "on";
     // A reported value of 0 is a real reading, not a missing one: only fall back
     // to the assumed-100 path when the value is genuinely unavailable.
     if (has_value && !std::isnan(value)) {
@@ -66,17 +75,53 @@ static inline void sync_toggle_percent_mode(
       next_pct = 100;
     }
   } else if (state == "off") {
-    next_state = "off";
     next_pct = 0;
-  } else {
-    next_state = "unknown";
   }
 
-  if (*ui.selected_item_state != next_state || next_pct != *pct_field) {
-    *ui.selected_item_state = next_state;
+  if (*ui.selected_item_state != state || next_pct != *pct_field) {
+    *ui.selected_item_state = state;
     *pct_field = next_pct;
     *ui.updated_ui = true;
   }
+}
+
+// A timestamp sensor's state in local time: "5:30 PM" today, otherwise
+// "Oct 2, 5:30 PM"; a date sensor's "Oct 2". Home Assistant reports both in
+// ISO 8601, a timestamp in UTC, which is long and hard to read on the panel.
+// Any other state comes back unchanged.
+static const std::string &sensor_display_state(const std::string &state, std::string &formatted) {
+  int64_t epoch = 0;
+  bool date_only = false;
+  if (!parse_ha_timestamp(state, &epoch, &date_only)) {
+    return state;
+  }
+  static const char *const MONTHS[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  char buffer[32];
+  if (date_only) {
+    int year = 0, month = 0, day = 0;
+    sscanf(state.c_str(), "%4d-%2d-%2d", &year, &month, &day);
+    snprintf(buffer, sizeof(buffer), "%s %d, %d", MONTHS[month - 1], day, year);
+    formatted = buffer;
+    return formatted;
+  }
+  ESPTime local = ESPTime::from_epoch_local(static_cast<time_t>(epoch));
+  ESPTime now = ESPTime::from_epoch_local(::time(nullptr));
+  int hour = local.hour % 12;
+  if (hour == 0) {
+    hour = 12;
+  }
+  const char *meridiem = local.hour >= 12 ? "PM" : "AM";
+  if (now.is_valid() && now.year == local.year && now.day_of_year == local.day_of_year) {
+    snprintf(buffer, sizeof(buffer), "%d:%02d %s", hour, local.minute, meridiem);
+  } else if (local.month >= 1 && local.month <= 12) {
+    snprintf(buffer, sizeof(buffer), "%s %d, %d:%02d %s", MONTHS[local.month - 1], local.day_of_month, hour,
+             local.minute, meridiem);
+  } else {
+    return state;
+  }
+  formatted = buffer;
+  return formatted;
 }
 
 // Whether Home Assistant reports the entity behind this screen as unavailable.
@@ -104,12 +149,18 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
   // or the last state it reported (which no longer holds).
   if (tracked_entity_unavailable(mode, idx)) {
     *ui.updated_ui = assign_cstr_if_changed(ui.selected_item_state, "unavailable") || *ui.updated_ui;
+    if (mode == REMOTE_MODE_WEATHER) {
+      // The weather screen goes by its condition.
+      *ui.updated_ui = assign_cstr_if_changed(ui.selected_weather_condition, "unavailable") || *ui.updated_ui;
+    }
     return;
   }
 
   if (mode == REMOTE_MODE_LIGHTS) {
+    // A light that can't dim never reports a brightness: it shows ON.
     sync_toggle_percent_mode(ui, selected_light_state(idx), selected_light_has_brightness(idx),
-                             selected_light_brightness(idx), 100.0f / 255.0f, ui.selected_brightness_pct, false);
+                             selected_light_brightness(idx), 100.0f / 255.0f, ui.selected_brightness_pct,
+                             selected_light_dimmable(idx) == 0);
     return;
   }
 
@@ -127,7 +178,7 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     float current = humidifier_current_humidity_for_index(idx);
     bool changed = false;
 
-    if (!ha_state_missing(state) || !std::isnan(target) || !std::isnan(current)) {
+    if (!state.empty() || !std::isnan(target) || !std::isnan(current)) {
       changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
       changed = assign_string_if_changed(ui.selected_humidifier_action, action) || changed;
       changed = assign_string_if_changed(ui.selected_humidifier_mode, mode_value) || changed;
@@ -155,7 +206,9 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     float humidity = climate_target_humidity_for_index(idx);
     bool changed = false;
 
-    if (!ha_state_missing(state)) {
+    // A thermostat whose mode Home Assistant reports as unknown still has
+    // temperatures worth showing.
+    if (!state.empty() || !std::isnan(current) || !std::isnan(target)) {
       changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
       if (!hvac_action.empty()) {
         changed = assign_string_if_changed(ui.selected_climate_hvac_action, hvac_action) || changed;
@@ -178,7 +231,7 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     const std::string &away_mode = selected_water_heater_away_mode(idx);
     float target = selected_water_heater_target_temperature(idx);
     bool changed = false;
-    if (!ha_state_missing(state) || !std::isnan(target)) {
+    if (!state.empty() || !std::isnan(target)) {
       changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
       changed = assign_string_if_changed(ui.selected_water_heater_mode, operation_mode) || changed;
       changed = assign_string_if_changed(ui.selected_water_heater_away, away_mode) || changed;
@@ -198,8 +251,8 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     float position = selected_cover_position(idx);
     bool changed = false;
 
-    if (!ha_state_missing(state) || !std::isnan(position)) {
-      if (!ha_state_missing(state)) {
+    if (!state.empty() || !std::isnan(position)) {
+      if (!state.empty()) {
         changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
       }
       if (!std::isnan(position)) {
@@ -222,7 +275,7 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     float volume = selected_media_volume(idx);
     bool changed = false;
 
-    if (!ha_state_missing(state)) {
+    if (!state.empty()) {
       changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
       changed = assign_string_if_changed(ui.selected_media_title, title) || changed;
       changed = assign_string_if_changed(ui.selected_media_artist, artist) || changed;
@@ -250,8 +303,9 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     bool changed = false;
     const std::string &state = sensor_state_for_index(idx);
     const std::string &unit = sensor_unit_for_index(idx);
-    if (!ha_state_missing(state)) {
-      changed = assign_string_if_changed(ui.selected_item_state, state) || changed;
+    if (!state.empty()) {
+      std::string formatted;
+      changed = assign_string_if_changed(ui.selected_item_state, sensor_display_state(state, formatted)) || changed;
       changed = assign_string_if_changed(ui.selected_sensor_unit, unit) || changed;
       if (changed) *ui.updated_ui = true;
     }
@@ -261,8 +315,10 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
   if (mode == REMOTE_MODE_AUTOMATION) {
     const std::string &state = automation_state_for_index(idx);
     // Automations report on/off for enabled/disabled and scripts for
-    // running/idle; a scene's state is only the time it last ran.
-    std::string next_state = automation_kind(idx) == AUTOMATION_KIND_SCENE ? "ready" : state;
+    // running/idle; a scene's state is only the time it last ran ("unknown"
+    // if it never has), so any state means it is ready.
+    std::string next_state =
+        automation_kind(idx) == AUTOMATION_KIND_SCENE && !state.empty() ? std::string("ready") : state;
     bool changed = false;
     changed = assign_string_if_changed(ui.selected_item_state, next_state) || changed;
     if (changed) *ui.updated_ui = true;
@@ -308,8 +364,8 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
     float precipitation = weather_precipitation_for_index(idx);
     bool changed = false;
 
-    if (!ha_state_missing(condition) || !std::isnan(temperature) || !std::isnan(humidity) ||
-        !std::isnan(high) || !std::isnan(low)) {
+    if (!condition.empty() || !std::isnan(temperature) || !std::isnan(humidity) || !std::isnan(high) ||
+        !std::isnan(low)) {
       changed = assign_string_if_changed(ui.selected_item_state, condition) || changed;
       changed = assign_string_if_changed(ui.selected_weather_condition, condition) || changed;
       changed = assign_float_if_changed(ui.selected_weather_temperature, temperature) || changed;

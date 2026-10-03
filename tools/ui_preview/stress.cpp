@@ -161,11 +161,14 @@ RemoteRenderContext hostile_context(int mode, int setting, const std::string &s,
   c.info_primary_text = s;
   c.info_secondary_text = s;
   c.wifi_rssi = r.percent;
-  // Units come from settings.yaml, so only the documented choices.
+  // TEMPERATURE_UNIT comes from settings.yaml, so only the documented
+  // choices; a weather entity's units are whatever Home Assistant sends.
   c.temperature_unit = variant == 1 ? "C" : "F";
-  c.speed_unit = variant == 1 ? "KPH" : "MPH";
-  c.pressure_unit = variant == 1 ? "kPa" : "hPa";
-  c.precipitation_unit = variant == 1 ? "mm" : "in";
+  c.weather_temperature_unit = variant == 2 ? nullptr : s.c_str();
+  c.weather_speed_unit = variant == 0 ? "Beaufort" : s.c_str();
+  c.weather_pressure_unit = variant == 1 ? "inHg" : s.c_str();
+  c.weather_precipitation_unit = variant == 2 ? "in" : s.c_str();
+  c.alarm_supported_features = variant == 0 ? -1 : r.percent;
   return c;
 }
 

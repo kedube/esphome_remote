@@ -113,6 +113,26 @@ globals:
     type: bool
     initial_value: 'false'
 
+  # When the alarm request being checked went out.
+  - id: alarm_verification_started_at
+    type: uint32_t
+    initial_value: '0'
+
+  # The automation's last_triggered before automation.trigger went out, and
+  # when that was (seconds since 1970; 0 when the clock wasn't set).
+  - id: automation_last_triggered_before
+    type: std::string
+    initial_value: '""'
+
+  - id: automation_trigger_requested_at
+    type: uint32_t
+    initial_value: '0'
+
+  # adjust_climate_temperature changed a setpoint and has it to send.
+  - id: climate_adjust_pending
+    type: bool
+    initial_value: 'false'
+
   - id: updated_ui
     type: bool
     initial_value: 'true'

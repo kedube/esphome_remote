@@ -1,65 +1,77 @@
 script:
-  - id: toggle_selected_light
+  # Circle: on at the light's last brightness. light.turn_on without a
+  # brightness has Home Assistant restore that level; the screen shows ON until
+  # it reports the level.
+  - id: turn_on_selected_light
     mode: queued
     then:
-      - if:
-          condition:
-            lambda: 'return id(selected_item_state) == "on";'
-          then:
-            - homeassistant.action:
-                action: light.turn_off
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-            - lambda: |-
-                id(selected_item_state) = "off";
-                note_local_change();
-                id(updated_ui) = true;
-            - script.execute: update_display
-          else:
-            # No brightness: the light comes back at its last level. The screen
-            # shows ON until Home Assistant reports that level.
-            - homeassistant.action:
-                action: light.turn_on
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-            - lambda: |-
-                id(selected_item_state) = "on";
-                note_local_change();
-                id(updated_ui) = true;
-            - script.execute: update_display
+      - homeassistant.action:
+          action: light.turn_on
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          if (id(selected_item_state) != "on") {
+            id(selected_item_state) = "on";
+            id(selected_brightness_pct) = 0;
+          }
+          note_local_change();
+          id(updated_ui) = true;
+      - script.execute: refresh_setting_options
+      - script.execute: update_display
 
-  - id: toggle_selected_fan
+  - id: turn_off_selected_light
     mode: queued
     then:
-      - if:
-          condition:
-            lambda: 'return id(selected_item_state) == "on";'
-          then:
-            - homeassistant.action:
-                action: fan.turn_off
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-            - lambda: |-
-                id(selected_item_state) = "off";
-                id(selected_fan_speed_pct) = 0;
-                note_local_change();
-                id(updated_ui) = true;
-            - script.execute: update_display
-          else:
-            # No speed: the fan comes back at its last speed. The screen shows ON
-            # until Home Assistant reports that speed.
-            - homeassistant.action:
-                action: fan.turn_on
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-            - lambda: |-
-                id(selected_item_state) = "on";
-                note_local_change();
-                id(updated_ui) = true;
-            - script.execute: update_display
+      - homeassistant.action:
+          action: light.turn_off
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      # The brightness goes too, so Plus in the next few seconds turns the
+      # light on at 10% rather than stepping from its old level.
+      - lambda: |-
+          id(selected_item_state) = "off";
+          id(selected_brightness_pct) = 0;
+          note_local_change();
+          id(updated_ui) = true;
+      - script.execute: refresh_setting_options
+      - script.execute: update_display
+
+  # No speed: the fan comes back at its last speed. The screen shows ON until
+  # Home Assistant reports that speed.
+  - id: turn_on_selected_fan
+    mode: queued
+    then:
+      - homeassistant.action:
+          action: fan.turn_on
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(selected_item_state) = "on";
+          id(selected_fan_speed_pct) = 0;
+          note_local_change();
+          id(updated_ui) = true;
+      - script.execute: refresh_setting_options
+      - script.execute: update_display
+
+  - id: turn_off_selected_fan
+    mode: queued
+    then:
+      - homeassistant.action:
+          action: fan.turn_off
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(selected_item_state) = "off";
+          id(selected_fan_speed_pct) = 0;
+          note_local_change();
+          id(updated_ui) = true;
+      - script.execute: refresh_setting_options
+      - script.execute: update_display
 
   - id: turn_on_selected_switch
     mode: queued
+    parameters:
+      switch_index: int
     then:
       - if:
           condition:
@@ -81,23 +93,33 @@ script:
             - homeassistant.action:
                 action: switch.turn_on
                 data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
+                  entity_id: !lambda 'return std::string(mode_item_entity_cstr(REMOTE_MODE_SWITCHES, switch_index));'
                 on_success:
-                  - script.execute:
-                      id: set_switch_feedback
-                      feedback: "SUCCESS"
+                  - if:
+                      condition:
+                        lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES && id(selected_switch_index) == switch_index;'
+                      then:
+                        - script.execute:
+                            id: set_switch_feedback
+                            feedback: "SUCCESS"
                 on_error:
-                  - script.stop: verify_selected_switch_result
-                  - script.execute:
-                      id: set_switch_feedback
-                      feedback: "FAILED"
+                  - if:
+                      condition:
+                        lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES && id(selected_switch_index) == switch_index;'
+                      then:
+                        - script.stop: verify_selected_switch_result
+                        - script.execute:
+                            id: set_switch_feedback
+                            feedback: "FAILED"
             - script.execute:
                 id: verify_selected_switch_result
-                switch_index: !lambda 'return id(selected_switch_index);'
+                switch_index: !lambda 'return switch_index;'
                 expected_state: "on"
 
   - id: turn_off_selected_switch
     mode: queued
+    parameters:
+      switch_index: int
     then:
       - if:
           condition:
@@ -119,30 +141,54 @@ script:
             - homeassistant.action:
                 action: switch.turn_off
                 data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
+                  entity_id: !lambda 'return std::string(mode_item_entity_cstr(REMOTE_MODE_SWITCHES, switch_index));'
                 on_success:
-                  - script.execute:
-                      id: set_switch_feedback
-                      feedback: "SUCCESS"
+                  - if:
+                      condition:
+                        lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES && id(selected_switch_index) == switch_index;'
+                      then:
+                        - script.execute:
+                            id: set_switch_feedback
+                            feedback: "SUCCESS"
                 on_error:
-                  - script.stop: verify_selected_switch_result
-                  - script.execute:
-                      id: set_switch_feedback
-                      feedback: "FAILED"
+                  - if:
+                      condition:
+                        lambda: 'return id(current_mode) == REMOTE_MODE_SWITCHES && id(selected_switch_index) == switch_index;'
+                      then:
+                        - script.stop: verify_selected_switch_result
+                        - script.execute:
+                            id: set_switch_feedback
+                            feedback: "FAILED"
             - script.execute:
                 id: verify_selected_switch_result
-                switch_index: !lambda 'return id(selected_switch_index);'
+                switch_index: !lambda 'return switch_index;'
                 expected_state: "off"
 
-  # Home Assistant never answers for a switch that fails on its own, so check
-  # its state a few seconds after the command went out.
+  # Home Assistant never answers for a switch that fails on its own, so its
+  # state is checked. TURNING ON/OFF gives way to the state as soon as Home
+  # Assistant reports it; FAILED if that hasn't happened within 5 s.
   - id: verify_selected_switch_result
     mode: restart
     parameters:
       switch_index: int
       expected_state: std::string
     then:
-      - delay: 5s
+      - repeat:
+          count: 10
+          then:
+            - delay: 500ms
+            - if:
+                condition:
+                  lambda: |-
+                    return id(current_mode) == REMOTE_MODE_SWITCHES && id(selected_switch_index) == switch_index &&
+                           selected_switch_state(switch_index) == expected_state;
+                then:
+                  - lambda: |-
+                      clear_local_change();
+                      id(selected_item_state) = expected_state;
+                      id(updated_ui) = true;
+                  - script.execute: update_display
+                  - script.stop: verify_selected_switch_result
       - if:
           condition:
             lambda: |-
@@ -153,58 +199,73 @@ script:
                 id: set_switch_feedback
                 feedback: "FAILED"
 
+  # Plus. A light that can't dim just turns on. Otherwise 10% steps from the
+  # level on screen (an off light comes on at 10%); just after the light came
+  # back on at a level Home Assistant hasn't reported yet, Home Assistant
+  # steps from the real one.
   - id: increase_brightness
-    mode: queued
-    then:
-      - lambda: |-
-          int next = id(selected_brightness_pct) + 10;
-          if (next > 100) next = 100;
-          if (next < 10) next = 10;
-          id(selected_brightness_pct) = next;
-          id(selected_item_state) = "on";
-          id(last_brightness_interaction) = millis();
-          note_local_change();
-          id(updated_ui) = true;
-      - homeassistant.service:
-          service: light.turn_on
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-            brightness_pct: !lambda 'return id(selected_brightness_pct);'
-      - script.execute: update_display
-
-  - id: increase_fan_speed
     mode: queued
     then:
       - if:
           condition:
-            lambda: 'return !selected_fan_has_percentage(id(selected_fan_index));'
+            lambda: 'return selected_light_dimmable(id(selected_light_index)) == 0;'
           then:
             - if:
                 condition:
                   lambda: 'return id(selected_item_state) != "on";'
                 then:
-                  - script.execute: toggle_selected_fan
+                  - script.execute: turn_on_selected_light
           else:
-            # Step by the fan's own speed increment: on a 3-speed fan a 10% nudge
-            # rounds back to the speed it started from.
-            - lambda: |-
-                int next = (int) lroundf(id(selected_fan_speed_pct) +
-                                         selected_fan_percentage_step(id(selected_fan_index)));
-                if (next > 100) next = 100;
-                id(selected_fan_speed_pct) = next;
-                id(selected_item_state) = "on";
-                id(last_fan_speed_interaction) = millis();
-                note_local_change();
-                id(updated_ui) = true;
-            - homeassistant.service:
-                service: fan.increase_speed
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-            - script.execute: update_display
+            - if:
+                condition:
+                  lambda: 'return id(selected_item_state) == "on" && id(selected_brightness_pct) <= 0;'
+                then:
+                  - homeassistant.action:
+                      action: light.turn_on
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                        brightness_step_pct: "10"
+                  - lambda: 'id(last_brightness_interaction) = millis();'
+                else:
+                  - lambda: |-
+                      int next = id(selected_brightness_pct) + 10;
+                      if (next > 100) next = 100;
+                      if (next < 10) next = 10;
+                      id(selected_brightness_pct) = next;
+                      id(selected_item_state) = "on";
+                      id(last_brightness_interaction) = millis();
+                      note_local_change();
+                      id(updated_ui) = true;
+                  - homeassistant.service:
+                      service: light.turn_on
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                        brightness_pct: !lambda 'return id(selected_brightness_pct);'
+                  - script.execute: refresh_setting_options
+                  - script.execute: update_display
 
+  # Minus. Turns the light off at 10% or less; does nothing to a light that is
+  # off. Steps from the real level, as Plus does, while it is unknown (Home
+  # Assistant turns the light off when that step takes it to zero).
   - id: decrease_brightness
     mode: queued
     then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) != "on";'
+          then:
+            - script.stop: decrease_brightness
+      - if:
+          condition:
+            lambda: 'return id(selected_brightness_pct) <= 0;'
+          then:
+            - homeassistant.action:
+                action: light.turn_on
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+                  brightness_step_pct: "-10"
+            - lambda: 'id(last_brightness_interaction) = millis();'
+            - script.stop: decrease_brightness
       - if:
           condition:
             lambda: 'return id(selected_brightness_pct) <= 10;'
@@ -219,6 +280,7 @@ script:
                 id(last_brightness_interaction) = millis();
                 note_local_change();
                 id(updated_ui) = true;
+            - script.execute: refresh_setting_options
             - script.execute: update_display
           else:
             - lambda: |-
@@ -236,61 +298,121 @@ script:
                   brightness_pct: !lambda 'return id(selected_brightness_pct);'
             - script.execute: update_display
 
+  # Plus on a fan that is off turns it on at its last speed, as Circle does.
+  # On a running fan it steps by the fan's own speed increment (33% on a
+  # 3-speed fan) and sends that speed, so a second press within the few
+  # seconds before Home Assistant reports back steps from what the screen
+  # shows. Just after the fan came on at a speed Home Assistant hasn't
+  # reported yet, Home Assistant steps from the real one.
+  - id: increase_fan_speed
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(selected_item_state) != "on";'
+          then:
+            - script.execute: turn_on_selected_fan
+          else:
+            - if:
+                condition:
+                  lambda: 'return selected_fan_supports_speed(id(selected_fan_index)) && id(selected_fan_speed_pct) <= 0;'
+                then:
+                  - homeassistant.action:
+                      action: fan.increase_speed
+                      data:
+                        entity_id: !lambda 'return id(selected_item_entity);'
+                  - lambda: 'id(last_fan_speed_interaction) = millis();'
+                else:
+                  - if:
+                      condition:
+                        lambda: 'return selected_fan_supports_speed(id(selected_fan_index));'
+                      then:
+                        - lambda: |-
+                            id(selected_fan_speed_pct) = fan_step_percentage(
+                                id(selected_fan_speed_pct), selected_fan_percentage_step(id(selected_fan_index)), 1);
+                            id(last_fan_speed_interaction) = millis();
+                            note_local_change();
+                            id(updated_ui) = true;
+                        - homeassistant.action:
+                            action: fan.set_percentage
+                            data:
+                              entity_id: !lambda 'return id(selected_item_entity);'
+                              percentage: !lambda 'return id(selected_fan_speed_pct);'
+                        - script.execute: update_display
+
+  # Minus on a running fan steps down by its own speed increment, and below
+  # the lowest speed turns it off (Home Assistant does the same when it steps
+  # from a speed it hasn't reported yet). While a fan is off only Plus applies.
   - id: decrease_fan_speed
     mode: queued
     then:
       - if:
           condition:
-            lambda: 'return !selected_fan_has_percentage(id(selected_fan_index));'
+            lambda: 'return id(selected_item_state) != "on";'
           then:
-            - if:
-                condition:
-                  lambda: 'return id(selected_item_state) == "on";'
-                then:
-                  - script.execute: toggle_selected_fan
+            - script.stop: decrease_fan_speed
+      - if:
+          condition:
+            lambda: 'return !selected_fan_supports_speed(id(selected_fan_index));'
+          then:
+            - script.execute: turn_off_selected_fan
+            - script.stop: decrease_fan_speed
+      - if:
+          condition:
+            lambda: 'return id(selected_fan_speed_pct) <= 0;'
+          then:
+            - homeassistant.action:
+                action: fan.decrease_speed
+                data:
+                  entity_id: !lambda 'return id(selected_item_entity);'
+            - lambda: 'id(last_fan_speed_interaction) = millis();'
+            - script.stop: decrease_fan_speed
+      - if:
+          condition:
+            lambda: |-
+              return fan_step_percentage(id(selected_fan_speed_pct),
+                                         selected_fan_percentage_step(id(selected_fan_index)), -1) == 0;
+          then:
+            - script.execute: turn_off_selected_fan
           else:
-            # Home Assistant steps down by the fan's own increment and turns it
-            # off below the lowest speed.
             - lambda: |-
-                int next = (int) lroundf(id(selected_fan_speed_pct) -
-                                         selected_fan_percentage_step(id(selected_fan_index)));
-                if (next < 0) next = 0;
-                id(selected_fan_speed_pct) = next;
-                id(selected_item_state) = next > 0 ? "on" : "off";
+                id(selected_fan_speed_pct) = fan_step_percentage(
+                    id(selected_fan_speed_pct), selected_fan_percentage_step(id(selected_fan_index)), -1);
                 id(last_fan_speed_interaction) = millis();
                 note_local_change();
                 id(updated_ui) = true;
-            - homeassistant.service:
-                service: fan.decrease_speed
+            - homeassistant.action:
+                action: fan.set_percentage
                 data:
                   entity_id: !lambda 'return id(selected_item_entity);'
+                  percentage: !lambda 'return id(selected_fan_speed_pct);'
             - script.execute: update_display
 
-  - id: toggle_selected_humidifier_power
+  - id: turn_on_selected_humidifier
     mode: queued
     then:
-      - if:
-          condition:
-            lambda: 'return id(selected_item_state) == "off";'
-          then:
-            - homeassistant.action:
-                action: humidifier.turn_on
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-            - lambda: |-
-                id(selected_item_state) = "on";
-                note_local_change();
-                id(updated_ui) = true;
-          else:
-            - homeassistant.action:
-                action: humidifier.turn_off
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-            - lambda: |-
-                id(selected_item_state) = "off";
-                id(selected_humidifier_action) = "off";
-                note_local_change();
-                id(updated_ui) = true;
+      - homeassistant.action:
+          action: humidifier.turn_on
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(selected_item_state) = "on";
+          note_local_change();
+          id(updated_ui) = true;
+      - script.execute: update_display
+
+  - id: turn_off_selected_humidifier
+    mode: queued
+    then:
+      - homeassistant.action:
+          action: humidifier.turn_off
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+      - lambda: |-
+          id(selected_item_state) = "off";
+          id(selected_humidifier_action) = "off";
+          note_local_change();
+          id(updated_ui) = true;
       - script.execute: update_display
 
   - id: adjust_humidifier_target
@@ -303,9 +425,8 @@ script:
           if (isnan(next)) {
             next = 50.0f;
           }
-          next += delta;
-          if (next < 0.0f) next = 0.0f;
-          if (next > 100.0f) next = 100.0f;
+          // Home Assistant rejects a target outside the humidifier's limits.
+          next = clamp_humidifier_target(id(selected_humidifier_index), next + delta);
           id(selected_humidifier_target_humidity) = next;
           id(last_humidifier_interaction) = millis();
           note_local_change();
