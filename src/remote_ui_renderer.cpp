@@ -233,10 +233,14 @@ void draw_round_rect(Display *it, int x, int y, int w, int h, Color color = ON) 
   it->vertical_line(x + w - 1, y + 1, h - 2, color);
 }
 
+// A circle is always an odd number of pixels across, so for an even h each cap
+// is two circles a pixel apart. With w == h this is a disc of any size.
 void fill_pill(Display *it, int x, int y, int w, int h, Color color = ON) {
-  int r = h / 2;
-  it->filled_circle(x + r, y + r, r, color);
-  it->filled_circle(x + w - 1 - r, y + r, r, color);
+  int r = (h - 1) / 2;
+  for (int cy : {y + r, y + h - 1 - r}) {
+    it->filled_circle(x + r, cy, r, color);
+    it->filled_circle(x + w - 1 - r, cy, r, color);
+  }
   it->filled_rectangle(x + r, y, w - 2 * r, h, color);
 }
 
@@ -293,13 +297,13 @@ int draw_chip(Display *it, font::Font *font, int x, int y, int h, const char *va
 }
 
 void draw_toggle(Display *it, int x, int y, int w, int h, bool on) {
-  int r = h / 2;
+  int knob = h - 4;
   if (on) {
     fill_pill(it, x, y, w, h, ON);
-    it->filled_circle(x + w - 1 - r, y + r, r - 2, OFF);
+    fill_pill(it, x + w - 2 - knob, y + 2, knob, knob, OFF);
   } else {
     draw_pill(it, x, y, w, h);
-    it->filled_circle(x + r, y + r, r - 2, ON);
+    fill_pill(it, x + 2, y + 2, knob, knob, ON);
   }
 }
 
@@ -844,15 +848,15 @@ void render_switch(Display *it, const RemoteUiFonts &f, const RemoteRenderContex
   bool on = state == "on";
   // A big toggle stands in for the badge: switches have nothing else to show.
   if (ha_state_missing(state)) {
-    draw_pill(it, 0, 29, 36, 18);
+    draw_pill(it, 0, 29, 36, 19);
     hero_word(it, f, missing_word(state), 42);
   } else if (state == "turning_on" || state == "turning_off") {
     // Sent, not yet confirmed: the toggle shows where it is going.
     bool turning_on = state == "turning_on";
-    draw_toggle(it, 0, 29, 36, 18, turning_on);
+    draw_toggle(it, 0, 29, 36, 19, turning_on);
     hero_word(it, f, turning_on ? "TURNING ON" : "TURNING OFF", 42);
   } else {
-    draw_toggle(it, 0, 29, 36, 18, on);
+    draw_toggle(it, 0, 29, 36, 19, on);
     hero_value(it, f, on ? "ON" : "OFF", 42);
   }
   char buf[32];
