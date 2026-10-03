@@ -272,4 +272,8 @@ display:
     address: 0x3C
     rotation: 180
     contrast: 0.5
+    # Every screen change draws the frame and sends it (update_display and the
+    # system screens), so the display's own refresh, which resent the unchanged
+    # frame every second for about 30 ms of I2C, is off.
+    update_interval: never
     id: oled_display

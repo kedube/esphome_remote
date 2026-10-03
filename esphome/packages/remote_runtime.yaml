@@ -14,7 +14,14 @@ interval:
               uint32_t since = now_s - static_cast<uint32_t>(id(last_active));
               return since >= ${SLEEP_DURATION};
           then:
-            - script.execute: turn_off
+            # turn_off shows GOODBYE for a moment before deep sleep, and this
+            # stays true until then: start it once.
+            - if:
+                condition:
+                  not:
+                    script.is_running: turn_off
+                then:
+                  - script.execute: turn_off
           else:
             - lambda: |-
                 RemoteUiTimeoutState state;

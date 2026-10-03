@@ -5,7 +5,7 @@ script:
       # Defer the render to the next loop pass. A single press often runs
       # several scripts that each request a redraw; with mode: restart, every
       # request made before this delay elapses collapses into one render
-      # (~25 ms of blocking I2C each) instead of drawing the frame twice.
+      # instead of drawing the frame twice.
       - delay: 0ms
       - if:
           condition:
@@ -190,8 +190,24 @@ script:
                 }
 
                 render_remote_ui(it, remote_ui_fonts, ctx);
-                it->display();
                 id(updated_ui) = false;
+                id(display_push_pending) = true;
+      # Sending the frame to the panel takes about 30 ms of I2C on its own (88
+      # transfers to the SH1106), so it gets the next loop pass: drawing and
+      # sending in one ran past the 50 ms ESPHome lets a step block the loop,
+      # and Wi-Fi and the API wait for the loop. A restart in between still
+      # sends the frame drawn before it.
+      - if:
+          condition:
+            lambda: 'return id(display_push_pending);'
+          then:
+            - delay: 0ms
+            - lambda: |-
+                id(display_push_pending) = false;
+                auto it = id(oled_display);
+                if (!it->is_failed() && it->is_ready()) {
+                  it->display();
+                }
 
   # Redraws while a protected action (lock, cover, automation, alarm) is held so
   # the footer's hold bar fills smoothly. Stops by itself on release or once

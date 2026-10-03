@@ -36,7 +36,13 @@ script:
       - lambda: |-
           id(wake_button_press_started_at) = 0;
           id(wake_button_long_press_fired) = false;
-      - script.execute: turn_off
+      # Already powering off (the sleep timer got there first): nothing to do.
+      - if:
+          condition:
+            not:
+              script.is_running: turn_off
+          then:
+            - script.execute: turn_off
 
   # The footer's hold bar shows the prompt while the button is down. Square and
   # circle also leave it as feedback, so a too-short tap explains itself; the

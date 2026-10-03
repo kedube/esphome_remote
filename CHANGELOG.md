@@ -6,6 +6,12 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+- A screen update draws the frame and sends it to the panel in separate passes of
+  ESPHome's main loop, so it no longer holds the loop past 50 ms (the
+  `update_display took a long time` warnings in the log). The display also no longer
+  resends an unchanged frame every second.
+- Powering off after `SLEEP_DURATION` no longer logs `Script 'turn_off' is already
+  running!` every half second while the `GOODBYE` screen is up.
 
 ## 4.4 — 2026-10-03
 - Weather readings use the units the weather entity reports (`29.92 inHg`, `31 KM/H`), so
