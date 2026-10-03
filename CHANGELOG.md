@@ -6,6 +6,8 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+
+## 4.3 — 2026-10-03
 - Every text font is a setting: `LABEL_FONT`, `TEXT_FONT`, `NAME_FONT`, `STATE_FONT` and
   `VALUE_FONT`, each with a size, in `settings.yaml` (see "Choosing fonts" in the README).
   If your `settings.yaml` is older, copy the font lines from
