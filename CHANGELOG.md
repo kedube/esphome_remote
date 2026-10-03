@@ -6,6 +6,8 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+
+## 4.7 — 2026-10-03
 - Hold `Previous` or `Next` to move through a list (it stops at the ends), and `Plus` or
   `Minus` to keep changing a value with a range. A held value changes on screen and goes
   to Home Assistant once, when you let go.
