@@ -28,9 +28,12 @@ enum RemoteMode {
   REMOTE_MODE_WEATHER = 12,
   REMOTE_MODE_INFO = 13,
   REMOTE_MODE_ALARMS = 14,
+  REMOTE_MODE_INPUTS = 15,   // number, input_number, select, input_select
+  REMOTE_MODE_VACUUMS = 16,  // vacuum, lawn_mower
+  REMOTE_MODE_TIMERS = 17,
 };
 
-inline constexpr int REMOTE_MODE_COUNT = 15;
+inline constexpr int REMOTE_MODE_COUNT = 18;
 inline constexpr RemoteMode MENU_MODE_ORDER[] = {
     REMOTE_MODE_LIGHTS,
     REMOTE_MODE_SWITCHES,
@@ -41,8 +44,11 @@ inline constexpr RemoteMode MENU_MODE_ORDER[] = {
     REMOTE_MODE_COVERS,
     REMOTE_MODE_LOCKS,
     REMOTE_MODE_MEDIA,
+    REMOTE_MODE_VACUUMS,
     REMOTE_MODE_SENSORS,
+    REMOTE_MODE_INPUTS,
     REMOTE_MODE_AUTOMATION,
+    REMOTE_MODE_TIMERS,
     REMOTE_MODE_ALARMS,
     REMOTE_MODE_WEATHER,
     REMOTE_MODE_NOTIFICATIONS,
@@ -197,6 +203,156 @@ inline int light_modes_dimmable(const std::string &modes) {
   }
   return 0;
 }
+
+// Whether a light's supported_color_modes ('|'-joined) include color_temp, so
+// it takes a colour temperature.
+inline bool light_modes_color_temp(const std::string &modes) {
+  size_t start = 0;
+  while (start <= modes.size()) {
+    size_t end = modes.find('|', start);
+    if (modes.compare(start, end == std::string::npos ? std::string::npos : end - start, "color_temp") == 0) {
+      return true;
+    }
+    if (end == std::string::npos) {
+      break;
+    }
+    start = end + 1;
+  }
+  return false;
+}
+
+// How warm a colour temperature is within the light's range: 0 at its coolest
+// (highest kelvin), 100 at its warmest.
+inline int warmth_percent(float kelvin, float min_kelvin, float max_kelvin) {
+  if (!std::isfinite(kelvin) || !std::isfinite(min_kelvin) || !std::isfinite(max_kelvin) || max_kelvin <= min_kelvin) {
+    return 0;
+  }
+  float pct = (max_kelvin - kelvin) * 100.0f / (max_kelvin - min_kelvin);
+  return pct <= 0.0f ? 0 : pct >= 100.0f ? 100 : static_cast<int>(std::lround(pct));
+}
+
+// The colour temperature one step warmer (direction > 0) or cooler: a tenth of
+// the light's range, in whole 50 K, kept within the range.
+inline int light_warmth_step(float kelvin, float min_kelvin, float max_kelvin, int direction) {
+  if (!std::isfinite(min_kelvin) || !std::isfinite(max_kelvin) || max_kelvin <= min_kelvin) {
+    min_kelvin = 2000.0f;  // Home Assistant's defaults for a light that doesn't say
+    max_kelvin = 6535.0f;
+  }
+  if (!std::isfinite(kelvin)) {
+    kelvin = (min_kelvin + max_kelvin) / 2.0f;
+  }
+  float step = std::round((max_kelvin - min_kelvin) / 10.0f / 50.0f) * 50.0f;
+  if (step < 50.0f) {
+    step = 50.0f;
+  }
+  float next = std::round((kelvin - (direction > 0 ? step : -step)) / 50.0f) * 50.0f;
+  next = next < min_kelvin ? min_kelvin : next > max_kelvin ? max_kelvin : next;
+  return static_cast<int>(std::lround(next));
+}
+
+// A number entity's value one step up (direction > 0) or down, within its
+// min and max. Without a step attribute, 1; without limits, unbounded. The
+// result is rounded to the step so float error doesn't pile up.
+inline float number_step_value(float value, float min_value, float max_value, float step, int direction) {
+  if (!std::isfinite(step) || step <= 0.0f) {
+    step = 1.0f;
+  }
+  if (!std::isfinite(value)) {
+    value = std::isfinite(min_value) ? min_value : 0.0f;
+  }
+  float next = value + (direction > 0 ? step : -step);
+  float base = std::isfinite(min_value) ? min_value : 0.0f;
+  next = base + std::round((next - base) / step) * step;
+  if (std::isfinite(min_value) && next < min_value) {
+    next = min_value;
+  }
+  if (std::isfinite(max_value) && next > max_value) {
+    next = max_value;
+  }
+  return next;
+}
+
+// Seconds in a Home Assistant duration: "0:05:00", "12:30" (minutes and
+// seconds), or "1 day, 2:00:00".
+inline bool parse_ha_duration(const std::string &text, int64_t *seconds) {
+  const char *p = text.c_str();
+  int64_t days = 0;
+  int used = 0;
+  long day_count = 0;
+  if (sscanf(p, "%ld day%n", &day_count, &used) == 1 && used > 0) {
+    days = day_count;
+    p += used;
+    while (*p == 's' || *p == ',' || *p == ' ') {
+      p++;
+    }
+  }
+  int a = 0, b = 0, c = 0;
+  int fields = sscanf(p, "%d:%d:%d", &a, &b, &c);
+  if (fields < 2 || a < 0 || b < 0 || c < 0) {
+    return false;
+  }
+  int64_t total = fields == 3 ? int64_t(a) * 3600 + int64_t(b) * 60 + c : int64_t(a) * 60 + b;
+  *seconds = days * 86400 + total;
+  return true;
+}
+
+// A countdown as "4:05" or, from an hour up, "1:04:05". Negative is "0:00".
+inline void format_countdown(int64_t seconds, char *buf, size_t size) {
+  if (seconds < 0) {
+    seconds = 0;
+  }
+  int64_t hours = seconds / 3600;
+  int minutes = static_cast<int>((seconds / 60) % 60);
+  int secs = static_cast<int>(seconds % 60);
+  if (hours > 0) {
+    snprintf(buf, size, "%lld:%02d:%02d", static_cast<long long>(hours), minutes, secs);
+  } else {
+    snprintf(buf, size, "%d:%02d", minutes, secs);
+  }
+}
+
+// "<domain>.<verb>" for an entity: "input_boolean.turn_on", "valve.stop_valve".
+inline std::string entity_domain_action(const char *entity_id, const char *verb) {
+  std::string action;
+  if (entity_id != nullptr) {
+    const char *dot = strchr(entity_id, '.');
+    action.assign(entity_id, dot != nullptr ? static_cast<size_t>(dot - entity_id) : strlen(entity_id));
+  }
+  action += '.';
+  action += verb;
+  return action;
+}
+
+// A cover or valve service. verb "open", "close", "stop" or "set_position"
+// gives cover.open_cover, valve.stop_valve, valve.set_valve_position.
+inline std::string cover_domain_action(const std::string &entity_id, const char *verb) {
+  const char *kind = entity_id.compare(0, 6, "valve.") == 0 ? "valve" : "cover";
+  std::string action = kind;
+  if (strcmp(verb, "set_position") == 0) {
+    action += ".set_";
+    action += kind;
+    action += "_position";
+  } else {
+    action += '.';
+    action += verb;
+    action += '_';
+    action += kind;
+  }
+  return action;
+}
+
+// Covers and valves report the same states.
+inline bool cover_state_moving(const std::string &state) { return state == "opening" || state == "closing"; }
+
+// A person or device tracker: "home", "not_home", or the name of a zone.
+inline const char *presence_state_word(const std::string &state) {
+  if (state == "home") return "HOME";
+  if (state == "not_home") return "AWAY";
+  return nullptr;
+}
+
+// A vacuum or lawn mower at work.
+inline bool vacuum_state_working(const std::string &state) { return state == "cleaning" || state == "mowing"; }
 
 // Degrees for a compass point ("NW", "ssw"). Some weather integrations report
 // the wind's direction that way instead of in degrees.
@@ -431,6 +587,64 @@ enum RemoteSettingOption {
   REMOTE_SETTING_WATER_HEATER_TARGET,
   REMOTE_SETTING_WATER_HEATER_MODE,
   REMOTE_SETTING_WATER_HEATER_AWAY,
+  // Added later: kept at the end so a setting saved across sleep keeps its number.
+  REMOTE_SETTING_LIGHT_WARMTH,
+  REMOTE_SETTING_MEDIA_MUTE,
+  REMOTE_SETTING_INPUT_VALUE,
+  REMOTE_SETTING_INPUT_OPTION,
+  REMOTE_SETTING_VACUUM_ACTIONS,  // the footer's START/DOCK hints
+  REMOTE_SETTING_VACUUM_FAN_SPEED,
+};
+
+inline constexpr int REMOTE_SETTING_LAST = REMOTE_SETTING_VACUUM_FAN_SPEED;
+
+// Settings that a held Plus or Minus keeps stepping: values with a range.
+// Lists, toggles and track skips step once per press.
+inline bool remote_setting_repeats(int option) {
+  switch (option) {
+    case REMOTE_SETTING_LIGHT_DIMMER:
+    case REMOTE_SETTING_LIGHT_WARMTH:
+    case REMOTE_SETTING_CLIMATE_LOW:
+    case REMOTE_SETTING_CLIMATE_HIGH:
+    case REMOTE_SETTING_CLIMATE_TARGET:
+    case REMOTE_SETTING_CLIMATE_HUMIDITY:
+    case REMOTE_SETTING_HUMIDIFIER_HUMIDITY:
+    case REMOTE_SETTING_FAN_SPEED:
+    case REMOTE_SETTING_COVER_POSITION:
+    case REMOTE_SETTING_COVER_TILT:
+    case REMOTE_SETTING_MEDIA_VOLUME:
+    case REMOTE_SETTING_WATER_HEATER_TARGET:
+    case REMOTE_SETTING_INPUT_VALUE:
+    case REMOTE_SETTING_NOTIFICATION_MESSAGES:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// What send_setting_value sends. While Plus or Minus is held the value on
+// screen keeps stepping and only the one it stops at is sent.
+enum RemoteValueSend {
+  VALUE_SEND_LIGHT_BRIGHTNESS = 0,  // percent; 0 turns the light off
+  VALUE_SEND_LIGHT_COLOR_TEMP,      // kelvin
+  VALUE_SEND_FAN_PERCENTAGE,
+  VALUE_SEND_HUMIDIFIER_TARGET,
+  VALUE_SEND_CLIMATE_TARGET,
+  VALUE_SEND_CLIMATE_RANGE,         // value low, value2 high
+  VALUE_SEND_CLIMATE_HUMIDITY,
+  VALUE_SEND_COVER_POSITION,        // percent; 0 closes (a cover or a valve)
+  VALUE_SEND_COVER_TILT,
+  VALUE_SEND_MEDIA_VOLUME,          // percent
+  VALUE_SEND_WATER_HEATER_TARGET,
+  VALUE_SEND_NUMBER,                // number or input_number
+};
+
+// What send_option_after_pause sends: options that take effect the moment
+// they are picked, sent once the presses stop so stepping past one doesn't
+// switch to it.
+enum RemoteOptionSend {
+  OPTION_SEND_HVAC_MODE = 0,
+  OPTION_SEND_SELECT,  // select or input_select
 };
 
 inline const char *mode_title(RemoteMode mode) {
@@ -465,6 +679,12 @@ inline const char *mode_title(RemoteMode mode) {
       return "WEATHER";
     case REMOTE_MODE_INFO:
       return "INFO";
+    case REMOTE_MODE_INPUTS:
+      return "INPUTS";
+    case REMOTE_MODE_VACUUMS:
+      return "VACUUMS";
+    case REMOTE_MODE_TIMERS:
+      return "TIMERS";
     default:
       return "MODE";
   }
@@ -474,6 +694,15 @@ enum AutomationKind {
   AUTOMATION_KIND_AUTOMATION = 0,
   AUTOMATION_KIND_SCRIPT = 1,
   AUTOMATION_KIND_SCENE = 2,
+  AUTOMATION_KIND_BUTTON = 3,  // button or input_button
+};
+
+// What the button prompts need to know about the selected entity beyond its
+// mode and state.
+struct RemoteEntityTraits {
+  int alarm_features = -1;  // an alarm panel's supported_features; -1 until synced
+  bool cover_stoppable = false;  // moving, can stop, and not just moved by Plus/Minus (selected_cover_stoppable)
+  AutomationKind automation_kind = AUTOMATION_KIND_SCRIPT;
 };
 
 enum AlarmArmMode {

@@ -169,6 +169,22 @@ RemoteRenderContext hostile_context(int mode, int setting, const std::string &s,
   c.weather_pressure_unit = variant == 1 ? "inHg" : s.c_str();
   c.weather_precipitation_unit = variant == 2 ? "in" : s.c_str();
   c.alarm_supported_features = variant == 0 ? -1 : r.percent;
+  c.light_color_temp_kelvin = r.value;
+  c.light_min_kelvin = variant == 1 ? -r.value : r.value;
+  c.light_max_kelvin = r.value;
+  c.climate_mode_count = r.percent;
+  c.cover_is_valve = variant == 1;
+  c.cover_stoppable = variant != 0;
+  c.media_muted = variant - 1;
+  c.sensor_is_presence = variant == 2;
+  c.input_is_select = variant == 1;
+  c.input_value = r.value;
+  c.input_min = variant == 2 ? r.value : -r.value;
+  c.input_max = r.value;
+  c.input_unit = &s;
+  c.vacuum_is_mower = variant == 1;
+  c.vacuum_fan_speed = &s;
+  c.timer_seconds = variant == 0 ? -1 : variant == 1 ? int64_t(r.percent) * 100000000 : r.percent;
   return c;
 }
 
@@ -188,7 +204,7 @@ int main() {
   auto draw_every_screen = [&](const std::string &s, Reading r) {
     for (int mode = 0; mode < REMOTE_MODE_COUNT; mode++) {
       int pages = mode == REMOTE_MODE_INFO ? 7 : 1;  // six Info pages, plus one past the end
-      for (int setting = REMOTE_SETTING_NONE; setting <= REMOTE_SETTING_WATER_HEATER_AWAY; setting++) {
+      for (int setting = REMOTE_SETTING_NONE; setting <= REMOTE_SETTING_LAST; setting++) {
         for (int variant = 0; variant < 3; variant++) {
           RemoteRenderContext c = hostile_context(mode, setting, s, r, variant);
           for (int page = 0; page < pages; page++) {
@@ -227,6 +243,14 @@ int main() {
         frames++;
       }
     }
+  }
+
+  // The status over a frame kept from before sleep.
+  for (const std::string &s : text) {
+    SimDisplay display;
+    render_remote_ui(&display, fonts, hostile_context(REMOTE_MODE_LIGHTS, REMOTE_SETTING_NONE, s, {NAN, 0}, 1));
+    render_snapshot_status(&display, fonts, s.c_str());
+    frames++;
   }
 
   printf("%ld frames drawn with hostile input, no sanitizer reports\n", frames);

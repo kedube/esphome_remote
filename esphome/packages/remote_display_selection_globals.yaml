@@ -78,6 +78,18 @@ globals:
     type: int
     initial_value: '0'
 
+  - id: selected_input_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_vacuum_index
+    type: int
+    initial_value: '0'
+
+  - id: selected_timer_index
+    type: int
+    initial_value: '0'
+
   - id: selected_alarm_arm_mode
     type: int
     initial_value: '0'

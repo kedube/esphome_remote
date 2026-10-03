@@ -233,3 +233,14 @@ globals:
   - id: last_navigation_requested_at
     type: uint32_t
     initial_value: '0'
+
+  # The screen is dimmed because the remote is about to sleep.
+  - id: idle_dimmed
+    type: bool
+    initial_value: 'false'
+
+  # After a wake, the frame kept from before sleep stays up until the selected
+  # item's state arrives, or until this time.
+  - id: snapshot_hold_until
+    type: uint32_t
+    initial_value: '0'

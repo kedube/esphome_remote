@@ -17,8 +17,14 @@ struct PersistedUIStateData {
 inline constexpr uint32_t UI_STATE_AUX_FORMAT_MASK = 3UL << 30;
 inline constexpr uint32_t UI_STATE_AUX_FORMAT_V7 = 1UL << 31;
 inline constexpr uint32_t UI_STATE_AUX_FORMAT_V8 = 3UL << 30;
+// V9 widens current_mode to 5 bits (V8 had 4, for up to 16 modes). It keeps
+// V8's format bits and sets this marker in state bits 48-55, which V8 never
+// set: format bits of 01 would match V6 state, whose top aux bits held the
+// Info index.
+inline constexpr uint64_t UI_STATE_V9_MARKER = uint64_t(0x59) << 48;
+inline constexpr uint64_t UI_STATE_V9_MARKER_MASK = uint64_t(0xFF) << 48;
 
-// The V8 pack below masks each field to a fixed bit width; these asserts tie
+// The V9 pack below masks each field to a fixed bit width; these asserts tie
 // every width to the constant that bounds the corresponding value so a raised
 // limit cannot silently wrap the restored index.
 constexpr size_t max_favorite_list_entry_count() {
@@ -35,8 +41,8 @@ static_assert(MAX_PERSISTED_FAVORITE_LISTS + 2 <= 32, "current_menu_index is pac
 static_assert(max_favorite_list_entry_count() <= 64, "current_favorite_index is packed into 6 bits");
 static_assert(NOTIFICATION_FEED_MAX_ITEMS <= 64, "selected_notification_index is packed into 6 bits");
 static_assert(INFO_ITEM_COUNT <= 64, "selected_info_index is packed into 6 bits");
-static_assert(REMOTE_MODE_COUNT <= 16, "current_mode is packed into 4 bits");
-static_assert(REMOTE_SETTING_WATER_HEATER_AWAY < 64, "selected_setting_option is packed into 6 bits");
+static_assert(REMOTE_MODE_COUNT <= 32, "current_mode is packed into 5 bits");
+static_assert(REMOTE_SETTING_LAST < 64, "selected_setting_option is packed into 6 bits");
 static_assert(ALARM_ARM_MODE_COUNT <= 8, "selected_alarm_arm_mode is packed into 3 bits");
 
 inline PersistedUIStateData default_persisted_ui_state() {
@@ -49,6 +55,21 @@ inline PersistedUIStateData default_persisted_ui_state() {
 
 inline PersistedUIStateData unpack_persisted_ui_state(uint64_t state, uint32_t aux_state) {
   uint32_t format = aux_state & UI_STATE_AUX_FORMAT_MASK;
+  if (format == UI_STATE_AUX_FORMAT_V8 && (state & UI_STATE_V9_MARKER_MASK) == UI_STATE_V9_MARKER) {
+    PersistedUIStateData data;
+    data.contrast = state & 0x0F;
+    data.current_menu_index = (state >> 4) & 0x1F;
+    data.current_favorite_index = (state >> 9) & 0x3F;
+    data.selected_notification_index = (state >> 15) & 0x3F;
+    data.selected_info_index = (state >> 21) & 0x3F;
+    data.current_mode = (state >> 27) & 0x1F;
+    data.selected_setting_option = (state >> 32) & 0x3F;
+    data.selected_weather_detail_index = (state >> 38) & 0x0F;
+    data.selected_alarm_arm_mode = (state >> 42) & 0x07;
+    return data;
+  }
+
+  // Saved by firmware before V9.
   if (format == UI_STATE_AUX_FORMAT_V8) {
     PersistedUIStateData data;
     data.contrast = state & 0x0F;
@@ -84,10 +105,10 @@ inline uint64_t pack_persisted_ui_state(const PersistedUIStateData &data) {
          (uint64_t(data.current_favorite_index & 0x3F) << 9) |
          (uint64_t(data.selected_notification_index & 0x3F) << 15) |
          (uint64_t(data.selected_info_index & 0x3F) << 21) |
-         (uint64_t(data.current_mode & 0x0F) << 27) |
-         (uint64_t(data.selected_setting_option & 0x3F) << 31) |
-         (uint64_t(data.selected_weather_detail_index & 0x0F) << 37) |
-         (uint64_t(data.selected_alarm_arm_mode & 0x07) << 41);
+         (uint64_t(data.current_mode & 0x1F) << 27) |
+         (uint64_t(data.selected_setting_option & 0x3F) << 32) |
+         (uint64_t(data.selected_weather_detail_index & 0x0F) << 38) |
+         (uint64_t(data.selected_alarm_arm_mode & 0x07) << 42) | UI_STATE_V9_MARKER;
 }
 
 inline uint32_t pack_persisted_ui_state_aux(const PersistedUIStateData &data) {

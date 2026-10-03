@@ -1,0 +1,243 @@
+# Sending what Plus and Minus change, and actions on an entity named at the
+# time of the press.
+script:
+  # A value Plus or Minus set (kind: a RemoteValueSend). A single press sends
+  # it at once. While a held Plus or Minus repeats (remote_repeat_active) it
+  # waits, and every step restarts it with the new value, so Home Assistant
+  # only gets the value the hold ends on. The entity comes with the value, so
+  # it reaches the right one even if another item is selected by then.
+  - id: send_setting_value
+    mode: restart
+    parameters:
+      kind: int
+      entity: std::string
+      value: float
+      value2: float
+    then:
+      - wait_until:
+          condition:
+            lambda: 'return !remote_repeat_active;'
+          # The release always ends the repeat; this only guards against a
+          # release that never arrives.
+          timeout: 30s
+      # Integer fields are sent as integers: Home Assistant coerces them with
+      # int(), which rejects "51.000000".
+      - if:
+          condition:
+            lambda: 'return kind == VALUE_SEND_LIGHT_BRIGHTNESS;'
+          then:
+            - if:
+                condition:
+                  lambda: 'return value <= 0;'
+                then:
+                  - homeassistant.action:
+                      action: light.turn_off
+                      data:
+                        entity_id: !lambda 'return entity;'
+                else:
+                  - homeassistant.action:
+                      action: light.turn_on
+                      data:
+                        entity_id: !lambda 'return entity;'
+                        brightness_pct: !lambda 'return (int) lroundf(value);'
+      - if:
+          condition:
+            lambda: 'return kind == VALUE_SEND_LIGHT_COLOR_TEMP;'
+          then:
+            - homeassistant.action:
+                action: light.turn_on
+                data:
+                  entity_id: !lambda 'return entity;'
+                  color_temp_kelvin: !lambda 'return (int) lroundf(value);'
+      - if:
+          condition:
+            lambda: 'return kind == VALUE_SEND_FAN_PERCENTAGE;'
+          then:
+            - if:
+                condition:
+                  lambda: 'return value <= 0;'
+                then:
+                  - homeassistant.action:
+                      action: fan.turn_off
+                      data:
+                        entity_id: !lambda 'return entity;'
+                else:
+                  - homeassistant.action:
+                      action: fan.set_percentage
+                      data:
+                        entity_id: !lambda 'return entity;'
+                        percentage: !lambda 'return (int) lroundf(value);'
+      - if:
+          condition:
+            lambda: 'return kind == VALUE_SEND_HUMIDIFIER_TARGET;'
+          then:
+            - homeassistant.action:
+                action: humidifier.set_humidity
+                data:
+                  entity_id: !lambda 'return entity;'
+                  humidity: !lambda 'return (int) lroundf(value);'
+      - if:
+          condition:
+            lambda: 'return kind == VALUE_SEND_CLIMATE_TARGET;'
+          then:
+            - homeassistant.action:
+                action: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return entity;'
+                  temperature: !lambda 'return value;'
+      - if:
+          condition:
+            lambda: 'return kind == VALUE_SEND_CLIMATE_RANGE;'
+          then:
+            - homeassistant.action:
+                action: climate.set_temperature
+                data:
+                  entity_id: !lambda 'return entity;'
+                  target_temp_low: !lambda 'return value;'
+                  target_temp_high: !lambda 'return value2;'
+      - if:
+          condition:
+            lambda: 'return kind == VALUE_SEND_CLIMATE_HUMIDITY;'
+          then:
+            - homeassistant.action:
+                action: climate.set_humidity
+                data:
+                  entity_id: !lambda 'return entity;'
+                  humidity: !lambda 'return (int) lroundf(value);'
+      - if:
+          condition:
+            lambda: 'return kind == VALUE_SEND_COVER_POSITION;'
+          then:
+            - if:
+                condition:
+                  lambda: 'return value <= 0;'
+                then:
+                  - homeassistant.action:
+                      action: !lambda 'return cover_domain_action(entity, "close");'
+                      data:
+                        entity_id: !lambda 'return entity;'
+                else:
+                  - homeassistant.action:
+                      action: !lambda 'return cover_domain_action(entity, "set_position");'
+                      data:
+                        entity_id: !lambda 'return entity;'
+                        position: !lambda 'return (int) lroundf(value);'
+      - if:
+          condition:
+            lambda: 'return kind == VALUE_SEND_COVER_TILT;'
+          then:
+            - homeassistant.action:
+                action: cover.set_cover_tilt_position
+                data:
+                  entity_id: !lambda 'return entity;'
+                  tilt_position: !lambda 'return (int) lroundf(value);'
+      - if:
+          condition:
+            lambda: 'return kind == VALUE_SEND_MEDIA_VOLUME;'
+          then:
+            - homeassistant.action:
+                action: media_player.volume_set
+                data:
+                  entity_id: !lambda 'return entity;'
+                  volume_level: !lambda 'return value / 100.0f;'
+      - if:
+          condition:
+            lambda: 'return kind == VALUE_SEND_WATER_HEATER_TARGET;'
+          then:
+            - homeassistant.action:
+                action: water_heater.set_temperature
+                data:
+                  entity_id: !lambda 'return entity;'
+                  temperature: !lambda 'return value;'
+      - if:
+          condition:
+            lambda: 'return kind == VALUE_SEND_NUMBER;'
+          then:
+            - homeassistant.action:
+                action: !lambda 'return entity_domain_action(entity.c_str(), "set_value");'
+                data:
+                  entity_id: !lambda 'return entity;'
+                  # Without float noise: 0.1, not 0.100000001.
+                  value: !lambda |-
+                    char number[32];
+                    format_ha_number(value, number, sizeof(number));
+                    return std::string(number);
+
+  # An option Plus or Minus picked (kind: a RemoteOptionSend), sent once the
+  # presses have paused for OPTION_SEND_DELAY_MS: each press restarts the
+  # wait, so stepping past an HVAC mode or a select option on the way to
+  # another doesn't switch to it. An option still waiting for a different
+  # entity goes out straight away rather than being lost.
+  - id: send_option_after_pause
+    mode: restart
+    parameters:
+      kind: int
+      entity: std::string
+      option: std::string
+    then:
+      - lambda: |-
+          RemotePendingOption &pending = remote_pending_option;
+          if (pending.kind >= 0 && (pending.kind != kind || pending.entity != entity)) {
+            id(send_option_now).execute(pending.kind, pending.entity, pending.option);
+          }
+          pending.kind = kind;
+          pending.entity = entity;
+          pending.option = option;
+      - delay: !lambda 'return OPTION_SEND_DELAY_MS;'
+      - lambda: |-
+          RemotePendingOption pending = remote_pending_option;
+          remote_pending_option.kind = -1;
+          if (pending.kind < 0) {
+            return;
+          }
+          // Hold the screen on the new option until Home Assistant reports it.
+          if (pending.entity == id(selected_item_entity)) {
+            note_local_change();
+          }
+          id(send_option_now).execute(pending.kind, pending.entity, pending.option);
+
+  - id: send_option_now
+    mode: queued
+    parameters:
+      kind: int
+      entity: std::string
+      option: std::string
+    then:
+      - if:
+          condition:
+            lambda: 'return kind == OPTION_SEND_HVAC_MODE;'
+          then:
+            - homeassistant.action:
+                action: climate.set_hvac_mode
+                data:
+                  entity_id: !lambda 'return entity;'
+                  hvac_mode: !lambda 'return option;'
+          else:
+            - homeassistant.action:
+                action: !lambda 'return entity_domain_action(entity.c_str(), "select_option");'
+                data:
+                  entity_id: !lambda 'return entity;'
+                  option: !lambda 'return option;'
+
+  # An action with nothing to send but the entity (vacuum.start, timer.pause,
+  # valve.stop_valve): shows failed in the footer if Home Assistant refuses
+  # it while that entity is still selected.
+  - id: call_entity_action
+    mode: queued
+    parameters:
+      action: std::string
+      entity: std::string
+      failed: std::string
+    then:
+      - homeassistant.action:
+          action: !lambda 'return action;'
+          data:
+            entity_id: !lambda 'return entity;'
+          on_error:
+            - if:
+                condition:
+                  lambda: 'return entity == id(selected_item_entity);'
+                then:
+                  - script.execute:
+                      id: show_toast
+                      text: !lambda 'return failed;'

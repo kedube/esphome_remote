@@ -119,7 +119,8 @@ class LightStatusTracker : public EntityTracker<LIGHT_LIST_COUNT> {
 
   // supported_color_modes is the only reliable sign of a light that can't dim:
   // brightness is missing from every light that is off, and from one that
-  // hasn't synced yet.
+  // hasn't synced yet. The colour temperature and its range are only sent by
+  // lights that have one.
   void subscribe(int idx) {
     const char *entity_id = this->entity_id(idx);
     ha_track_state(entity_id, nullptr, this->state_[idx]);
@@ -127,6 +128,13 @@ class LightStatusTracker : public EntityTracker<LIGHT_LIST_COUNT> {
     ha_track_list(entity_id, "supported_color_modes", this->color_modes_[idx]);
     ha_track_text(entity_id, "effect", this->effect_[idx]);
     ha_track_list(entity_id, "effect_list", this->effect_list_[idx]);
+    // Home Assistant passes a colour temperature to the light without
+    // checking it against the light's range, so the remote needs the range.
+    if (LIGHT_WARMTH) {
+      ha_track_float(entity_id, "color_temp_kelvin", this->color_temp_kelvin_[idx]);
+      ha_track_float(entity_id, "min_color_temp_kelvin", this->min_color_temp_kelvin_[idx]);
+      ha_track_float(entity_id, "max_color_temp_kelvin", this->max_color_temp_kelvin_[idx]);
+    }
   }
 
   const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
@@ -137,6 +145,13 @@ class LightStatusTracker : public EntityTracker<LIGHT_LIST_COUNT> {
   const std::string &effect(int idx) const { return at_(this->effect_, idx); }
   const std::string &effect_list(int idx) const { return at_(this->effect_list_, idx); }
   bool has_effect(int idx) const { return !this->effect_list(idx).empty(); }
+  bool supports_color_temp(int idx) const {
+    return LIGHT_WARMTH && light_modes_color_temp(at_(this->color_modes_, idx));
+  }
+  // NAN while the light is off, or in a colour mode.
+  float color_temp_kelvin(int idx) const { return at_(this->color_temp_kelvin_, idx); }
+  float min_color_temp_kelvin(int idx) const { return at_(this->min_color_temp_kelvin_, idx); }
+  float max_color_temp_kelvin(int idx) const { return at_(this->max_color_temp_kelvin_, idx); }
 
  protected:
   std::array<std::string, LIGHT_LIST_COUNT> state_{};
@@ -144,6 +159,9 @@ class LightStatusTracker : public EntityTracker<LIGHT_LIST_COUNT> {
   std::array<std::string, LIGHT_LIST_COUNT> effect_{};
   std::array<std::string, LIGHT_LIST_COUNT> effect_list_{};
   std::array<float, LIGHT_LIST_COUNT> brightness_ = filled_array<float, LIGHT_LIST_COUNT>(NAN);
+  std::array<float, LIGHT_LIST_COUNT> color_temp_kelvin_ = filled_array<float, LIGHT_LIST_COUNT>(NAN);
+  std::array<float, LIGHT_LIST_COUNT> min_color_temp_kelvin_ = filled_array<float, LIGHT_LIST_COUNT>(NAN);
+  std::array<float, LIGHT_LIST_COUNT> max_color_temp_kelvin_ = filled_array<float, LIGHT_LIST_COUNT>(NAN);
 };
 
 using SwitchStatusTracker = SingleStateTracker<SWITCH_LIST_COUNT>;
@@ -313,11 +331,11 @@ class SensorStatusTracker : public SingleStateTracker<SENSOR_LIST_COUNT> {
 
   // suggested_unit_of_measurement is an entity-registry option, not a state
   // attribute, so Home Assistant never sends it; unit_of_measurement already
-  // reflects any unit override. Binary sensors have no unit, so they don't
-  // spend a subscription on one.
+  // reflects any unit override. Binary sensors, people and device trackers
+  // have no unit, so they don't spend a subscription on one.
   void subscribe(int idx) {
     SingleStateTracker<SENSOR_LIST_COUNT>::subscribe(idx);
-    if (entity_id_matches_domain(this->entity_id(idx), "binary_sensor")) {
+    if (entity_id_matches_domain(this->entity_id(idx), "binary_sensor") || this->is_presence(idx)) {
       return;
     }
     std::string *unit = &this->unit_[idx];
@@ -334,6 +352,11 @@ class SensorStatusTracker : public SingleStateTracker<SENSOR_LIST_COUNT> {
   }
 
   const std::string &unit(int idx) const { return at_(this->unit_, idx); }
+  // A person or device tracker: home, away or a zone.
+  bool is_presence(int idx) const {
+    return in_range_(idx) && (entity_id_matches_domain(this->entity_id(idx), "person") ||
+                              entity_id_matches_domain(this->entity_id(idx), "device_tracker"));
+  }
 
  protected:
   std::array<std::string, SENSOR_LIST_COUNT> unit_{};
@@ -343,11 +366,15 @@ class CoverStatusTracker : public EntityTracker<COVER_LIST_COUNT> {
  public:
   CoverStatusTracker() : EntityTracker(COVER_LIST) {}
 
+  // Valves report the same states and feature bits as covers (open 1, close 2,
+  // set position 4, stop 8) but have no tilt.
   void subscribe(int idx) {
     const char *entity_id = this->entity_id(idx);
     ha_track_state(entity_id, nullptr, this->state_[idx]);
     ha_track_float(entity_id, "current_position", this->position_[idx]);
-    ha_track_float(entity_id, "current_tilt_position", this->tilt_[idx]);
+    if (!this->is_valve(idx)) {
+      ha_track_float(entity_id, "current_tilt_position", this->tilt_[idx]);
+    }
     ha_track_int(entity_id, "supported_features", this->supported_features_[idx]);
   }
 
@@ -356,6 +383,8 @@ class CoverStatusTracker : public EntityTracker<COVER_LIST_COUNT> {
   bool has_position(int idx) const { return in_range_(idx) && (this->supported_features_[idx] & 4) != 0; }
   float tilt(int idx) const { return at_(this->tilt_, idx); }
   bool has_tilt(int idx) const { return in_range_(idx) && (this->supported_features_[idx] & 128) != 0; }
+  bool supports_stop(int idx) const { return in_range_(idx) && (this->supported_features_[idx] & 8) != 0; }
+  bool is_valve(int idx) const { return in_range_(idx) && entity_id_matches_domain(this->entity_id(idx), "valve"); }
 
  protected:
   std::array<std::string, COVER_LIST_COUNT> state_{};
@@ -381,6 +410,7 @@ class MediaStatusTracker : public EntityTracker<MEDIA_PLAYER_LIST_COUNT> {
     ha_track_text(entity_id, "repeat", this->repeat_[idx]);
     ha_track_text(entity_id, "sound_mode", this->sound_mode_[idx]);
     ha_track_list(entity_id, "sound_mode_list", this->sound_mode_list_[idx]);
+    ha_track_text(entity_id, "is_volume_muted", this->muted_[idx]);
   }
 
   const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
@@ -394,6 +424,8 @@ class MediaStatusTracker : public EntityTracker<MEDIA_PLAYER_LIST_COUNT> {
   const std::string &repeat(int idx) const { return at_(this->repeat_, idx); }
   const std::string &sound_mode(int idx) const { return at_(this->sound_mode_, idx); }
   const std::string &sound_mode_list(int idx) const { return at_(this->sound_mode_list_, idx); }
+  // "True"/"False", or empty for a player that doesn't report it.
+  const std::string &muted(int idx) const { return at_(this->muted_, idx); }
 
  protected:
   // Home Assistant drops a player's attributes when it stops or turns off, and
@@ -413,6 +445,7 @@ class MediaStatusTracker : public EntityTracker<MEDIA_PLAYER_LIST_COUNT> {
       this->shuffle_[idx].clear();
       this->repeat_[idx].clear();
       this->sound_mode_[idx].clear();
+      this->muted_[idx].clear();
       this->volume_[idx] = NAN;
     }
   }
@@ -442,6 +475,7 @@ class MediaStatusTracker : public EntityTracker<MEDIA_PLAYER_LIST_COUNT> {
   std::array<std::string, MEDIA_PLAYER_LIST_COUNT> repeat_{};
   std::array<std::string, MEDIA_PLAYER_LIST_COUNT> sound_mode_{};
   std::array<std::string, MEDIA_PLAYER_LIST_COUNT> sound_mode_list_{};
+  std::array<std::string, MEDIA_PLAYER_LIST_COUNT> muted_{};
   std::array<float, MEDIA_PLAYER_LIST_COUNT> volume_ = filled_array<float, MEDIA_PLAYER_LIST_COUNT>(NAN);
 };
 
@@ -680,6 +714,126 @@ class WeatherStatusTracker : public EntityTracker<WEATHER_LIST_COUNT> {
   std::array<float, WEATHER_LIST_COUNT> dew_point_ = filled_array<float, WEATHER_LIST_COUNT>(NAN);
   std::array<float, WEATHER_LIST_COUNT> apparent_temperature_ = filled_array<float, WEATHER_LIST_COUNT>(NAN);
   std::array<float, WEATHER_LIST_COUNT> precipitation_ = filled_array<float, WEATHER_LIST_COUNT>(NAN);
+};
+
+// Number and select entities, and their input_number and input_select helpers.
+class InputStatusTracker : public EntityTracker<INPUT_LIST_COUNT> {
+ public:
+  InputStatusTracker() : EntityTracker(INPUT_LIST) {}
+
+  // A number's range, step and unit; a select's options.
+  void subscribe(int idx) {
+    const char *entity_id = this->entity_id(idx);
+    ha_track_state(entity_id, nullptr, this->state_[idx]);
+    if (this->is_select(idx)) {
+      ha_track_list(entity_id, "options", this->options_[idx]);
+      return;
+    }
+    ha_track_float(entity_id, "min", this->min_[idx]);
+    ha_track_float(entity_id, "max", this->max_[idx]);
+    ha_track_float(entity_id, "step", this->step_[idx]);
+    std::string *unit = &this->unit_[idx];
+    ha_subscribe(entity_id, "unit_of_measurement", [unit](esphome::StringRef state) {
+      if (!ha_state_missing(state)) {
+        unit->assign(state.c_str(), state.size());
+        normalize_unit_text(*unit);
+      }
+    });
+  }
+
+  bool is_select(int idx) const {
+    return in_range_(idx) && (entity_id_matches_domain(this->entity_id(idx), "select") ||
+                              entity_id_matches_domain(this->entity_id(idx), "input_select"));
+  }
+  const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
+  const std::string &options(int idx) const { return at_(this->options_, idx); }
+  const std::string &unit(int idx) const { return at_(this->unit_, idx); }
+  float min(int idx) const { return at_(this->min_, idx); }
+  float max(int idx) const { return at_(this->max_, idx); }
+  float step(int idx) const { return at_(this->step_, idx); }
+
+ protected:
+  std::array<std::string, INPUT_LIST_COUNT> state_{};
+  std::array<std::string, INPUT_LIST_COUNT> options_{};
+  std::array<std::string, INPUT_LIST_COUNT> unit_{};
+  std::array<float, INPUT_LIST_COUNT> min_ = filled_array<float, INPUT_LIST_COUNT>(NAN);
+  std::array<float, INPUT_LIST_COUNT> max_ = filled_array<float, INPUT_LIST_COUNT>(NAN);
+  std::array<float, INPUT_LIST_COUNT> step_ = filled_array<float, INPUT_LIST_COUNT>(NAN);
+};
+
+// Vacuums and lawn mowers. Only vacuums have fan speeds. Home Assistant has
+// deprecated the vacuum battery attributes in favour of a separate battery
+// sensor, so none is followed here (add that sensor as a favorite instead).
+class VacuumStatusTracker : public EntityTracker<VACUUM_LIST_COUNT> {
+ public:
+  VacuumStatusTracker() : EntityTracker(VACUUM_LIST) {}
+
+  void subscribe(int idx) {
+    const char *entity_id = this->entity_id(idx);
+    ha_track_state(entity_id, nullptr, this->state_[idx]);
+    if (this->is_mower(idx)) {
+      return;
+    }
+    ha_track_text(entity_id, "fan_speed", this->fan_speed_[idx]);
+    ha_track_list(entity_id, "fan_speed_list", this->fan_speed_list_[idx]);
+  }
+
+  bool is_mower(int idx) const { return in_range_(idx) && entity_id_matches_domain(this->entity_id(idx), "lawn_mower"); }
+  const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
+  const std::string &fan_speed(int idx) const { return at_(this->fan_speed_, idx); }
+  const std::string &fan_speed_list(int idx) const { return at_(this->fan_speed_list_, idx); }
+
+ protected:
+  std::array<std::string, VACUUM_LIST_COUNT> state_{};
+  std::array<std::string, VACUUM_LIST_COUNT> fan_speed_{};
+  std::array<std::string, VACUUM_LIST_COUNT> fan_speed_list_{};
+};
+
+// Timers: idle, active or paused. An active timer reports when it finishes;
+// a paused one how long it had left; an idle one its duration.
+class TimerStatusTracker : public EntityTracker<TIMER_LIST_COUNT> {
+ public:
+  TimerStatusTracker() : EntityTracker(TIMER_LIST) {}
+
+  void subscribe(int idx) {
+    const char *entity_id = this->entity_id(idx);
+    ha_track_state(entity_id, nullptr, this->state_[idx]);
+    ha_track_text(entity_id, "duration", this->duration_[idx]);
+    ha_track_text(entity_id, "remaining", this->remaining_[idx]);
+    ha_track_text(entity_id, "finishes_at", this->finishes_at_[idx]);
+  }
+
+  const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
+
+  // Seconds left, as of now_epoch (seconds since 1970, 0 when the clock isn't
+  // set); -1 when it isn't known yet.
+  int64_t seconds_left(int idx, int64_t now_epoch) const {
+    if (!in_range_(idx)) {
+      return -1;
+    }
+    const std::string &state = this->state_[idx];
+    int64_t seconds = 0;
+    if (state == "active" && now_epoch > 0) {
+      int64_t finishes = 0;
+      bool date_only = false;
+      if (parse_ha_timestamp(this->finishes_at_[idx], &finishes, &date_only) && !date_only) {
+        return finishes > now_epoch ? finishes - now_epoch : 0;
+      }
+    }
+    if (state != "idle" && parse_ha_duration(this->remaining_[idx], &seconds)) {
+      return seconds;
+    }
+    if (parse_ha_duration(this->duration_[idx], &seconds)) {
+      return seconds;
+    }
+    return -1;
+  }
+
+ protected:
+  std::array<std::string, TIMER_LIST_COUNT> state_{};
+  std::array<std::string, TIMER_LIST_COUNT> duration_{};
+  std::array<std::string, TIMER_LIST_COUNT> remaining_{};
+  std::array<std::string, TIMER_LIST_COUNT> finishes_at_{};
 };
 
 class NotificationFeedTracker {

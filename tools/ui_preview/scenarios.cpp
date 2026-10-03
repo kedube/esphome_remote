@@ -496,6 +496,117 @@ int main(int argc, char **argv) {
     ww.selected_setting_option = REMOTE_SETTING_WEATHER_WIND_SPEED;
     add("9e_weather_metric_wind", ww);
   }
+  {  // Entity types added later, and settings added to existing ones.
+    auto ib = base(REMOTE_MODE_SWITCHES, "HOUSE", "Guest Mode", "on", 0, 7);
+    add("a0_input_boolean", ib);
+    auto bt = base(REMOTE_MODE_AUTOMATION, "HOUSE", "TV Power", "ready", 1, 7);
+    bt.automation_kind = AUTOMATION_KIND_BUTTON;
+    add("a1_button", bt);
+    bt.hold_label = "HOLD TO PRESS";
+    bt.hold_progress = 60;
+    add("a2_button_hold", bt);
+    auto ph = base(REMOTE_MODE_SENSORS, "HOUSE", "Alex", "home", 6, 7);
+    ph.sensor_is_presence = true;
+    add("a3_person_home", ph);
+    auto pa = ph;
+    pa.selected_item_state = S("not_home");
+    add("a4_person_away", pa);
+    auto pz = ph;
+    pz.selected_item_state = S("Work");
+    add("a5_person_zone", pz);
+    auto nb = base(REMOTE_MODE_INPUTS, "HOUSE", "Speaker Bass", "4.0", 2, 7);
+    nb.input_value = 4;
+    nb.input_min = -10;
+    nb.input_max = 10;
+    nb.input_unit = S("dB");
+    nb.selected_setting_option = REMOTE_SETTING_INPUT_VALUE;
+    add("a6_number", nb);
+    auto sl = base(REMOTE_MODE_INPUTS, "HOUSE", "House Mode", "Movie Night", 3, 7);
+    sl.input_is_select = true;
+    sl.selected_setting_option = REMOTE_SETTING_INPUT_OPTION;
+    add("a7_select", sl);
+    auto vc = base(REMOTE_MODE_VACUUMS, "HOUSE", "Robot Vacuum", "cleaning", 4, 7);
+    vc.selected_setting_option = REMOTE_SETTING_VACUUM_ACTIONS;
+    vc.vacuum_fan_speed = S("standard");
+    add("a8_vacuum_cleaning", vc);
+    auto vd = vc;
+    vd.selected_item_state = S("docked");
+    vd.selected_setting_option = REMOTE_SETTING_VACUUM_FAN_SPEED;
+    vd.vacuum_fan_speed = S("max");
+    add("a9_vacuum_fan", vd);
+    auto mw = base(REMOTE_MODE_VACUUMS, "GARDEN", "Lawn Mower", "mowing", 0, 2);
+    mw.vacuum_is_mower = true;
+    mw.selected_setting_option = REMOTE_SETTING_VACUUM_ACTIONS;
+    add("aa_mower", mw);
+    auto ta = base(REMOTE_MODE_TIMERS, "KITCHEN", "Pasta Timer", "active", 6, 7);
+    ta.timer_seconds = 252;
+    add("ab_timer_active", ta);
+    auto tp = ta;
+    tp.selected_item_state = S("paused");
+    tp.timer_seconds = 3725;
+    add("ac_timer_paused", tp);
+    auto ti = ta;
+    ti.selected_item_state = S("idle");
+    ti.timer_seconds = 300;
+    add("ad_timer_idle", ti);
+    auto vo = base(REMOTE_MODE_COVERS, "HOUSE", "Garden Water", "open", 5, 7);
+    vo.cover_is_valve = true;
+    add("ae_valve_open", vo);
+    auto vp = vo;
+    vp.selected_item_state = S("closed");
+    vp.cover_has_position = true;
+    vp.selected_cover_position_pct = 0;
+    vp.selected_setting_option = REMOTE_SETTING_COVER_POSITION;
+    add("af_valve_closed", vp);
+    auto cs = base(REMOTE_MODE_COVERS, "GARAGE", "Garage Door", "closing", 0, 2);
+    cs.cover_stoppable = true;
+    add("ag_cover_stop", cs);
+    auto lw = base(REMOTE_MODE_LIGHTS, "OFFICE", "Desk Lamp", "on", 0, 4);
+    lw.selected_brightness_pct = 70;
+    lw.selected_setting_option = REMOTE_SETTING_LIGHT_WARMTH;
+    lw.light_color_temp_kelvin = 2700;
+    lw.light_min_kelvin = 2000;
+    lw.light_max_kelvin = 6500;
+    add("ah_light_warmth", lw);
+    auto cm = base(REMOTE_MODE_CLIMATE, "LOFT", "Hallway Thermostat", "heat", 0, 2);
+    cm.selected_climate_current_temp = 68;
+    cm.selected_climate_target_temp = 71;
+    cm.selected_climate_hvac_action = S("IDLE");
+    cm.selected_setting_option = REMOTE_SETTING_CLIMATE_STATE;
+    cm.climate_mode_count = 4;
+    add("ai_climate_mode", cm);
+    auto mm = base(REMOTE_MODE_MEDIA, "KITCHEN", "Kitchen Speaker", "playing", 1, 2);
+    mm.selected_media_title = S("Clair de Lune");
+    mm.selected_media_artist = S("Claude Debussy");
+    mm.media_muted = 1;
+    mm.selected_setting_option = REMOTE_SETTING_MEDIA_MUTE;
+    add("aj_media_mute", mm);
+    auto tm = base(REMOTE_MODE_MEDIA, "DEN", "Living Room TV", "on", 0, 2);
+    tm.selected_media_device_class = S("tv");
+    tm.selected_media_source = S("HDMI 1");
+    tm.media_muted = 1;
+    tm.selected_setting_option = REMOTE_SETTING_MEDIA_VOLUME;
+    tm.selected_media_volume_pct = 25;
+    add("ak_tv_muted", tm);
+
+    // Waking: the frame from before sleep, without its clock, while the
+    // remote connects (what boot_screen and update_display draw).
+    auto snap = base(REMOTE_MODE_LIGHTS, "OFFICE", "Desk Lamp", "on", 0, 4);
+    snap.selected_brightness_pct = 70;
+    snap.selected_setting_option = REMOTE_SETTING_LIGHT_DIMMER;
+    for (const char *status : {"WAITING FOR WI-FI\u2026", "CONNECTING\u2026", "SYNCING\u2026"}) {
+      std::string name = std::string("al_snapshot_") + (status[0] == 'W' ? "wifi" : status[0] == 'C' ? "api" : "sync");
+      list.push_back({name, [snap, status](SimDisplay &d, const RemoteUiFonts &fonts) {
+                        render_remote_ui(&d, fonts, snap);
+                        int clock_x = 0, clock_w = 0;
+                        remote_ui_header_clock_box(&clock_x, &clock_w);
+                        if (clock_w > 0) {
+                          d.filled_rectangle(clock_x, 0, clock_w, 9, display::COLOR_OFF);
+                        }
+                        render_snapshot_status(&d, fonts, status);
+                      }});
+    }
+  }
   {
     RemoteSystemScreenInfo info;
     info.version = "3.11";

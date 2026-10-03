@@ -1,4 +1,18 @@
 # Background runtime timers and periodic refresh behavior.
+
+# How long each wake takes to reach Home Assistant, for comparing settings
+# such as a fixed IP address (see settings-example.yaml) over time.
+sensor:
+  - platform: template
+    id: wake_connect_time
+    name: "Wake to Home Assistant"
+    unit_of_measurement: "ms"
+    device_class: duration
+    state_class: measurement
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: never
+
 interval:
   - interval: 500ms
     then:
@@ -23,6 +37,18 @@ interval:
                 then:
                   - script.execute: turn_off
           else:
+            # Dim the screen shortly before sleeping, as a warning; any button
+            # brings it back (reset_idle_timer).
+            - if:
+                condition:
+                  lambda: |-
+                    uint32_t idle_s = millis() / 1000 - static_cast<uint32_t>(id(last_active));
+                    return !id(idle_dimmed) && id(wake_button_press_started_at) == 0 &&
+                           idle_dim_due(idle_s, ${SLEEP_DURATION});
+                then:
+                  - lambda: |-
+                      id(idle_dimmed) = true;
+                      id(oled_display).set_contrast(0.0f);
             - lambda: |-
                 RemoteUiTimeoutState state;
                 state.last_brightness_interaction = &id(last_brightness_interaction);
@@ -89,6 +115,14 @@ interval:
                               - lambda: |-
                                   id(show_boot_screen) = false;
                                   id(updated_ui) = true;
+                                  // Keep the frame from before sleep up until the
+                                  // selected item has synced (see update_display).
+                                  if (oled_snapshot_valid()) {
+                                    id(snapshot_hold_until) = (millis() + SNAPSHOT_SYNC_HOLD_MS) | 1;
+                                  }
+                                  ESP_LOGI("remote", "Home Assistant connected %u ms after waking",
+                                           static_cast<unsigned>(millis()));
+                                  id(wake_connect_time).publish_state(millis());
             # A popup, a system page (powering off, rebooting) or the reboot hold
             # owns the panel: don't draw the boot or offline screens over it.
             - if:
@@ -136,6 +170,11 @@ interval:
                                                    id(selected_setting_detail).empty();
                                         then:
                                           - script.execute: sync_current_mode_status
+                                    # A running timer counts down on screen.
+                                    - lambda: |-
+                                        if (id(current_mode) == REMOTE_MODE_TIMERS && id(selected_item_state) == "active") {
+                                          id(updated_ui) = true;
+                                        }
                                     - if:
                                         condition:
                                           lambda: 'return id(updated_ui);'

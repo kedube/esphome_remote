@@ -91,4 +91,15 @@ font:
       "\ue2c1", # cloud_off
       "\ue9b2", # home
       "\ue000", # error
+      "\ue224", # valve
+      "\ue7fd", # person
+      "\uf150", # location_away
+      "\ue913", # touch_app
+      "\ue429", # tune
+      "\ue896", # list
+      "\uefc5", # vacuum
+      "\uf205", # grass
+      "\ue425", # timer
+      "\uf4bb", # timer_pause
+      "\ue04f", # volume_off
     ]

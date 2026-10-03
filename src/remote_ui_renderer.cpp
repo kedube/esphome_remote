@@ -90,6 +90,17 @@ const char *const RESTART = "\uf053";
 const char *const CLOUD_OFF = "\ue2c1";
 const char *const HOME = "\ue9b2";
 const char *const ALERT = "\ue000";  // error: a jammed lock
+const char *const VALVE = "\ue224";
+const char *const PERSON = "\ue7fd";
+const char *const PERSON_AWAY = "\uf150";  // location_away
+const char *const TOUCH = "\ue913";        // touch_app: a button
+const char *const TUNE = "\ue429";         // a number
+const char *const LIST = "\ue896";         // a select
+const char *const VACUUM = "\uefc5";
+const char *const MOWER = "\uf205";        // grass
+const char *const TIMER = "\ue425";
+const char *const TIMER_PAUSE = "\uf4bb";
+const char *const VOLUME_OFF = "\ue04f";
 }  // namespace icon
 
 const std::string &str(const std::string *value) {
@@ -341,6 +352,10 @@ void draw_signal_bars(Display *it, int x, int bottom, int rssi) {
 
 // ---- Header ----------------------------------------------------------------------
 
+// Where draw_header last put the clock, for remote_ui_header_clock_box().
+int last_clock_x = 0;
+int last_clock_w = 0;
+
 void draw_header(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
   // Right: battery, then the clock. Fixed positions so they never jump around.
   int right = SCREEN_W;
@@ -391,6 +406,8 @@ void draw_header(Display *it, const RemoteUiFonts &f, const RemoteRenderContext 
   if (clock_w > 0) {
     text(it, f.tiny, right, 8, TextAlign::BASELINE_RIGHT, clock);
   }
+  last_clock_x = right - clock_w - 1;
+  last_clock_w = clock_w > 0 ? clock_w + 2 : 0;
 }
 
 void draw_name(Display *it, const RemoteUiFonts &f, const char *name) {
@@ -661,6 +678,12 @@ void draw_setting_footer(Display *it, const RemoteUiFonts &f, const RemoteRender
     case REMOTE_SETTING_LIGHT_EFFECT:
       footer_options(it, f, "EFFECT", label(pending_or(ctx.light_effect), upper, sizeof(upper), "NONE"));
       break;
+    case REMOTE_SETTING_LIGHT_WARMTH:
+      // The meter fills as the light gets warmer, as Plus makes it.
+      snprintf(value, sizeof(value), "%.0fK", ctx.light_color_temp_kelvin);
+      footer_range(it, f, "WARMTH", warmth_percent(ctx.light_color_temp_kelvin, ctx.light_min_kelvin, ctx.light_max_kelvin),
+                   or_dash(ctx.light_color_temp_kelvin, value));
+      break;
     case REMOTE_SETTING_CLIMATE_LOW:
     case REMOTE_SETTING_CLIMATE_HIGH: {
       bool high = option == REMOTE_SETTING_CLIMATE_HIGH;
@@ -698,7 +721,12 @@ void draw_setting_footer(Display *it, const RemoteUiFonts &f, const RemoteRender
       break;
     case REMOTE_SETTING_CLIMATE_STATE:
     case REMOTE_SETTING_CLIMATE_HVAC_MODE:
-      footer_info(it, f, "MODE", label(str(ctx.selected_item_state), upper, sizeof(upper), "SYNCING"));
+      // A list to step through once the thermostat has said which modes it has.
+      if (ctx.climate_mode_count > 1) {
+        footer_options(it, f, "MODE", label(str(ctx.selected_item_state), upper, sizeof(upper), "SYNCING"));
+      } else {
+        footer_info(it, f, "MODE", label(str(ctx.selected_item_state), upper, sizeof(upper), "SYNCING"));
+      }
       break;
     case REMOTE_SETTING_HUMIDIFIER_HUMIDITY:
       snprintf(value, sizeof(value), "%.0f%%", ctx.selected_humidifier_target_humidity);
@@ -762,6 +790,30 @@ void draw_setting_footer(Display *it, const RemoteUiFonts &f, const RemoteRender
       break;
     case REMOTE_SETTING_MEDIA_STATE:
       footer_info(it, f, "STATE", label(str(ctx.selected_item_state), upper, sizeof(upper), "SYNCING"));
+      break;
+    case REMOTE_SETTING_MEDIA_MUTE:
+      footer_toggle(it, f, "MUTE", detail.empty() ? ctx.media_muted == 1 : detail == "ON");
+      break;
+    case REMOTE_SETTING_INPUT_VALUE: {
+      char number[24];
+      format_ha_number(ctx.input_value, number, sizeof(number));
+      const std::string &unit = str(ctx.input_unit);
+      snprintf(value, sizeof(value), "%s%s%s", number, unit.empty() ? "" : " ", unit.c_str());
+      int percent = 0;
+      if (std::isfinite(ctx.input_value) && std::isfinite(ctx.input_min) && std::isfinite(ctx.input_max) &&
+          ctx.input_max > ctx.input_min) {
+        percent = meter_percent((ctx.input_value - ctx.input_min) * 100.0f / (ctx.input_max - ctx.input_min));
+      }
+      footer_range(it, f, "VALUE", percent, or_dash(ctx.input_value, value));
+      break;
+    }
+    case REMOTE_SETTING_INPUT_OPTION:
+      // A select's options are names, not state keys: kept as written, upper-cased.
+      str_upper_to_buffer(str(ctx.selected_item_state), upper, sizeof(upper));
+      footer_options(it, f, "OPTION", upper);
+      break;
+    case REMOTE_SETTING_VACUUM_FAN_SPEED:
+      footer_options(it, f, "FAN", label(pending_or(ctx.vacuum_fan_speed), upper, sizeof(upper)));
       break;
     case REMOTE_SETTING_ALARM_STATE: {
       // Only the arm modes this panel supports.
@@ -1057,8 +1109,14 @@ void draw_cover(Display *it, int position, bool known) {
 void render_cover(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
   const std::string &state = str(ctx.selected_item_state);
   bool known = ctx.cover_has_position;
-  int position = known ? ctx.selected_cover_position_pct : (state == "open" ? 100 : 0);
-  draw_cover(it, position, known || state == "open" || state == "closed");
+  if (ctx.cover_is_valve) {
+    // A valve is lit while any water or gas can flow.
+    bool open = state == "open" || state == "opening" || (known && state != "closed" && ctx.selected_cover_position_pct > 0);
+    draw_badge(it, f, icon::VALVE, open && !ha_state_missing(state));
+  } else {
+    int position = known ? ctx.selected_cover_position_pct : (state == "open" ? 100 : 0);
+    draw_cover(it, position, known || state == "open" || state == "closed");
+  }
   char word[16];
   label(state, word, sizeof(word), "SYNCING");
   if (known && !ha_state_missing(state)) {
@@ -1074,7 +1132,10 @@ void render_cover(Display *it, const RemoteUiFonts &f, const RemoteRenderContext
                           fresh_feedback(ctx, ctx.last_cover_feedback, ctx.last_cover_interaction, buf, sizeof(buf)))) {
     return;
   }
-  if (ctx.selected_setting_option != REMOTE_SETTING_NONE) {
+  // While it moves either button stops it.
+  if (ctx.cover_stoppable) {
+    footer_hints(it, f, "STOP", "STOP", false);
+  } else if (ctx.selected_setting_option != REMOTE_SETTING_NONE) {
     draw_setting_footer(it, f, ctx);
   } else {
     footer_hints(it, f, "CLOSE", "OPEN", true);
@@ -1113,8 +1174,14 @@ void render_media(Display *it, const RemoteUiFonts &f, const RemoteRenderContext
     if (on && !str(ctx.selected_media_source).empty()) {
       hero_caption(it, f, 33, label(*ctx.selected_media_source, source, sizeof(source)), 84);
     }
+    if (on && ctx.media_muted == 1) {
+      hero_caption(it, f, HERO_BASELINE, "MUTED", 84);
+    }
   } else {
-    const char *badge = state == "playing" ? icon::PLAY : state == "paused" ? icon::PAUSE : icon::SPEAKER;
+    const char *badge = ctx.media_muted == 1 ? icon::VOLUME_OFF
+                        : state == "playing" ? icon::PLAY
+                        : state == "paused"  ? icon::PAUSE
+                                             : icon::SPEAKER;
     draw_badge(it, f, badge, state == "playing");
     const std::string &title = str(ctx.selected_media_title);
     const std::string &artist = str(ctx.selected_media_artist);
@@ -1157,6 +1224,22 @@ void hero_word_with_unit(Display *it, const RemoteUiFonts &f, const char *value,
   text(it, f.title, HERO_X + text_width(f.title, shown), HERO_WORD_BASELINE, TextAlign::BASELINE_LEFT, unit_text);
 }
 
+// A number with its unit: big when it fits beside the unit, else in the title
+// font. Rounded: Home Assistant keeps 15 significant digits of a float, so
+// "23.6000003814697" is 23.6.
+void hero_number_with_unit(Display *it, const RemoteUiFonts &f, double number, const char *unit) {
+  char value[32];
+  format_ha_number(number, value, sizeof(value));
+  int unit_w = text_width(f.small, unit);
+  int room = SCREEN_W - HERO_X - (unit_w > 0 ? unit_w + 2 : 0);
+  if (has_glyphs(f.large, value) && text_width(f.large, value) <= room) {
+    int right = hero_value(it, f, value);
+    text(it, f.small, right + 2, HERO_BASELINE, TextAlign::BASELINE_LEFT, unit);
+  } else {
+    hero_word_with_unit(it, f, value, unit);
+  }
+}
+
 // An enum sensor reports a key such as "not_charging": shown as words.
 bool is_state_key(const std::string &state) {
   for (char c : state) {
@@ -1167,7 +1250,21 @@ bool is_state_key(const std::string &state) {
   return !state.empty();
 }
 
+// A person or device tracker: HOME, AWAY, or the zone it is in.
+void render_presence(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  bool home = state == "home";
+  draw_badge(it, f, home || ha_state_missing(state) ? icon::PERSON : icon::PERSON_AWAY, home);
+  const char *word = presence_state_word(state);
+  hero_word(it, f, ha_state_missing(state) ? missing_word(state) : word != nullptr ? word : state.c_str());
+  draw_footer_overlay(it, f, ctx, nullptr);
+}
+
 void render_sensor(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  if (ctx.sensor_is_presence) {
+    render_presence(it, f, ctx);
+    return;
+  }
   const std::string &state = str(ctx.selected_item_state);
   const std::string &unit = str(ctx.selected_sensor_unit);
   bool binary = state == "on" || state == "off";
@@ -1178,18 +1275,7 @@ void render_sensor(Display *it, const RemoteUiFonts &f, const RemoteRenderContex
   } else if (binary) {
     hero_value(it, f, state == "on" ? "ON" : "OFF");
   } else if (parse_ha_number(state, &number)) {
-    // Rounded: Home Assistant keeps 15 significant digits of a float, so
-    // "23.6000003814697" is 23.6. Numbers go big when they fit beside the unit.
-    char value[32];
-    format_ha_number(number, value, sizeof(value));
-    int unit_w = text_width(f.small, unit.c_str());
-    int room = SCREEN_W - HERO_X - (unit_w > 0 ? unit_w + 2 : 0);
-    if (has_glyphs(f.large, value) && text_width(f.large, value) <= room) {
-      int right = hero_value(it, f, value);
-      text(it, f.small, right + 2, HERO_BASELINE, TextAlign::BASELINE_LEFT, unit.c_str());
-    } else {
-      hero_word_with_unit(it, f, value, unit.c_str());
-    }
+    hero_number_with_unit(it, f, number, unit.c_str());
   } else {
     char word[48];
     hero_word_with_unit(it, f, is_state_key(state) ? label(state, word, sizeof(word)) : state.c_str(), unit.c_str());
@@ -1206,6 +1292,9 @@ void render_automation(Display *it, const RemoteUiFonts &f, const RemoteRenderCo
   } else if (ctx.automation_kind == AUTOMATION_KIND_SCENE) {
     glyph = icon::SCENE;
     kind = "SCENE";
+  } else if (ctx.automation_kind == AUTOMATION_KIND_BUTTON) {
+    glyph = icon::TOUCH;
+    kind = "BUTTON";
   }
   const std::string &state = str(ctx.selected_item_state);
   bool running = state == "on" && ctx.automation_kind == AUTOMATION_KIND_SCRIPT;
@@ -1224,7 +1313,73 @@ void render_automation(Display *it, const RemoteUiFonts &f, const RemoteRenderCo
                                          sizeof(buf)))) {
     return;
   }
-  footer_hints(it, f, nullptr, "RUN", true);
+  footer_hints(it, f, nullptr, ctx.automation_kind == AUTOMATION_KIND_BUTTON ? "PRESS" : "RUN", true);
+}
+
+// Number and select entities: the value (with its unit) or the option, and
+// the footer that Plus and Minus step.
+void render_input(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  draw_badge(it, f, ctx.input_is_select ? icon::LIST : icon::TUNE, false);
+  if (ha_state_missing(state)) {
+    hero_word(it, f, missing_word(state));
+  } else if (ctx.input_is_select) {
+    char option[48];
+    str_upper_to_buffer(state, option, sizeof(option));
+    hero_word(it, f, option);
+  } else if (std::isfinite(ctx.input_value)) {
+    hero_number_with_unit(it, f, ctx.input_value, str(ctx.input_unit).c_str());
+  } else {
+    hero_word(it, f, state.c_str());
+  }
+  if (draw_footer_overlay(it, f, ctx, nullptr)) {
+    return;
+  }
+  draw_setting_footer(it, f, ctx);
+}
+
+// Vacuums and lawn mowers: the badge lights while one is at work. The footer
+// offers start or pause and docking, or the fan speed once Settings picks it.
+void render_vacuum(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  bool working = vacuum_state_working(state);
+  draw_badge(it, f, ctx.vacuum_is_mower ? icon::MOWER : icon::VACUUM, working);
+  char word[24];
+  hero_word(it, f, ha_state_missing(state) ? missing_word(state) : label(state, word, sizeof(word)));
+  if (draw_footer_overlay(it, f, ctx, nullptr)) {
+    return;
+  }
+  if (ctx.selected_setting_option == REMOTE_SETTING_VACUUM_FAN_SPEED) {
+    draw_setting_footer(it, f, ctx);
+  } else {
+    footer_hints(it, f, "DOCK", working ? "PAUSE" : "START", false);
+  }
+}
+
+// Timers count down on screen between Home Assistant's updates.
+void render_timer(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  bool active = state == "active";
+  bool paused = state == "paused";
+  draw_badge(it, f, paused ? icon::TIMER_PAUSE : icon::TIMER, active);
+  char word[16];
+  if (ha_state_missing(state)) {
+    hero_word(it, f, missing_word(state));
+  } else if (ctx.timer_seconds < 0) {
+    hero_word(it, f, label(state, word, sizeof(word)));
+  } else {
+    char countdown[24];
+    format_countdown(ctx.timer_seconds, countdown, sizeof(countdown));
+    int right = hero_value(it, f, countdown);
+    label(active && ctx.timer_seconds == 0 ? std::string("done") : state, word, sizeof(word));
+    if (text_width(f.tiny, word) <= SCREEN_W - right - 4) {
+      hero_caption(it, f, 33, word, right + 4);
+    }
+  }
+  if (draw_footer_overlay(it, f, ctx, nullptr)) {
+    return;
+  }
+  footer_hints(it, f, active || paused ? "CANCEL" : nullptr, active ? "PAUSE" : "START", false);
 }
 
 void render_alarm(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
@@ -1664,11 +1819,29 @@ void render_remote_ui(display::Display *it, const RemoteUiFonts &fonts, const Re
     case REMOTE_MODE_WEATHER:
       render_weather(it, fonts, ctx);
       break;
+    case REMOTE_MODE_INPUTS:
+      render_input(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_VACUUMS:
+      render_vacuum(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_TIMERS:
+      render_timer(it, fonts, ctx);
+      break;
     case REMOTE_MODE_INFO:
     default:
       render_info(it, fonts, ctx);
       break;
   }
+}
+
+void remote_ui_header_clock_box(int *x, int *width) {
+  *x = last_clock_x;
+  *width = last_clock_w;
+}
+
+void render_snapshot_status(display::Display *it, const RemoteUiFonts &fonts, const char *status) {
+  footer_toast(it, fonts, status);
 }
 
 void render_system_screen(display::Display *it, const RemoteUiFonts &fonts, RemoteSystemScreen screen,

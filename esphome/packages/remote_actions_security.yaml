@@ -357,8 +357,9 @@ script:
             id(selected_cover_position_pct) = 100;
           }
           id(updated_ui) = true;
+      # cover.open_cover, or valve.open_valve.
       - homeassistant.action:
-          action: cover.open_cover
+          action: !lambda 'return cover_action_for_index(cover_index, "open");'
           data:
             entity_id: !lambda 'return std::string(mode_item_entity_cstr(REMOTE_MODE_COVERS, cover_index));'
           on_error:
@@ -385,7 +386,7 @@ script:
           opening: false
           start_position: !lambda 'return selected_cover_position(cover_index);'
       - homeassistant.action:
-          action: cover.close_cover
+          action: !lambda 'return cover_action_for_index(cover_index, "close");'
           data:
             entity_id: !lambda 'return std::string(mode_item_entity_cstr(REMOTE_MODE_COVERS, cover_index));'
           on_error:
@@ -397,6 +398,37 @@ script:
                   - script.execute:
                       id: set_cover_feedback
                       feedback: "CLOSE FAILED"
+
+  # Square or Circle while a cover or valve with the stop feature moves. No
+  # hold: stopping is always safe. A move still being checked, or a position
+  # still waiting to go out, would undo it.
+  - id: stop_selected_cover
+    mode: queued
+    parameters:
+      cover_index: int
+    then:
+      - script.stop: verify_selected_cover_result
+      - script.stop: send_setting_value
+      - lambda: |-
+          id(cover_verification_complete) = true;
+          // Show where Home Assistant says it stopped as soon as it says so.
+          clear_local_change();
+          id(last_cover_position_interaction) = 0;
+      - script.execute:
+          id: set_cover_feedback
+          feedback: "STOPPED"
+      - homeassistant.action:
+          action: !lambda 'return cover_action_for_index(cover_index, "stop");'
+          data:
+            entity_id: !lambda 'return std::string(mode_item_entity_cstr(REMOTE_MODE_COVERS, cover_index));'
+          on_error:
+            - if:
+                condition:
+                  lambda: 'return id(current_mode) == REMOTE_MODE_COVERS && id(selected_cover_index) == cover_index;'
+                then:
+                  - script.execute:
+                      id: set_cover_feedback
+                      feedback: "STOP FAILED"
 
   - id: increase_cover_position
     mode: queued
@@ -410,11 +442,12 @@ script:
           id(last_cover_position_interaction) = millis();
           note_local_change();
           id(updated_ui) = true;
-      - homeassistant.service:
-          service: cover.set_cover_position
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-            position: !lambda 'return id(selected_cover_position_pct);'
+      - script.execute:
+          id: send_setting_value
+          kind: !lambda 'return VALUE_SEND_COVER_POSITION;'
+          entity: !lambda 'return id(selected_item_entity);'
+          value: !lambda 'return id(selected_cover_position_pct);'
+          value2: !lambda 'return NAN;'
       - script.execute: update_display
 
   - id: decrease_cover_position
@@ -424,10 +457,12 @@ script:
           condition:
             lambda: 'return id(selected_cover_position_pct) <= 10;'
           then:
-            - homeassistant.service:
-                service: cover.close_cover
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
+            - script.execute:
+                id: send_setting_value
+                kind: !lambda 'return VALUE_SEND_COVER_POSITION;'
+                entity: !lambda 'return id(selected_item_entity);'
+                value: !lambda 'return 0;'
+                value2: !lambda 'return NAN;'
             - lambda: |-
                 id(selected_cover_position_pct) = 0;
                 id(selected_item_state) = "closed";
@@ -444,11 +479,12 @@ script:
                 id(last_cover_position_interaction) = millis();
                 note_local_change();
                 id(updated_ui) = true;
-            - homeassistant.service:
-                service: cover.set_cover_position
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  position: !lambda 'return id(selected_cover_position_pct);'
+            - script.execute:
+                id: send_setting_value
+                kind: !lambda 'return VALUE_SEND_COVER_POSITION;'
+                entity: !lambda 'return id(selected_item_entity);'
+                value: !lambda 'return id(selected_cover_position_pct);'
+                value2: !lambda 'return NAN;'
             - script.execute: update_display
 
   - id: increase_cover_tilt
@@ -471,11 +507,12 @@ script:
           id(selected_setting_detail) = buffer;
           note_local_change();
           id(updated_ui) = true;
-      - homeassistant.service:
-          service: cover.set_cover_tilt_position
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-            tilt_position: !lambda 'return id(pending_cover_tilt_pct);'
+      - script.execute:
+          id: send_setting_value
+          kind: !lambda 'return VALUE_SEND_COVER_TILT;'
+          entity: !lambda 'return id(selected_item_entity);'
+          value: !lambda 'return id(pending_cover_tilt_pct);'
+          value2: !lambda 'return NAN;'
       - script.execute: update_display
 
   - id: decrease_cover_tilt
@@ -498,9 +535,10 @@ script:
           id(selected_setting_detail) = buffer;
           note_local_change();
           id(updated_ui) = true;
-      - homeassistant.service:
-          service: cover.set_cover_tilt_position
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-            tilt_position: !lambda 'return id(pending_cover_tilt_pct);'
+      - script.execute:
+          id: send_setting_value
+          kind: !lambda 'return VALUE_SEND_COVER_TILT;'
+          entity: !lambda 'return id(selected_item_entity);'
+          value: !lambda 'return id(pending_cover_tilt_pct);'
+          value2: !lambda 'return NAN;'
       - script.execute: update_display

@@ -65,9 +65,13 @@ struct RemoteRenderContext {
   const std::string *selected_item_name = nullptr;
   const std::string *selected_item_state = nullptr;
 
-  // Lights.
+  // Lights. The colour temperature is the one just sent while it is fresh,
+  // otherwise the light's; NAN when it has none (off, or in a colour mode).
   int selected_brightness_pct = 0;
   const std::string *light_effect = nullptr;
+  float light_color_temp_kelvin = NAN;
+  float light_min_kelvin = NAN;
+  float light_max_kelvin = NAN;
 
   // Switches.
   const std::string *last_switch_feedback = nullptr;
@@ -85,6 +89,7 @@ struct RemoteRenderContext {
   int climate_target_focus = 0;  // 0 none, 1 low/single, 2 high
   float climate_target_focus_value = NAN;
   uint32_t last_climate_target_focus_interaction = 0;
+  int climate_mode_count = 0;  // HVAC modes offered: MODE can be changed when there are two or more
 
   // Water heaters.
   float selected_water_heater_target_temp = NAN;
@@ -103,10 +108,12 @@ struct RemoteRenderContext {
   const std::string *fan_direction = nullptr;
   const std::string *fan_preset = nullptr;
 
-  // Covers.
+  // Covers and valves.
   int selected_cover_position_pct = 0;
   bool cover_has_position = false;
   int cover_tilt_pct = -1;
+  bool cover_is_valve = false;
+  bool cover_stoppable = false;  // moving, and Square and Circle stop it (see selected_cover_stoppable)
   const std::string *last_cover_feedback = nullptr;
   uint32_t last_cover_interaction = 0;
 
@@ -125,9 +132,11 @@ struct RemoteRenderContext {
   const std::string *selected_media_sound_mode = nullptr;
   const std::string *last_media_power_feedback = nullptr;
   uint32_t last_media_power_interaction = 0;
+  int media_muted = -1;  // -1 not reported, 0 or 1
 
   // Sensors.
   const std::string *selected_sensor_unit = nullptr;
+  bool sensor_is_presence = false;  // a person or device tracker
 
   // Automations, scripts and scenes.
   AutomationKind automation_kind = AUTOMATION_KIND_SCRIPT;
@@ -139,6 +148,22 @@ struct RemoteRenderContext {
   int alarm_supported_features = -1;
   const std::string *last_alarm_feedback = nullptr;
   uint32_t last_alarm_interaction = 0;
+
+  // Number and select entities. The selected item state holds a select's
+  // option; a number's value is the one just sent while it is fresh,
+  // otherwise the entity's.
+  bool input_is_select = false;
+  float input_value = NAN;
+  float input_min = NAN;
+  float input_max = NAN;
+  const std::string *input_unit = nullptr;
+
+  // Vacuums and lawn mowers.
+  bool vacuum_is_mower = false;
+  const std::string *vacuum_fan_speed = nullptr;
+
+  // Timers: seconds left (active or paused) or the duration (idle); -1 unknown.
+  int64_t timer_seconds = -1;
 
   // Notifications (the message is the selected item state).
   uint32_t last_notification_dismiss_interaction = 0;
@@ -180,6 +205,14 @@ struct RemoteRenderContext {
 };
 
 void render_remote_ui(display::Display *it, const RemoteUiFonts &fonts, const RemoteRenderContext &ctx);
+
+// Where the last render_remote_ui drew the clock in the header: its left edge
+// and width (0 when there was no clock).
+void remote_ui_header_clock_box(int *x, int *width);
+
+// The footer for a frame kept from before sleep while the remote reconnects,
+// saying what it is waiting for. Draws over the footer only.
+void render_snapshot_status(display::Display *it, const RemoteUiFonts &fonts, const char *status);
 
 enum RemoteSystemScreen {
   REMOTE_SCREEN_CONNECTING_WIFI,

@@ -1,6 +1,9 @@
 #pragma once
 
+#include <ctime>
+
 #include "entity_trackers.h"
+#include "remote_ui_runtime.h"
 
 inline LightStatusTracker light_status_tracker_storage;
 inline SwitchStatusTracker switch_status_tracker_storage(SWITCH_LIST);
@@ -17,6 +20,9 @@ inline AlarmStatusTracker alarm_status_tracker_storage;
 inline NotificationFeedTracker notification_feed_tracker_storage;
 inline WeatherStatusTracker weather_status_tracker_storage;
 inline SunStateTracker sun_state_tracker_storage;
+inline InputStatusTracker input_status_tracker_storage;
+inline VacuumStatusTracker vacuum_status_tracker_storage;
+inline TimerStatusTracker timer_status_tracker_storage;
 inline bool remote_status_trackers_initialized = false;
 
 // Order in which entities announce their subscriptions. Home Assistant answers
@@ -104,6 +110,9 @@ inline void ensure_remote_status_trackers(const TrackerSubscriptionOrder &order 
       notification_feed_tracker_storage.subscribe();
     }
     subscribe_tracker_rank(weather_status_tracker_storage, order, rank);
+    subscribe_tracker_rank(input_status_tracker_storage, order, rank);
+    subscribe_tracker_rank(vacuum_status_tracker_storage, order, rank);
+    subscribe_tracker_rank(timer_status_tracker_storage, order, rank);
   }
   if (WEATHER_LIST_COUNT > 0) {
     sun_state_tracker_storage.subscribe();
@@ -146,6 +155,26 @@ inline const std::string &selected_light_effect_list(int idx) {
 inline int selected_light_dimmable(int idx) {
   ensure_remote_status_trackers();
   return light_status_tracker_storage.dimmable(idx);
+}
+
+inline bool selected_light_supports_color_temp(int idx) {
+  ensure_remote_status_trackers();
+  return light_status_tracker_storage.supports_color_temp(idx);
+}
+
+inline float selected_light_color_temp(int idx) {
+  ensure_remote_status_trackers();
+  return light_status_tracker_storage.color_temp_kelvin(idx);
+}
+
+inline float selected_light_min_kelvin(int idx) {
+  ensure_remote_status_trackers();
+  return light_status_tracker_storage.min_color_temp_kelvin(idx);
+}
+
+inline float selected_light_max_kelvin(int idx) {
+  ensure_remote_status_trackers();
+  return light_status_tracker_storage.max_color_temp_kelvin(idx);
 }
 
 inline const std::string &selected_switch_state(int idx) {
@@ -365,6 +394,12 @@ inline float clamp_climate_humidity(int idx, float target) {
   return target < low ? low : target > high ? high : target;
 }
 
+// How many HVAC modes the thermostat offers; 0 until they have synced.
+inline int climate_hvac_mode_count(int idx) {
+  ensure_remote_status_trackers();
+  return delimited_option_count(climate_status_tracker_storage.hvac_modes(idx));
+}
+
 // Whether the thermostat can be switched off: hvac_modes includes "off", or
 // hasn't synced yet.
 inline bool climate_supports_off(int idx) {
@@ -486,6 +521,31 @@ inline float selected_cover_tilt(int idx) {
   return cover_status_tracker_storage.tilt(idx);
 }
 
+inline bool selected_cover_supports_stop(int idx) {
+  ensure_remote_status_trackers();
+  return cover_status_tracker_storage.supports_stop(idx);
+}
+
+// Square and Circle stop the cover or valve straight away: it has the stop
+// feature and Home Assistant reports it moving. Not within the few seconds
+// after Plus or Minus moved it to a position, while the footer still shows
+// that position and the remote shows the move it asked for rather than what
+// Home Assistant reports.
+inline bool selected_cover_stoppable(int idx) {
+  return selected_cover_supports_stop(idx) && cover_state_moving(selected_cover_state(idx)) &&
+         !esphome::local_change_hold_active(millis());
+}
+
+inline bool selected_cover_is_valve(int idx) {
+  return cover_status_tracker_storage.is_valve(idx);
+}
+
+// The service that does verb ("open", "close", "stop") to this cover or valve:
+// cover.open_cover, valve.stop_valve.
+inline std::string cover_action_for_index(int idx, const char *verb) {
+  return cover_domain_action(indexed_entity_id_cstr(COVER_LIST, COVER_LIST_COUNT, idx), verb);
+}
+
 inline const std::string &selected_media_state(int idx) {
   ensure_remote_status_trackers();
   return media_status_tracker_storage.state(idx);
@@ -541,6 +601,16 @@ inline const std::string &selected_media_sound_mode_list(int idx) {
   return media_status_tracker_storage.sound_mode_list(idx);
 }
 
+// -1 for a player that doesn't report mute (or is off), 0 or 1.
+inline int media_muted_for_index(int idx) {
+  ensure_remote_status_trackers();
+  const std::string &muted = media_status_tracker_storage.muted(idx);
+  if (muted.empty() || ha_state_missing(muted)) {
+    return -1;
+  }
+  return muted == "True" || muted == "true" || muted == "on" ? 1 : 0;
+}
+
 inline const std::string &sensor_state_for_index(int idx) {
   ensure_remote_status_trackers();
   return sensor_status_tracker_storage.state(idx);
@@ -549,6 +619,10 @@ inline const std::string &sensor_state_for_index(int idx) {
 inline const std::string &sensor_unit_for_index(int idx) {
   ensure_remote_status_trackers();
   return sensor_status_tracker_storage.unit(idx);
+}
+
+inline bool sensor_is_presence(int idx) {
+  return sensor_status_tracker_storage.is_presence(idx);
 }
 
 inline const std::string &automation_state_for_index(int idx) {
@@ -785,4 +859,95 @@ inline float weather_apparent_temperature_for_index(int idx) {
 inline float weather_precipitation_for_index(int idx) {
   ensure_remote_status_trackers();
   return weather_status_tracker_storage.precipitation(idx);
+}
+
+inline const std::string &input_state_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return input_status_tracker_storage.state(idx);
+}
+
+inline bool input_is_select(int idx) {
+  return input_status_tracker_storage.is_select(idx);
+}
+
+inline const std::string &input_options_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return input_status_tracker_storage.options(idx);
+}
+
+inline const std::string &input_unit_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return input_status_tracker_storage.unit(idx);
+}
+
+inline float input_min_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return input_status_tracker_storage.min(idx);
+}
+
+inline float input_max_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return input_status_tracker_storage.max(idx);
+}
+
+inline float input_step_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return input_status_tracker_storage.step(idx);
+}
+
+// A number's value, NAN until it has synced (or for a select).
+inline float input_value_for_index(int idx) {
+  double value = 0;
+  return !input_is_select(idx) && parse_ha_number(input_state_for_index(idx), &value) ? static_cast<float>(value) : NAN;
+}
+
+inline const std::string &vacuum_state_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return vacuum_status_tracker_storage.state(idx);
+}
+
+inline bool vacuum_is_mower(int idx) {
+  return vacuum_status_tracker_storage.is_mower(idx);
+}
+
+inline const std::string &vacuum_fan_speed_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return vacuum_status_tracker_storage.fan_speed(idx);
+}
+
+inline const std::string &vacuum_fan_speed_list_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return vacuum_status_tracker_storage.fan_speed_list(idx);
+}
+
+inline const std::string &timer_state_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return timer_status_tracker_storage.state(idx);
+}
+
+// Seconds left on the timer by the clock Home Assistant sets; -1 until known.
+inline int64_t timer_seconds_left_for_index(int idx) {
+  ensure_remote_status_trackers();
+  time_t now = ::time(nullptr);
+  return timer_status_tracker_storage.seconds_left(idx, now > 1600000000 ? static_cast<int64_t>(now) : 0);
+}
+
+// What the button prompts need about the selected entity of mode. Takes the
+// selected index of each mode that has any.
+inline RemoteEntityTraits selected_entity_traits(RemoteMode mode, int alarm_idx, int cover_idx, int automation_idx) {
+  RemoteEntityTraits traits;
+  switch (mode) {
+    case REMOTE_MODE_ALARMS:
+      traits.alarm_features = alarm_supported_features_for_index(alarm_idx);
+      break;
+    case REMOTE_MODE_COVERS:
+      traits.cover_stoppable = selected_cover_stoppable(cover_idx);
+      break;
+    case REMOTE_MODE_AUTOMATION:
+      traits.automation_kind = automation_kind(automation_idx);
+      break;
+    default:
+      break;
+  }
+  return traits;
 }

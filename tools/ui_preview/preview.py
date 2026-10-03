@@ -64,6 +64,11 @@ README_SHOTS = [
     "34_info_time",
     "35_info_wifi",
     "45_sys_hold_reboot",
+    "a8_vacuum_cleaning",
+    "ab_timer_active",
+    "a6_number",
+    "a7_select",
+    "al_snapshot_api",
 ]
 
 # Compiler flags for --stress. float-cast-overflow (which catches NaN cast to

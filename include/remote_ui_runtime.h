@@ -39,6 +39,78 @@ inline bool cover_tilt_sent_recently(uint32_t now, int cover_index) {
          now - cover_tilt_sent_at < LOCAL_CHANGE_HOLD_MS;
 }
 
+// Held Previous, Next, Minus and Plus repeat their step: the first repeat
+// after REPEAT_DELAY_MS, then one every REPEAT_INTERVAL_MS (values) or
+// REPEAT_NAVIGATION_INTERVAL_MS (moving through a list).
+inline constexpr uint32_t REPEAT_DELAY_MS = 400;
+inline constexpr uint32_t REPEAT_INTERVAL_MS = 200;
+inline constexpr uint32_t REPEAT_NAVIGATION_INTERVAL_MS = 150;
+
+// True while a held Plus or Minus repeats. send_setting_value then waits, so
+// Home Assistant gets the value the hold ends on rather than every step on the
+// way there.
+inline bool remote_repeat_active = false;
+
+// The buttons that repeat (button_repeat's parameter), and the one repeating.
+enum RemoteRepeatButton {
+  REMOTE_REPEAT_PREVIOUS = 0,
+  REMOTE_REPEAT_NEXT = 1,
+  REMOTE_REPEAT_MINUS = 2,
+  REMOTE_REPEAT_PLUS = 3,
+};
+inline int remote_repeat_button = -1;
+// The setting and entity a held Plus or Minus started on. send_setting_value
+// holds back one value at a time, so the repeat ends when either changes (a
+// tap of Settings), letting the value held so far go out.
+inline int remote_repeat_setting = 0;
+inline std::string remote_repeat_entity;
+
+// Set by shift_selected_item when it selected another item.
+inline bool shift_selected_item_moved = false;
+
+// An HVAC mode or a select option goes out this long after the last press
+// that stepped it (see send_option_after_pause).
+inline constexpr uint32_t OPTION_SEND_DELAY_MS = 1500;
+
+// The option waiting to go out: kind is a RemoteOptionSend, -1 for none.
+struct RemotePendingOption {
+  int kind = -1;
+  std::string entity;
+  std::string option;
+};
+inline RemotePendingOption remote_pending_option;
+
+// The screen dims this long before the remote goes to sleep, as a warning; any
+// button brings it back. Only when SLEEP_DURATION leaves room for it.
+inline constexpr uint32_t IDLE_DIM_BEFORE_SLEEP_S = 10;
+
+inline bool idle_dim_due(uint32_t idle_s, uint32_t sleep_after_s) {
+  return sleep_after_s > 2 * IDLE_DIM_BEFORE_SLEEP_S && idle_s + IDLE_DIM_BEFORE_SLEEP_S >= sleep_after_s;
+}
+
+// The value the remote just sent for one setting of one entity (a light's
+// colour temperature, a number), which the screen shows and the next press
+// steps from until Home Assistant reports it, as cover tilt does above.
+struct RemotePendingValue {
+  int mode = -1;
+  int index = -1;
+  int setting = 0;
+  float value = NAN;
+  uint32_t at = 0;
+};
+inline RemotePendingValue remote_pending_value;
+
+inline void note_pending_value(int mode, int index, int setting, float value) {
+  remote_pending_value = {mode, index, setting, value, millis() | 1};
+}
+// The pending value for this setting, or fallback when there is none.
+inline float pending_value_or(uint32_t now, int mode, int index, int setting, float fallback) {
+  const RemotePendingValue &p = remote_pending_value;
+  bool active = p.at != 0 && p.mode == mode && p.index == index && p.setting == setting &&
+                now - p.at < LOCAL_CHANGE_HOLD_MS;
+  return active ? p.value : fallback;
+}
+
 struct RemoteUiResetState {
   std::string *selected_item_state = nullptr;
   int *selected_brightness_pct = nullptr;

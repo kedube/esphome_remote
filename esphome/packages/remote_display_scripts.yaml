@@ -30,11 +30,25 @@ script:
                     id(selected_cover_index), id(selected_media_index), id(selected_automation_index),
                     id(selected_weather_index), id(selected_fan_index), id(selected_humidifier_index),
                     id(selected_sensor_index), id(selected_alarm_index), id(selected_notification_index),
-                    id(selected_info_index));
+                    id(selected_info_index), id(selected_input_index), id(selected_vacuum_index),
+                    id(selected_timer_index));
                 auto selection = resolve_current_ui_selection_context(id(current_mode), id(current_menu_index), selection_refs);
                 RemoteMode mode = selection.mode;
                 int idx = selection.resolved_index;
                 uint32_t now = millis();
+
+                // Just woken: the frame from before sleep stays up, saying it is
+                // syncing, until the selected item's state arrives, so the screen
+                // goes straight to the live value instead of flashing SYNCING.
+                if (id(snapshot_hold_until) != 0) {
+                  if (id(selected_item_state).empty() && static_cast<int32_t>(id(snapshot_hold_until) - now) > 0 &&
+                      oled_snapshot_restore(it)) {
+                    render_snapshot_status(it, remote_ui_fonts, "SYNCING\u2026");
+                    id(display_push_pending) = true;
+                    return;
+                  }
+                  id(snapshot_hold_until) = 0;
+                }
 
                 RemoteRenderContext ctx;
                 ctx.mode = mode;
@@ -75,10 +89,12 @@ script:
                     {id(play_pause_button_press_started_at), id(play_pause_button_press_mode), id(play_pause_button_long_press_fired)},
                 };
                 std::string hold_label;
-                int alarm_features = mode == REMOTE_MODE_ALARMS ? alarm_supported_features_for_index(idx) : -1;
+                // idx is the selection within the current mode, whichever that is.
+                RemoteEntityTraits traits = selected_entity_traits(mode, idx, idx, idx);
+                int alarm_features = traits.alarm_features;
                 if (describe_active_hold(mode, now, holds, id(selected_item_state), id(selected_alarm_arm_mode),
                                          ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS}, hold_label,
-                                         ctx.hold_progress, alarm_features)) {
+                                         ctx.hold_progress, traits)) {
                   ctx.hold_label = hold_label.c_str();
                 }
 
@@ -149,6 +165,39 @@ script:
                 switch (mode) {
                   case REMOTE_MODE_LIGHTS:
                     ctx.light_effect = &selected_light_effect(idx);
+                    ctx.light_color_temp_kelvin = pending_value_or(now, REMOTE_MODE_LIGHTS, idx, REMOTE_SETTING_LIGHT_WARMTH,
+                                                                   selected_light_color_temp(idx));
+                    ctx.light_min_kelvin = selected_light_min_kelvin(idx);
+                    ctx.light_max_kelvin = selected_light_max_kelvin(idx);
+                    break;
+                  case REMOTE_MODE_CLIMATE:
+                    ctx.climate_mode_count = climate_hvac_mode_count(idx);
+                    break;
+                  case REMOTE_MODE_MEDIA:
+                    ctx.media_muted = media_muted_for_index(idx);
+                    // Just pressed: what was asked for, until Home Assistant reports it.
+                    if (id(selected_setting_option) == REMOTE_SETTING_MEDIA_MUTE && local_change_hold_active(now) &&
+                        !id(selected_setting_detail).empty()) {
+                      ctx.media_muted = id(selected_setting_detail) == "ON" ? 1 : 0;
+                    }
+                    break;
+                  case REMOTE_MODE_SENSORS:
+                    ctx.sensor_is_presence = sensor_is_presence(idx);
+                    break;
+                  case REMOTE_MODE_INPUTS:
+                    ctx.input_is_select = input_is_select(idx);
+                    ctx.input_value = pending_value_or(now, REMOTE_MODE_INPUTS, idx, REMOTE_SETTING_INPUT_VALUE,
+                                                       input_value_for_index(idx));
+                    ctx.input_min = input_min_for_index(idx);
+                    ctx.input_max = input_max_for_index(idx);
+                    ctx.input_unit = &input_unit_for_index(idx);
+                    break;
+                  case REMOTE_MODE_VACUUMS:
+                    ctx.vacuum_is_mower = vacuum_is_mower(idx);
+                    ctx.vacuum_fan_speed = &vacuum_fan_speed_for_index(idx);
+                    break;
+                  case REMOTE_MODE_TIMERS:
+                    ctx.timer_seconds = timer_seconds_left_for_index(idx);
                     break;
                   case REMOTE_MODE_FANS: {
                     const std::string &oscillating = fan_oscillating_for_index(idx);
@@ -160,6 +209,8 @@ script:
                   }
                   case REMOTE_MODE_COVERS: {
                     ctx.cover_has_position = selected_cover_has_position(idx);
+                    ctx.cover_is_valve = selected_cover_is_valve(idx);
+                    ctx.cover_stoppable = traits.cover_stoppable;
                     float tilt = cover_tilt_sent_recently(now, idx) ? id(pending_cover_tilt_pct) : selected_cover_tilt(idx);
                     ctx.cover_tilt_pct = isnan(tilt) ? -1 : static_cast<int>(lroundf(tilt));
                     break;
@@ -190,6 +241,11 @@ script:
                 }
 
                 render_remote_ui(it, remote_ui_fonts, ctx);
+                // Kept through deep sleep, to show on the next wake.
+                int clock_x = 0;
+                int clock_width = 0;
+                remote_ui_header_clock_box(&clock_x, &clock_width);
+                oled_snapshot_capture(it, clock_x, clock_width);
                 id(updated_ui) = false;
                 id(display_push_pending) = true;
       # Sending the frame to the panel takes about 30 ms of I2C on its own (88

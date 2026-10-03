@@ -73,6 +73,7 @@ script:
               bool off = id(selected_item_state) == "off";
               if (off || selected_light_dimmable(id(selected_light_index)) != 0) add_option(REMOTE_SETTING_LIGHT_DIMMER);
               if (!off && selected_light_has_effect(id(selected_light_index))) add_option(REMOTE_SETTING_LIGHT_EFFECT);
+              if (!off && selected_light_supports_color_temp(id(selected_light_index))) add_option(REMOTE_SETTING_LIGHT_WARMTH);
               break;
             }
             case REMOTE_MODE_CLIMATE:
@@ -113,6 +114,7 @@ script:
             case REMOTE_MODE_MEDIA:
               if (id(selected_media_device_class) != "tv") add_option(REMOTE_SETTING_MEDIA_SELECT);
               add_option(REMOTE_SETTING_MEDIA_VOLUME);
+              if (media_muted_for_index(id(selected_media_index)) >= 0) add_option(REMOTE_SETTING_MEDIA_MUTE);
               if (!id(selected_media_shuffle).empty()) add_option(REMOTE_SETTING_MEDIA_SHUFFLE);
               if (id(selected_media_device_class) == "tv") add_option(REMOTE_SETTING_MEDIA_CHANNEL);
               if (media_source_option_count(id(selected_media_index)) > 0) add_option(REMOTE_SETTING_MEDIA_SOURCE);
@@ -146,10 +148,24 @@ script:
               if (!selected_water_heater_operation_list(id(selected_water_heater_index)).empty()) add_option(REMOTE_SETTING_WATER_HEATER_MODE);
               if (!id(selected_water_heater_away).empty()) add_option(REMOTE_SETTING_WATER_HEATER_AWAY);
               break;
+            case REMOTE_MODE_INPUTS:
+              if (!id(selected_item_state).empty()) {
+                add_option(input_is_select(id(selected_input_index)) ? REMOTE_SETTING_INPUT_OPTION
+                                                                     : REMOTE_SETTING_INPUT_VALUE);
+              }
+              break;
+            case REMOTE_MODE_VACUUMS:
+              // The START/DOCK hints first: they are what the buttons do.
+              add_option(REMOTE_SETTING_VACUUM_ACTIONS);
+              if (!vacuum_fan_speed_list_for_index(id(selected_vacuum_index)).empty()) {
+                add_option(REMOTE_SETTING_VACUUM_FAN_SPEED);
+              }
+              break;
             case REMOTE_MODE_SWITCHES:
             case REMOTE_MODE_LOCKS:
             case REMOTE_MODE_SENSORS:
             case REMOTE_MODE_AUTOMATION:
+            case REMOTE_MODE_TIMERS:
             case REMOTE_MODE_INFO:
             default:
               break;
@@ -212,6 +228,9 @@ script:
               break;
             case REMOTE_SETTING_LIGHT_EFFECT:
               detail = selected_light_effect(id(selected_light_index));
+              break;
+            case REMOTE_SETTING_MEDIA_MUTE:
+              detail = media_muted_for_index(id(selected_media_index)) == 1 ? "ON" : "OFF";
               break;
             case REMOTE_SETTING_CLIMATE_LOW:
               if (!isnan(id(selected_climate_target_temp_low)) && !isnan(id(selected_climate_target_temp_high))) {
@@ -491,6 +510,50 @@ script:
                   - script.execute: climate_temperature_high_down
       - if:
           condition:
+            lambda: |-
+              return id(selected_setting_option) == REMOTE_SETTING_CLIMATE_STATE &&
+                     climate_hvac_mode_count(id(selected_climate_index)) > 1;
+          then:
+            - script.execute:
+                id: step_climate_hvac_mode
+                step: !lambda 'return step > 0 ? 1 : -1;'
+      - if:
+          condition:
+            lambda: 'return id(selected_setting_option) == REMOTE_SETTING_LIGHT_WARMTH;'
+          then:
+            - script.execute:
+                id: adjust_light_warmth
+                step: !lambda 'return step > 0 ? 1 : -1;'
+      - if:
+          condition:
+            lambda: 'return id(selected_setting_option) == REMOTE_SETTING_MEDIA_MUTE;'
+          then:
+            - script.execute:
+                id: media_set_mute
+                enabled: !lambda 'return step > 0;'
+      - if:
+          condition:
+            lambda: 'return id(selected_setting_option) == REMOTE_SETTING_INPUT_VALUE;'
+          then:
+            - script.execute:
+                id: adjust_input_number
+                step: !lambda 'return step > 0 ? 1 : -1;'
+      - if:
+          condition:
+            lambda: 'return id(selected_setting_option) == REMOTE_SETTING_INPUT_OPTION;'
+          then:
+            - script.execute:
+                id: step_input_select
+                step: !lambda 'return step > 0 ? 1 : -1;'
+      - if:
+          condition:
+            lambda: 'return id(selected_setting_option) == REMOTE_SETTING_VACUUM_FAN_SPEED;'
+          then:
+            - script.execute:
+                id: step_vacuum_fan_speed
+                step: !lambda 'return step > 0 ? 1 : -1;'
+      - if:
+          condition:
             lambda: 'return id(selected_setting_option) == REMOTE_SETTING_CLIMATE_FAN;'
           then:
             - lambda: |-
@@ -676,6 +739,7 @@ script:
             - script.execute:
                 id: shift_selected_item
                 step: !lambda 'return step > 0 ? 1 : -1;'
+                wrap: true
       - if:
           condition:
             lambda: 'return id(selected_setting_option) == REMOTE_SETTING_WATER_HEATER_TARGET;'
@@ -771,9 +835,17 @@ script:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_COVERS;'
           then:
-            - script.execute:
-                id: close_selected_cover
-                cover_index: !lambda 'return id(selected_cover_index);'
+            - if:
+                condition:
+                  lambda: 'return selected_cover_stoppable(id(selected_cover_index));'
+                then:
+                  - script.execute:
+                      id: stop_selected_cover
+                      cover_index: !lambda 'return id(selected_cover_index);'
+                else:
+                  - script.execute:
+                      id: close_selected_cover
+                      cover_index: !lambda 'return id(selected_cover_index);'
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS;'
@@ -800,6 +872,16 @@ script:
             lambda: 'return id(current_mode) == REMOTE_MODE_ALARMS;'
           then:
             - script.execute: disarm_selected_alarm
+      - if:
+          condition:
+            lambda: 'return id(current_mode) == REMOTE_MODE_VACUUMS;'
+          then:
+            - script.execute: vacuum_square_action
+      - if:
+          condition:
+            lambda: 'return id(current_mode) == REMOTE_MODE_TIMERS;'
+          then:
+            - script.execute: timer_square_action
 
   - id: execute_circle_button_action
     then:
@@ -857,9 +939,17 @@ script:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_COVERS;'
           then:
-            - script.execute:
-                id: open_selected_cover
-                cover_index: !lambda 'return id(selected_cover_index);'
+            - if:
+                condition:
+                  lambda: 'return selected_cover_stoppable(id(selected_cover_index));'
+                then:
+                  - script.execute:
+                      id: stop_selected_cover
+                      cover_index: !lambda 'return id(selected_cover_index);'
+                else:
+                  - script.execute:
+                      id: open_selected_cover
+                      cover_index: !lambda 'return id(selected_cover_index);'
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS;'
@@ -898,38 +988,65 @@ script:
             lambda: 'return id(current_mode) == REMOTE_MODE_NOTIFICATIONS;'
           then:
             - script.execute: dismiss_selected_notification
+      - if:
+          condition:
+            lambda: 'return id(current_mode) == REMOTE_MODE_VACUUMS;'
+          then:
+            - script.execute: vacuum_circle_action
+      - if:
+          condition:
+            lambda: 'return id(current_mode) == REMOTE_MODE_TIMERS;'
+          then:
+            - script.execute: timer_circle_action
 
+  # wrap: past the last item comes the first. A held Previous or Next stops
+  # at the ends instead (see button_repeat).
   - id: shift_selected_item
     mode: restart
     parameters:
       step: int
+      wrap: bool
     then:
       - lambda: |-
-          id(last_navigation_requested_at) = millis();
+          shift_selected_item_moved = false;
           auto selection_refs = make_mode_selection_state_refs(
               id(selected_light_index), id(selected_switch_index), id(selected_climate_index),
               id(selected_water_heater_index), id(selected_lock_index),
               id(selected_cover_index), id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
               id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index), id(selected_alarm_index),
-              id(selected_notification_index), id(selected_info_index));
+              id(selected_notification_index), id(selected_info_index), id(selected_input_index),
+              id(selected_vacuum_index), id(selected_timer_index));
           auto selection = resolve_current_ui_selection_context(id(current_mode), id(current_menu_index), selection_refs);
           if (selection.count <= 0 || selection.selected_index == nullptr) {
             return;
           }
+          int next = selection.index + step;
+          if (!wrap && (next < 0 || next >= selection.count)) {
+            return;
+          }
+          id(last_navigation_requested_at) = millis();
           *selection.selected_index = wrapped_mode_index(selection.index, selection.count, step);
-      - script.execute: update_selected_item
+          shift_selected_item_moved = true;
+      # The lambda's return can't skip this, so it checks the flag.
+      - if:
+          condition:
+            lambda: 'return shift_selected_item_moved;'
+          then:
+            - script.execute: update_selected_item
 
   - id: select_next_item
     then:
       - script.execute:
           id: shift_selected_item
           step: 1
+          wrap: true
 
   - id: select_previous_item
     then:
       - script.execute:
           id: shift_selected_item
           step: -1
+          wrap: true
 
   - id: previous_button_action
     then:

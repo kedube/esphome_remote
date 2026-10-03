@@ -2,8 +2,9 @@
 
 RemoteButtonPrompt describe_remote_button_prompt(
     RemoteMode mode, int action, const std::string &selected_item_state, int selected_alarm_arm_mode,
-    uint32_t default_hold_ms, uint32_t extended_hold_ms, int alarm_features) {
+    uint32_t default_hold_ms, uint32_t extended_hold_ms, const RemoteEntityTraits &traits) {
   RemoteButtonPrompt prompt;
+  const int alarm_features = traits.alarm_features;
 
   switch (mode) {
     case REMOTE_MODE_LOCKS:
@@ -16,8 +17,9 @@ RemoteButtonPrompt describe_remote_button_prompt(
       break;
     case REMOTE_MODE_COVERS:
       // Square (action 0) closes and circle (action 2) opens, matching the
-      // off/on split every other mode uses.
-      if (action == 0 || action == 2) {
+      // off/on split every other mode uses. While the cover moves, either one
+      // stops it straight away: stopping is always safe.
+      if ((action == 0 || action == 2) && !traits.cover_stoppable) {
         prompt.requires_long_press = true;
         prompt.hold_duration_ms = default_hold_ms;
         prompt.feedback_target = REMOTE_INPUT_FEEDBACK_COVER;
@@ -30,7 +32,7 @@ RemoteButtonPrompt describe_remote_button_prompt(
         prompt.requires_long_press = true;
         prompt.hold_duration_ms = default_hold_ms;
         prompt.feedback_target = REMOTE_INPUT_FEEDBACK_AUTOMATION;
-        prompt.feedback = "HOLD TO RUN";
+        prompt.feedback = traits.automation_kind == AUTOMATION_KIND_BUTTON ? "HOLD TO PRESS" : "HOLD TO RUN";
       }
       break;
     case REMOTE_MODE_ALARMS:
@@ -61,14 +63,14 @@ RemoteButtonPrompt describe_remote_button_prompt(
 bool describe_active_hold(
     RemoteMode mode, uint32_t now, const RemoteHoldButton (&buttons)[3], const std::string &selected_item_state,
     int selected_alarm_arm_mode, uint32_t default_hold_ms, uint32_t extended_hold_ms, std::string &label,
-    int &progress, int alarm_features) {
+    int &progress, const RemoteEntityTraits &traits) {
   for (int action = 0; action < 3; action++) {
     const RemoteHoldButton &button = buttons[action];
     if (button.started_at == 0 || button.fired || button.mode != static_cast<int>(mode)) {
       continue;
     }
     RemoteButtonPrompt prompt = describe_remote_button_prompt(
-        mode, action, selected_item_state, selected_alarm_arm_mode, default_hold_ms, extended_hold_ms, alarm_features);
+        mode, action, selected_item_state, selected_alarm_arm_mode, default_hold_ms, extended_hold_ms, traits);
     if (!prompt.requires_long_press || prompt.hold_duration_ms == 0) {
       continue;
     }

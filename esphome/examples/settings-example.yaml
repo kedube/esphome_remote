@@ -66,3 +66,15 @@ packages:
 #  auth:
 #    username: !secret web_server_username
 #    password: !secret web_server_password
+
+# Optional: a fixed IP address. Every wake then skips asking the router for an
+# address, so the remote reaches Home Assistant sooner. Choose an address
+# outside your router's DHCP range, or reserve this one for the remote there.
+# The "Wake to Home Assistant" sensor shows how long each wake takes, so you
+# can compare before and after.
+#wifi:
+#  manual_ip:
+#    static_ip: 192.168.1.50
+#    gateway: 192.168.1.1
+#    subnet: 255.255.255.0
+#    dns1: 192.168.1.1

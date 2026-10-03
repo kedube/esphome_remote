@@ -2,7 +2,7 @@
 
 Replacement firmware for [Pawel Lugowski's ESPHome OLED Remote Control](https://tech.lugowski.dev/guides/smart-oled-remote-esphome/). The hardware is built around an ESP32 Lolin32 WROOM (WIFI + Bluetooth) board, a 1.3-inch SH1106 128x64 OLED display, and physical buttons that provide a compact, battery-friendly UI for controlling Home Assistant entities directly from the handheld remote. 
 
-The firmware has been entirely rewritten from scratch based on a newly designed codebase and architecture. It is designed to let you cycle through Home Assistant entities directly from the remote without needing a touchscreen or a phone. The remote now uses mixed-entity favorite lists as the primary navigation model, while still supporting controls for lights, switches, climate devices, humidifiers, fans, covers, locks, media players, sensors, automations, alarms, weather, notifications, and info screens.
+The firmware has been entirely rewritten from scratch based on a newly designed codebase and architecture. It is designed to let you cycle through Home Assistant entities directly from the remote without needing a touchscreen or a phone. The remote now uses mixed-entity favorite lists as the primary navigation model, while still supporting controls for lights, switches, climate devices, humidifiers, fans, covers and valves, locks, media players, vacuums and lawn mowers, timers, number and select helpers, buttons, sensors and people, automations, alarms, weather, notifications, and info screens.
 
 ## Gallery
 
@@ -17,12 +17,15 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 | ![Shade position](images/remote_UI-6.png)<br><sub>Shade position</sub> | ![Lock](images/remote_UI-7.png)<br><sub>Lock</sub> | ![Lock hold bar](images/remote_UI-8.png)<br><sub>Lock hold bar</sub> | ![Speaker](images/remote_UI-9.png)<br><sub>Speaker</sub> | ![TV](images/remote_UI-10.png)<br><sub>TV</sub> <tr></tr> |
 | ![Switch](images/remote_UI-11.png)<br><sub>Switch</sub> | ![Sensor](images/remote_UI-12.png)<br><sub>Sensor</sub> | ![Automation hold to run](images/remote_UI-13.png)<br><sub>Automation hold to run</sub> | ![Alarm arm modes](images/remote_UI-14.png)<br><sub>Alarm arm modes</sub> | ![Notification](images/remote_UI-15.png)<br><sub>Notification</sub> <tr></tr> |
 | ![Weather](images/remote_UI-16.png)<br><sub>Weather</sub> | ![Wind](images/remote_UI-17.png)<br><sub>Wind</sub> | ![Time and date](images/remote_UI-18.png)<br><sub>Time and date</sub> | ![Wi-Fi](images/remote_UI-19.png)<br><sub>Wi-Fi</sub> | ![Hold to reboot](images/remote_UI-20.png)<br><sub>Hold to reboot</sub> <tr></tr> |
+| ![Robot vacuum](images/remote_UI-21.png)<br><sub>Robot vacuum</sub> | ![Timer](images/remote_UI-22.png)<br><sub>Timer</sub> | ![Number](images/remote_UI-23.png)<br><sub>Number</sub> | ![Select](images/remote_UI-24.png)<br><sub>Select</sub> | ![Waking up](images/remote_UI-25.png)<br><sub>Waking up</sub> <tr></tr> |
 
 ## Features
 
 - Graphical, button-driven UI designed for a 128x64 monochrome OLED: large values, icon badges that light up when a device is on, meters, toggles, and a footer that shows what the buttons do
 - Hold-to-confirm progress bar for protected actions (locks, covers, automations, alarm)
+- Hold `Previous`, `Next`, `Plus` or `Minus` to keep stepping; a held `Plus` or `Minus` sends Home Assistant only the value it stops on
 - Deep sleep support for battery-powered remotes
+- Wakes straight into the item it went to sleep on, shown as it was until the live values arrive, and dims the screen shortly before it sleeps
 - Multiple board package options for different PCB revisions
 - Favorite-list navigation with mixed Home Assistant entity types in each list
 - Automatic hiding of empty favorite lists and optional Notifications mode
@@ -66,8 +69,8 @@ Where there is something to control, the footer explains it (sensor and Info scr
 - **Meters** (brightness, fan speed, volume, position, humidity) fill to the value, with the value printed across them. `Plus` / `Minus` adjust it.
 - **Steppers** (temperatures) show `- 71°F +`.
 - **Option lists** (effects, presets, sources, modes) show `< VALUE >`; `Plus` / `Minus` step through them.
-- **Toggles** (oscillate, shuffle, away) show a small switch.
-- **Button hints** show `□ OFF` on the left and `ON ○` on the right, matching the square and circle buttons. Protected actions add `HOLD`.
+- **Toggles** (oscillate, shuffle, mute, away) show a small switch.
+- **Button hints** show `□ OFF` on the left and `ON ○` on the right, matching the square and circle buttons. Protected actions add `HOLD`. While a cover or valve moves, both sides say `STOP`.
 - **Hold bar**: while you hold a protected action, the footer fills from left to right and the action fires when the bar is full.
 - **Toasts**: the result of an action (`LOCKING...`, `TRIGGERED`, `ALREADY ON`) replaces the footer for a few seconds.
 
@@ -167,6 +170,7 @@ esphome_remote/
 │   │   ├── remote_actions_devices.yaml
 │   │   ├── remote_actions_feedback.yaml
 │   │   ├── remote_actions_security.yaml
+│   │   ├── remote_actions_values.yaml
 │   │   ├── remote_button_action_scripts.yaml
 │   │   ├── remote_button_press_scripts.yaml
 │   │   ├── remote_display_runtime_globals.yaml
@@ -193,6 +197,7 @@ esphome_remote/
 │   ├── entity_trackers.h
 │   ├── framebuffer_web_debug.h
 │   ├── local_entities.h
+│   ├── oled_snapshot.h
 │   ├── remote_ui_bindings.h
 │   ├── remote_ui_feedback.h
 │   ├── remote_ui_input_logic.h
@@ -208,6 +213,7 @@ esphome_remote/
 ├── platformio.ini
 ├── src/
 │   ├── framebuffer_web_debug.cpp
+│   ├── oled_snapshot.cpp
 │   ├── remote_ui_feedback.cpp
 │   ├── remote_ui_input_logic.cpp
 │   ├── remote_ui_logic.cpp
@@ -253,6 +259,8 @@ esphome_remote/
   Renders every screen to PNG on your computer; see [Previewing the UI](#previewing-the-ui).
 - `src/framebuffer_web_debug.cpp` and `include/framebuffer_web_debug.h`
   Optional debug-only PBM framebuffer export for screenshot capture.
+- `src/oled_snapshot.cpp` and `include/oled_snapshot.h`
+  Keep the last UI frame in RTC memory through deep sleep, so a wake can show it while the remote reconnects.
 - `platformio.ini` and `tools/pio_esphome_bridge.py`
   Root PlatformIO wrapper that delegates the IDE build button and `pio run` to the ESPHome toolchain.
 - `home_assistant/remote_notifications.yaml`
@@ -286,7 +294,7 @@ esphome_remote/
 The `esphome/packages/` folder is split by responsibility:
 
 - `remote_actions_*.yaml`
-  Entity actions and feedback flows grouped by domain.
+  Entity actions and feedback flows grouped by domain. `remote_actions_values.yaml` sends what `Plus` and `Minus` change: a held value once the hold ends, an HVAC mode or select option once the presses pause.
 - `remote_button_*.yaml`
   Button press handling and action wrapper scripts.
 - `remote_display_*.yaml`
@@ -385,6 +393,14 @@ inline constexpr FavoriteList FAVORITE_LISTS[] = {
   make_favorite_list("UPSTAIRS", UPSTAIRS_FAVORITES),
   {"OUTDOOR", nullptr, 0},  // nothing here yet: hidden from the menu
 };
+```
+
+### Light warmth (optional)
+
+Lights with a colour temperature get a `WARMTH` setting. Following it costs three Home Assistant subscriptions per light, so with many lights a wake takes a little longer before every light has synced (the item the remote wakes into, and its list, still sync first). To go without, add this line to `esphome/local_entities.h`:
+
+```cpp
+#define LIGHT_WARMTH 0
 ```
 
 ### Media player sources (optional third field)
@@ -508,6 +524,21 @@ Notes:
 - Safe starting points:
   `NOTIFICATION_FEED_MAX_ITEMS: "16"`, `MAX_PERSISTED_FAVORITE_LISTS: "16"`, `WAKE_BUTTON_DEBOUNCE_MS: "30"`, `BUTTON_DEBOUNCE_MS: "30"`, `NAVIGATION_SYNC_DELAY_MS: "250"`, `REBOOT_MESSAGE_DURATION_MS: "2000"`, `SAFE_MODE_BOOT_IS_GOOD_AFTER: "10s"`.
 
+### Faster wakes with a fixed IP address
+
+Every wake starts by asking your router for an IP address. With a fixed one, the remote skips that and reaches Home Assistant sooner. Add a `wifi:` block to `esphome/settings.yaml` (the example file has it, commented out), with an address outside your router's DHCP range or one you reserve for the remote there:
+
+```yaml
+wifi:
+  manual_ip:
+    static_ip: 192.168.1.50
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+    dns1: 192.168.1.1
+```
+
+Compare the **Wake to Home Assistant** sensor's history before and after (see [step 8](#8-add-the-remote-to-home-assistant)), or watch `esphome logs`, which says how long Wi-Fi and Home Assistant each took after a wake.
+
 ### Choosing fonts
 
 Each `*_FONT` setting takes a `.ttf`, `.otf` or `.bdf` file (path relative to `esphome/`) or `"gfonts://Family@700"` for a Google Font, and each size setting a height in pixels (for a `.bdf` bitmap font, its point size). Put fonts you add in `assets/fonts/local/`, which git ignores, for example `NAME_FONT: "../assets/fonts/local/Arial Narrow Bold.ttf"`. Fonts that come with your computer, and trial or commercial fonts, usually can't be redistributed, so keep them out of the rest of the repository.
@@ -584,6 +615,8 @@ The `.vscode/` folder has IntelliSense settings (`c_cpp_properties.json`), exten
 
 The remote has to be awake while you add it: press a button first.
 
+Besides its battery sensors, the remote adds a diagnostic **Wake to Home Assistant** sensor: how many milliseconds each wake took to reach Home Assistant. Its history shows whether a change such as a [fixed IP address](#faster-wakes-with-a-fixed-ip-address) helps.
+
 ## Previewing the UI
 
 `tools/ui_preview/preview.py` draws every screen on your computer, pixel for pixel as the remote shows it, so you can check a UI change without flashing. It compiles the real renderer (`src/remote_ui_renderer.cpp`) together with ESPHome's own display and font code and the fonts chosen in your `esphome/settings.yaml`, and renders the sample states in `tools/ui_preview/scenarios.cpp`. `--readme` uses the fonts in `esphome/examples/settings-example.yaml`, so the screenshots don't depend on your settings.
@@ -651,16 +684,16 @@ The remote is designed around ten physical inputs:
 
 | Button | Default behavior |
 | --- | --- |
-| Wake / Power | Wakes the remote. A short press and release puts it to sleep. Hold for `EXTENDED_HOLD_DURATION_MS` to reboot: a bar fills while you hold, and releasing once it is full reboots. |
+| Wake / Power | Wakes the remote, straight into the item it went to sleep on. A short press and release puts it to sleep. Hold for `EXTENDED_HOLD_DURATION_MS` to reboot: a bar fills while you hold, and releasing once it is full reboots. |
 | Mode | Cycles to the next favorite list, then Notifications and Info. |
-| Previous | Selects the previous item in the current list. |
-| Next | Selects the next item in the current list. |
+| Previous | Selects the previous item in the current list. Hold it to keep going; it stops at the first item. |
+| Next | Selects the next item in the current list. Hold it to keep going; it stops at the last item. |
 | Dimmer | Steps the OLED contrast through ten levels and wraps around; a `CONTRAST` meter shows in the footer for a few seconds. |
 | Settings | Cycles through the settings the current item offers. In alarm mode, hold for `EXTENDED_HOLD_DURATION_MS` to trigger the alarm; a shorter press does nothing there. |
-| Minus | Decreases the selected setting. In Weather it steps back through the weather details, and in Notifications it moves to the previous notification. |
-| Plus | Increases the selected setting. In Weather it steps forward through the weather details, and in Notifications it moves to the next notification. |
-| Circle | Positive or activate action in most modes: turn on, open, lock, play/pause, run, arm, or dismiss. |
-| Square | Negative or deactivate action in most modes: turn off, close, unlock, stop, or disarm. |
+| Minus | Decreases the selected setting. Hold it to keep decreasing a value with a range (brightness, warmth, temperatures, humidity, speed, volume, positions, numbers). In Weather it steps back through the weather details, and in Notifications it moves to the previous notification. |
+| Plus | Increases the selected setting, and keeps increasing while held, as `Minus` does. In Weather it steps forward through the weather details, and in Notifications it moves to the next notification. |
+| Circle | Positive or activate action in most modes: turn on, open, lock, play/pause, run, press, start, arm, or dismiss. Stops a moving cover or valve. |
+| Square | Negative or deactivate action in most modes: turn off, close, unlock, stop, cancel, dock, or disarm. Stops a moving cover or valve. |
 
 Common usage pattern:
 
@@ -669,13 +702,14 @@ Common usage pattern:
 - Use `Settings` to pick which setting you want to adjust; the footer names it.
 - Use `Plus` and `Minus` to change the selected value or browse weather details.
 - Use `Circle` and `Square` for the main action on the current item.
+- Hold `Previous` or `Next` to get through a long list, and `Plus` or `Minus` to make a big change. A held `Plus` or `Minus` changes the value on screen and sends it to Home Assistant once, when you let go, so a light doesn't step through every level and a thermostat isn't sent every degree. Lists (effects, presets, sources) and toggles step once per press.
 
-`Circle`, `Square`, `Plus` and `Minus` do nothing until Home Assistant has connected after a wake, while the screen shows `CONNECTING`: Home Assistant would drop the commands.
+`Circle`, `Square`, `Plus` and `Minus` do nothing until Home Assistant has connected after a wake, while the footer shows `CONNECTING…`: Home Assistant would drop the commands.
 
 Long-press protection:
 
-- Locks and covers require holding either action button for `LONG_PRESS_DURATION_MS`.
-- Automations, scripts and scenes require holding `Circle` for `LONG_PRESS_DURATION_MS`. `Square` has no action in automation mode.
+- Locks, covers and valves require holding either action button for `LONG_PRESS_DURATION_MS`. A cover or valve that is moving stops at a tap of either button, if it supports stopping.
+- Automations, scripts, scenes and buttons require holding `Circle` for `LONG_PRESS_DURATION_MS`. `Square` has no action in automation mode.
 - Alarm arming and disarming also use long-press protection.
 - Alarm trigger on the Settings button (on panels that support it) and wake-button reboot both use `EXTENDED_HOLD_DURATION_MS`.
 
@@ -683,17 +717,20 @@ Long-press protection:
 
 | Mode | Primary actions |
 | --- | --- |
-| Favorites: Lights | `Circle` on (at its last brightness), `Square` off. `Settings` picks `BRIGHTNESS` or `EFFECT`; `Plus` / `Minus` adjust it, brightness in 10% steps (`Minus` at 10% turns the light off). While the light is off, `Plus` turns it on. A light that can't dim shows `ON` / `OFF`. |
-| Favorites: Switches | `Circle` on, `Square` off. |
-| Favorites: Climate | `Circle` on (in the thermostat's last active mode), `Square` off. `Settings` cycles `TARGET` (or `LOW` and `HIGH` in heat/cool), `FAN`, `HUMIDITY`, `PRESET`, `STATUS` and `MODE`; `STATUS` and `MODE` are read-only. |
+| Favorites: Lights | `Circle` on (at its last brightness), `Square` off. `Settings` picks `BRIGHTNESS`, `EFFECT` or `WARMTH`; `Plus` / `Minus` adjust it, brightness in 10% steps (`Minus` at 10% turns the light off). `WARMTH`, on lights with a colour temperature, goes warmer with `Plus` and cooler with `Minus`, a tenth of the light's range at a time. While the light is off, `Plus` turns it on. A light that can't dim shows `ON` / `OFF`. |
+| Favorites: Switches | `Circle` on, `Square` off. `input_boolean` helpers work the same way. |
+| Favorites: Climate | `Circle` on (in the thermostat's last active mode), `Square` off. `Settings` cycles `TARGET` (or `LOW` and `HIGH` in heat/cool), `FAN`, `HUMIDITY`, `PRESET`, `STATUS` and `MODE`; `STATUS` is read-only. `MODE` steps through the thermostat's HVAC modes: the screen changes at once, and the mode goes to the thermostat 1.5 seconds after the last press, so stepping from heat past cool to auto never switches the system to cool. |
 | Favorites: Humidifiers | `Circle` on, `Square` off. `Settings` cycles `TARGET` humidity, `MODE`, `STATUS` and `POWER`; `STATUS` and `POWER` are read-only. |
 | Favorites: Fans | `Circle` on (at its last speed), `Square` off. `Settings` cycles `SPEED`, `PRESET`, `OSCILLATE` and `DIRECTION`; `Plus` / `Minus` step the speed by the fan's own speed increments, and `Minus` below the lowest speed turns it off. While the fan is off, `Plus` turns it on at its last speed. |
-| Favorites: Covers | `Circle` open, `Square` close (both held). `Settings` selects `POSITION` or `TILT` when the cover has them; `Plus` / `Minus` move it 10% at a time, and `Minus` at 10% or less closes the cover. |
+| Favorites: Covers and valves | `Circle` open, `Square` close (both held). While one that can stop is moving, the footer shows `STOP` and either button stops it straight away. `Settings` selects `POSITION` or `TILT` when the cover has them (valves have no tilt); `Plus` / `Minus` move it 10% at a time, and `Minus` at 10% or less closes it. |
 | Favorites: Locks | `Circle` lock, `Square` unlock (both held). A lock that is `OPEN` (unlatched) counts as unlocked. |
-| Favorites: Media | `Circle` play/pause, or turns on a player that is off or in standby. `Square` stops, or turns off a TV or receiver. `Settings` cycles `TRACK` (`CHANNEL` on TVs), `VOLUME`, `SOURCE`, `SHUFFLE`, `REPEAT`, `SOUND` and `STATE`; on `TRACK` / `CHANNEL`, `Plus` / `Minus` skip. |
+| Favorites: Media | `Circle` play/pause, or turns on a player that is off or in standby. `Square` stops, or turns off a TV or receiver. `Settings` cycles `TRACK` (`CHANNEL` on TVs), `VOLUME`, `MUTE`, `SOURCE`, `SHUFFLE`, `REPEAT`, `SOUND` and `STATE`; on `TRACK` / `CHANNEL`, `Plus` / `Minus` skip, and on `MUTE`, `Plus` mutes and `Minus` unmutes. A muted player shows a crossed-out speaker (`MUTED` on a TV). |
 | Favorites: Water Heaters | `Circle` on, `Square` off (through the heater's operation modes when it has no on/off of its own). `Settings` cycles `TARGET`, `MODE` and `AWAY`; `Plus` / `Minus` adjust the target within the heater's own minimum and maximum. |
-| Favorites: Sensors | Read-only: the value, rounded to the decimals it needs, and its unit, or `ON` / `OFF` for binary sensors. Timestamp sensors show the local time. |
-| Favorites: Automation / Script / Scene | `Circle` (held) runs it. |
+| Favorites: Sensors | Read-only: the value, rounded to the decimals it needs, and its unit, or `ON` / `OFF` for binary sensors. Timestamp sensors show the local time. People and device trackers show `HOME`, `AWAY`, or the zone they are in. |
+| Favorites: Automation / Script / Scene / Button | `Circle` (held) runs it, or presses a `button` or `input_button` (`PRESSED` when Home Assistant has passed the press on). |
+| Favorites: Numbers and selects | `number` and `input_number`: `Plus` / `Minus` step the value by its own step, within its minimum and maximum, with the value and unit large and a meter across its range. `select` and `input_select`: `Plus` / `Minus` step through the options; the option goes out 1.5 seconds after the last press, since picking one can set off automations. |
+| Favorites: Vacuums and lawn mowers | `Circle` starts it, or pauses it while it works; `Square` sends it back to its dock. `Settings` switches the footer between those hints and `FAN`, a vacuum's fan speeds. |
+| Favorites: Timers | `Circle` starts or resumes the timer, or pauses it; `Square` cancels it. The time left counts down on screen (the duration while idle). |
 | Favorites: Alarms | `Circle` arm, `Square` disarm (both held); hold `Settings` to trigger. `Plus` / `Minus` pick the arm mode highlighted in the footer, out of those the panel supports. |
 | Favorites: Weather | `Plus` / `Minus` (or `Settings`) step through the weather details. |
 | Notifications | `Plus` / `Minus` move between notifications; `Circle` dismisses the one shown. |
@@ -704,7 +741,7 @@ Settings and details only appear when Home Assistant reports them: a light witho
 Mode-specific details:
 
 - Lights: `Circle` turns the light on at its last brightness, and `Square` turns it off. `Plus` on an off light turns it on at 10%.
-- Climate: `Circle` restores the thermostat's last active mode (or the first of heat/cool, heat, cool and auto it supports); the HVAC mode itself can't be changed from the remote, and `Square` shows `NO OFF MODE` on a thermostat without one. Setpoints and humidity stay within the thermostat's own limits. Celsius setpoints step by whole degrees and show half degrees as `21.5°`.
+- Climate: `Circle` restores the thermostat's last active mode (or the first of heat/cool, heat, cool and auto it supports); `MODE` picks any other HVAC mode, and `Square` shows `NO OFF MODE` on a thermostat without one. Setpoints and humidity stay within the thermostat's own limits. Celsius setpoints step by whole degrees and show half degrees as `21.5°`.
 - Fans: on a 3-speed fan, `Plus` / `Minus` move between low, medium and high (33% steps).
 - Media: on a player that reports no volume (for example one that is off), `VOLUME` shows `--`, and `Plus` / `Minus` ask the player to step its volume up or down.
 - Notifications: `Circle` dismisses the selected notification; `◀▶ MORE` shows when there is more than one.
@@ -714,6 +751,7 @@ Mode-specific details:
 ## UI Notes
 
 - The remote restores the previously selected menu, item, contrast, and the setting you last picked after wake or reboot.
+- Waking from sleep, the screen shows the item the remote went to sleep on, as it looked then (without the clock, which would be out of date), with `WAITING FOR WI-FI…` and then `CONNECTING…` in the footer. It changes to the live values as soon as Home Assistant sends them, showing `SYNCING…` for at most 2 seconds until then. The frame is kept in the ESP32's RTC memory, which only survives deep sleep: after a power cut, a reboot or an update the remote shows the connecting screens instead.
 - Empty favorite lists are skipped automatically.
 - Holding the wake/power button for `EXTENDED_HOLD_DURATION_MS` reboots the remote. The screen shows `HOLD TO REBOOT` with a bar that fills while you hold, then `REBOOTING` briefly before restart. Releasing before the bar is full puts the remote to sleep.
 - Lock, cover, automation, script and scene actions use long-press protection: the footer's hold bar fills while you hold, and the action fires when it is full. A tap that is too short leaves a `HOLD TO …` reminder in the footer. In automation mode only `Circle` runs the automation; `Square` does nothing.
@@ -726,29 +764,31 @@ Mode-specific details:
 - Alarm actions show `ARMING...`, `DISARMING...` or `TRIGGERING...` in the footer for as long as the panel's exit or entry delay runs (up to 3 minutes), then `SUCCESS`, or `FAILED` if the panel hasn't started within `ALARM_STATUS_UPDATE_DELAY_MS`; `ALREADY ARMED`, `ALREADY DISARMED` or `SYNCING` when nothing is sent. The panel's own state (`ARMED HOME`, `DISARMED`) shows in large text.
 - Info mode includes Time & Date (a large clock with the date as its title), Wireless (signal bars and dBm), Network, Device Name, Battery (a battery gauge and voltage), and Version screens.
 - Notifications reads from `NOTIFICATION_FEED_ENTITY` in `esphome/local_entities.h`. A notification wraps over up to three lines; an empty feed shows `ALL CAUGHT UP`.
-- System screens: `WI-FI` and then `HOME ASSISTANT` with `CONNECTING…` (and the firmware version) after a wake, `WI-FI LOST` or `HOME ASSISTANT` with `RECONNECTING…` if a connection drops, `LOW BATTERY` / `PLEASE CHARGE` with the voltage for 10 seconds when the battery is below `LOW_BATTERY_VOLTAGE` at wake, and `GOODBYE` / `POWERING OFF` before sleep.
-- The remote sleeps after `SLEEP_DURATION` seconds without a button press, and after `DEEP_SLEEP_DURATION` awake even while in use. Only Wake / Power wakes it.
+- System screens: `WI-FI` and then `HOME ASSISTANT` with `CONNECTING…` (and the firmware version) after a power cut, a reboot or an update, `WI-FI LOST` or `HOME ASSISTANT` with `RECONNECTING…` if a connection drops, `LOW BATTERY` / `PLEASE CHARGE` with the voltage for 10 seconds when the battery is below `LOW_BATTERY_VOLTAGE` at wake, and `GOODBYE` / `POWERING OFF` before sleep.
+- The remote sleeps after `SLEEP_DURATION` seconds without a button press, and after `DEEP_SLEEP_DURATION` awake even while in use. The screen dims 10 seconds before it sleeps (when `SLEEP_DURATION` is more than 20 seconds), and any button brings it back. Only Wake / Power wakes it.
 
 ## Supported Home Assistant Entity Domains
 
 - `light.*`
-- `switch.*`
+- `switch.*` and `input_boolean.*`
 - `climate.*`
 - `humidifier.*`
 - `fan.*`
-- `cover.*`
+- `cover.*` and `valve.*`
 - `lock.*`
 - `media_player.*`
-- `sensor.*`
-- `binary_sensor.*`
-- `automation.*`
-- `script.*`
-- `scene.*`
+- `vacuum.*` and `lawn_mower.*`
+- `sensor.*`, `binary_sensor.*`, `person.*` and `device_tracker.*`
+- `automation.*`, `script.*`, `scene.*`, `button.*` and `input_button.*`
+- `number.*`, `input_number.*`, `select.*` and `input_select.*`
+- `timer.*`
 - `alarm_control_panel.*`
 - `water_heater.*`
 - `weather.*`
 
-Other domains, such as `input_boolean`, aren't supported: the build stops with an error if a favorite uses one.
+Other domains, such as `camera` or `input_text`, aren't supported: the build stops with an error if a favorite uses one.
+
+Each value the remote follows adds a little to how long it takes to sync after a wake (Home Assistant answers one subscription per pass of ESPHome's main loop). The item the remote wakes into, and the rest of its list, sync first.
 
 ## Troubleshooting
 
@@ -829,7 +869,7 @@ Make sure both of these are true:
 
 ### The build stops with "a favorite has no entity_id, or its domain isn't supported"
 
-A favorite in `esphome/local_entities.h` is missing its `entity_id`, or uses a domain the remote can't control (for example `input_boolean.`, or a typo such as `lights.`). Fix or remove that entry; see [Supported Home Assistant Entity Domains](#supported-home-assistant-entity-domains).
+A favorite in `esphome/local_entities.h` is missing its `entity_id`, or uses a domain the remote can't control (for example `camera.`, or a typo such as `lights.`). Fix or remove that entry; see [Supported Home Assistant Entity Domains](#supported-home-assistant-entity-domains).
 
 ### ESPHome compile or upload fails
 

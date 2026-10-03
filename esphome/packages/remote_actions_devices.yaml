@@ -22,6 +22,8 @@ script:
   - id: turn_off_selected_light
     mode: queued
     then:
+      # A brightness held back by a repeating Plus would turn it on again.
+      - script.stop: send_setting_value
       - homeassistant.action:
           action: light.turn_off
           data:
@@ -56,6 +58,8 @@ script:
   - id: turn_off_selected_fan
     mode: queued
     then:
+      # A speed held back by a repeating Minus would turn it on again.
+      - script.stop: send_setting_value
       - homeassistant.action:
           action: fan.turn_off
           data:
@@ -90,8 +94,9 @@ script:
                 note_local_change();
                 id(updated_ui) = true;
             - script.execute: update_display
+            # switch.turn_on, or input_boolean.turn_on for a helper.
             - homeassistant.action:
-                action: switch.turn_on
+                action: !lambda 'return entity_domain_action(mode_item_entity_cstr(REMOTE_MODE_SWITCHES, switch_index), "turn_on");'
                 data:
                   entity_id: !lambda 'return std::string(mode_item_entity_cstr(REMOTE_MODE_SWITCHES, switch_index));'
                 on_success:
@@ -139,7 +144,7 @@ script:
                 id(updated_ui) = true;
             - script.execute: update_display
             - homeassistant.action:
-                action: switch.turn_off
+                action: !lambda 'return entity_domain_action(mode_item_entity_cstr(REMOTE_MODE_SWITCHES, switch_index), "turn_off");'
                 data:
                   entity_id: !lambda 'return std::string(mode_item_entity_cstr(REMOTE_MODE_SWITCHES, switch_index));'
                 on_success:
@@ -236,11 +241,12 @@ script:
                       id(last_brightness_interaction) = millis();
                       note_local_change();
                       id(updated_ui) = true;
-                  - homeassistant.service:
-                      service: light.turn_on
-                      data:
-                        entity_id: !lambda 'return id(selected_item_entity);'
-                        brightness_pct: !lambda 'return id(selected_brightness_pct);'
+                  - script.execute:
+                      id: send_setting_value
+                      kind: !lambda 'return VALUE_SEND_LIGHT_BRIGHTNESS;'
+                      entity: !lambda 'return id(selected_item_entity);'
+                      value: !lambda 'return id(selected_brightness_pct);'
+                      value2: !lambda 'return NAN;'
                   - script.execute: refresh_setting_options
                   - script.execute: update_display
 
@@ -270,10 +276,12 @@ script:
           condition:
             lambda: 'return id(selected_brightness_pct) <= 10;'
           then:
-            - homeassistant.service:
-                service: light.turn_off
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
+            - script.execute:
+                id: send_setting_value
+                kind: !lambda 'return VALUE_SEND_LIGHT_BRIGHTNESS;'
+                entity: !lambda 'return id(selected_item_entity);'
+                value: !lambda 'return 0;'
+                value2: !lambda 'return NAN;'
             - lambda: |-
                 id(selected_brightness_pct) = 0;
                 id(selected_item_state) = "off";
@@ -291,11 +299,12 @@ script:
                 id(last_brightness_interaction) = millis();
                 note_local_change();
                 id(updated_ui) = true;
-            - homeassistant.service:
-                service: light.turn_on
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  brightness_pct: !lambda 'return id(selected_brightness_pct);'
+            - script.execute:
+                id: send_setting_value
+                kind: !lambda 'return VALUE_SEND_LIGHT_BRIGHTNESS;'
+                entity: !lambda 'return id(selected_item_entity);'
+                value: !lambda 'return id(selected_brightness_pct);'
+                value2: !lambda 'return NAN;'
             - script.execute: update_display
 
   # Plus on a fan that is off turns it on at its last speed, as Circle does.
@@ -333,11 +342,12 @@ script:
                             id(last_fan_speed_interaction) = millis();
                             note_local_change();
                             id(updated_ui) = true;
-                        - homeassistant.action:
-                            action: fan.set_percentage
-                            data:
-                              entity_id: !lambda 'return id(selected_item_entity);'
-                              percentage: !lambda 'return id(selected_fan_speed_pct);'
+                        - script.execute:
+                            id: send_setting_value
+                            kind: !lambda 'return VALUE_SEND_FAN_PERCENTAGE;'
+                            entity: !lambda 'return id(selected_item_entity);'
+                            value: !lambda 'return id(selected_fan_speed_pct);'
+                            value2: !lambda 'return NAN;'
                         - script.execute: update_display
 
   # Minus on a running fan steps down by its own speed increment, and below
@@ -381,11 +391,12 @@ script:
                 id(last_fan_speed_interaction) = millis();
                 note_local_change();
                 id(updated_ui) = true;
-            - homeassistant.action:
-                action: fan.set_percentage
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  percentage: !lambda 'return id(selected_fan_speed_pct);'
+            - script.execute:
+                id: send_setting_value
+                kind: !lambda 'return VALUE_SEND_FAN_PERCENTAGE;'
+                entity: !lambda 'return id(selected_item_entity);'
+                value: !lambda 'return id(selected_fan_speed_pct);'
+                value2: !lambda 'return NAN;'
             - script.execute: update_display
 
   - id: turn_on_selected_humidifier
@@ -431,13 +442,12 @@ script:
           id(last_humidifier_interaction) = millis();
           note_local_change();
           id(updated_ui) = true;
-      - homeassistant.action:
-          action: humidifier.set_humidity
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-            # Home Assistant coerces humidity to int; a float lambda would send
-            # "51.000000", which that coercion rejects.
-            humidity: !lambda 'return (int) lroundf(id(selected_humidifier_target_humidity));'
+      - script.execute:
+          id: send_setting_value
+          kind: !lambda 'return VALUE_SEND_HUMIDIFIER_TARGET;'
+          entity: !lambda 'return id(selected_item_entity);'
+          value: !lambda 'return id(selected_humidifier_target_humidity);'
+          value2: !lambda 'return NAN;'
       - script.execute: update_display
 
   - id: humidifier_target_up
@@ -581,3 +591,97 @@ script:
             entity_id: !lambda 'return id(selected_item_entity);'
             direction: !lambda 'return direction;'
       - script.execute: update_display
+
+  # Plus warmer, Minus cooler, a tenth of the light's range at a time, from
+  # the value just sent while Home Assistant hasn't reported it yet.
+  - id: adjust_light_warmth
+    parameters:
+      step: int
+    then:
+      - lambda: |-
+          int idx = id(selected_light_index);
+          uint32_t now = millis();
+          float current = pending_value_or(now, REMOTE_MODE_LIGHTS, idx, REMOTE_SETTING_LIGHT_WARMTH,
+                                           selected_light_color_temp(idx));
+          int next = light_warmth_step(current, selected_light_min_kelvin(idx), selected_light_max_kelvin(idx), step);
+          note_pending_value(REMOTE_MODE_LIGHTS, idx, REMOTE_SETTING_LIGHT_WARMTH, next);
+          id(last_setting_interaction) = now;
+          note_local_change();
+          id(updated_ui) = true;
+          id(send_setting_value).execute(VALUE_SEND_LIGHT_COLOR_TEMP, id(selected_item_entity), next, NAN);
+      - script.execute: update_display
+
+  # Vacuums and lawn mowers. Circle starts one, or pauses one at work; Square
+  # sends it back to its dock. The state shown is the one asked for until
+  # Home Assistant reports.
+  - id: vacuum_circle_action
+    then:
+      - lambda: |-
+          const std::string &state = id(selected_item_state);
+          if (state.empty()) {
+            id(show_toast).execute("SYNCING");
+            return;
+          }
+          int idx = id(selected_vacuum_index);
+          bool mower = vacuum_is_mower(idx);
+          bool working = vacuum_state_working(state);
+          const char *action = working ? (mower ? "lawn_mower.pause" : "vacuum.pause")
+                                       : (mower ? "lawn_mower.start_mowing" : "vacuum.start");
+          id(selected_item_state) = working ? "paused" : (mower ? "mowing" : "cleaning");
+          note_local_change();
+          id(updated_ui) = true;
+          id(show_toast).execute(working ? "PAUSING..." : "STARTING...");
+          id(call_entity_action).execute(action, id(selected_item_entity), working ? "PAUSE FAILED" : "START FAILED");
+
+  - id: vacuum_square_action
+    then:
+      - lambda: |-
+          const std::string &state = id(selected_item_state);
+          if (state.empty()) {
+            id(show_toast).execute("SYNCING");
+            return;
+          }
+          if (state == "docked") {
+            id(show_toast).execute("ALREADY DOCKED");
+            return;
+          }
+          bool mower = vacuum_is_mower(id(selected_vacuum_index));
+          id(selected_item_state) = "returning";
+          note_local_change();
+          id(updated_ui) = true;
+          id(show_toast).execute("RETURNING...");
+          id(call_entity_action).execute(mower ? "lawn_mower.dock" : "vacuum.return_to_base", id(selected_item_entity),
+                                         "DOCK FAILED");
+
+  # FAN in the footer: the vacuum's fan speeds, from the one just sent while
+  # Home Assistant hasn't reported it.
+  - id: step_vacuum_fan_speed
+    parameters:
+      step: int
+    then:
+      - lambda: |-
+          int idx = id(selected_vacuum_index);
+          const std::string &current = local_change_hold_active(millis()) && !id(selected_setting_detail).empty()
+              ? id(selected_setting_detail)
+              : vacuum_fan_speed_for_index(idx);
+          std::string next = step_delimited_option(vacuum_fan_speed_list_for_index(idx), current, step);
+          if (next.empty()) {
+            return;
+          }
+          id(selected_setting_detail) = next;
+          id(last_setting_interaction) = millis();
+          note_local_change();
+          id(updated_ui) = true;
+          id(set_vacuum_fan_speed).execute(next);
+      - script.execute: update_display
+
+  - id: set_vacuum_fan_speed
+    mode: queued
+    parameters:
+      fan_speed: std::string
+    then:
+      - homeassistant.action:
+          action: vacuum.set_fan_speed
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            fan_speed: !lambda 'return fan_speed;'

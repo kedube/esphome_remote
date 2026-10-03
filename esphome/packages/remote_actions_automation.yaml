@@ -124,6 +124,8 @@ script:
             id(set_automation_feedback).execute("RUNNING...");
           } else if (kind == AUTOMATION_KIND_SCENE) {
             id(set_automation_feedback).execute("ACTIVATING...");
+          } else if (kind == AUTOMATION_KIND_BUTTON) {
+            id(set_automation_feedback).execute("PRESSING...");
           } else {
             id(automation_last_triggered_before) = automation_last_triggered_for_index(automation_index);
             time_t now = ::time(nullptr);
@@ -175,6 +177,14 @@ script:
                       automation_index: !lambda 'return automation_index;'
                       pending: "ACTIVATING..."
                 else:
+                  - if:
+                      condition:
+                        lambda: 'return automation_kind(automation_index) == AUTOMATION_KIND_BUTTON;'
+                      then:
+                        - script.execute:
+                            id: press_selected_button
+                            automation_index: !lambda 'return automation_index;'
+                        - script.stop: trigger_selected_automation
                   - homeassistant.action:
                       action: script.turn_on
                       data:
@@ -206,3 +216,119 @@ script:
                       id: expire_automation_request
                       automation_index: !lambda 'return automation_index;'
                       pending: "RUNNING..."
+
+  # button.press, or input_button.press for a helper. Home Assistant answers
+  # once the press has been passed on.
+  - id: press_selected_button
+    mode: queued
+    parameters:
+      automation_index: int
+    then:
+      - homeassistant.action:
+          action: !lambda 'return entity_domain_action(mode_item_entity_cstr(REMOTE_MODE_AUTOMATION, automation_index), "press");'
+          data:
+            entity_id: !lambda 'return std::string(mode_item_entity_cstr(REMOTE_MODE_AUTOMATION, automation_index));'
+          on_success:
+            - if:
+                condition:
+                  lambda: |-
+                    return id(current_mode) == REMOTE_MODE_AUTOMATION &&
+                           id(selected_automation_index) == automation_index;
+                then:
+                  - script.execute:
+                      id: set_automation_feedback
+                      feedback: "PRESSED"
+          on_error:
+            - if:
+                condition:
+                  lambda: |-
+                    return id(current_mode) == REMOTE_MODE_AUTOMATION &&
+                           id(selected_automation_index) == automation_index;
+                then:
+                  - script.execute:
+                      id: set_automation_feedback
+                      feedback: "FAILED"
+      - script.execute:
+          id: expire_automation_request
+          automation_index: !lambda 'return automation_index;'
+          pending: "PRESSING..."
+
+  # VALUE in the footer of a number or input_number: its own step, within its
+  # min and max, from the value just sent while Home Assistant hasn't reported
+  # it yet. Held, it repeats, and only where it stops is sent.
+  - id: adjust_input_number
+    parameters:
+      step: int
+    then:
+      - lambda: |-
+          int idx = id(selected_input_index);
+          uint32_t now = millis();
+          float current = pending_value_or(now, REMOTE_MODE_INPUTS, idx, REMOTE_SETTING_INPUT_VALUE,
+                                           input_value_for_index(idx));
+          float next = number_step_value(current, input_min_for_index(idx), input_max_for_index(idx),
+                                         input_step_for_index(idx), step);
+          if (std::isfinite(current) && next == current) {
+            return;  // at its min or max
+          }
+          note_pending_value(REMOTE_MODE_INPUTS, idx, REMOTE_SETTING_INPUT_VALUE, next);
+          id(last_setting_interaction) = now;
+          note_local_change();
+          id(updated_ui) = true;
+          id(send_setting_value).execute(VALUE_SEND_NUMBER, id(selected_item_entity), next, NAN);
+      - script.execute: update_display
+
+  # OPTION in the footer of a select or input_select. Picking an option can
+  # set off automations, so it goes out once the presses stop
+  # (send_option_after_pause), not for every option on the way.
+  - id: step_input_select
+    parameters:
+      step: int
+    then:
+      - lambda: |-
+          std::string next =
+              step_delimited_option(input_options_for_index(id(selected_input_index)), id(selected_item_state), step);
+          if (next.empty()) {
+            return;
+          }
+          id(selected_item_state) = next;
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = next;
+          note_local_change();
+          id(updated_ui) = true;
+          id(send_option_after_pause).execute(OPTION_SEND_SELECT, id(selected_item_entity), next);
+      - script.execute: update_display
+
+  # Timers. Circle starts one (or resumes it) or pauses it; Square cancels it.
+  - id: timer_circle_action
+    then:
+      - lambda: |-
+          const std::string &state = id(selected_item_state);
+          if (state.empty()) {
+            id(show_toast).execute("SYNCING");
+            return;
+          }
+          bool active = state == "active";
+          id(selected_item_state) = active ? "paused" : "active";
+          note_local_change();
+          id(updated_ui) = true;
+          id(show_toast).execute(active ? "PAUSED" : "STARTED");
+          id(call_entity_action).execute(active ? "timer.pause" : "timer.start", id(selected_item_entity),
+                                         active ? "PAUSE FAILED" : "START FAILED");
+
+  - id: timer_square_action
+    then:
+      - lambda: |-
+          const std::string &state = id(selected_item_state);
+          if (state.empty()) {
+            id(show_toast).execute("SYNCING");
+            return;
+          }
+          if (state == "idle") {
+            id(show_toast).execute("NOT RUNNING");
+            return;
+          }
+          id(selected_item_state) = "idle";
+          note_local_change();
+          id(updated_ui) = true;
+          id(show_toast).execute("CANCELLED");
+          id(call_entity_action).execute("timer.cancel", id(selected_item_entity), "CANCEL FAILED");

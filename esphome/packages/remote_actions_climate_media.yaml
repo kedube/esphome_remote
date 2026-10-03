@@ -33,7 +33,12 @@ script:
       preview: std::string
     mode: queued
     then:
+      # A MODE still waiting to go out would undo this one.
       - lambda: |-
+          if (remote_pending_option.kind == OPTION_SEND_HVAC_MODE &&
+              remote_pending_option.entity == id(selected_item_entity)) {
+            remote_pending_option.kind = -1;
+          }
           id(selected_item_state) = mode_name;
           id(last_climate_interaction) = millis();
           note_local_change();
@@ -110,12 +115,12 @@ script:
                      remote_ui_has_dual_climate_target(id(selected_item_state), id(selected_climate_target_temp_low),
                                                        id(selected_climate_target_temp_high));
           then:
-            - homeassistant.action:
-                action: climate.set_temperature
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  target_temp_low: !lambda 'return id(selected_climate_target_temp_low);'
-                  target_temp_high: !lambda 'return id(selected_climate_target_temp_high);'
+            - script.execute:
+                id: send_setting_value
+                kind: !lambda 'return VALUE_SEND_CLIMATE_RANGE;'
+                entity: !lambda 'return id(selected_item_entity);'
+                value: !lambda 'return id(selected_climate_target_temp_low);'
+                value2: !lambda 'return id(selected_climate_target_temp_high);'
           else:
             # The lambda's early return doesn't stop this script: skip the call
             # when there is no target to send (not synced yet, or the
@@ -124,11 +129,12 @@ script:
                 condition:
                   lambda: 'return id(climate_adjust_pending) && !isnan(id(selected_climate_target_temp));'
                 then:
-                  - homeassistant.action:
-                      action: climate.set_temperature
-                      data:
-                        entity_id: !lambda 'return id(selected_item_entity);'
-                        temperature: !lambda 'return id(selected_climate_target_temp);'
+                  - script.execute:
+                      id: send_setting_value
+                      kind: !lambda 'return VALUE_SEND_CLIMATE_TARGET;'
+                      entity: !lambda 'return id(selected_item_entity);'
+                      value: !lambda 'return id(selected_climate_target_temp);'
+                      value2: !lambda 'return NAN;'
       - script.execute: update_display
 
   - id: climate_temperature_up
@@ -239,13 +245,12 @@ script:
           id(selected_setting_detail) = buffer;
           note_local_change();
           id(updated_ui) = true;
-      - homeassistant.action:
-          action: climate.set_humidity
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-            # Home Assistant coerces humidity to int; a float lambda would send
-            # "51.000000", which that coercion rejects.
-            humidity: !lambda 'return (int) lroundf(id(selected_climate_target_humidity));'
+      - script.execute:
+          id: send_setting_value
+          kind: !lambda 'return VALUE_SEND_CLIMATE_HUMIDITY;'
+          entity: !lambda 'return id(selected_item_entity);'
+          value: !lambda 'return id(selected_climate_target_humidity);'
+          value2: !lambda 'return NAN;'
       - script.execute: update_display
 
   - id: media_set_shuffle
@@ -408,11 +413,12 @@ script:
           id(selected_setting_detail) = buffer;
           note_local_change();
           id(updated_ui) = true;
-      - homeassistant.service:
-          service: water_heater.set_temperature
-          data:
-            entity_id: !lambda 'return id(selected_item_entity);'
-            temperature: !lambda 'return id(selected_water_heater_target_temp);'
+      - script.execute:
+          id: send_setting_value
+          kind: !lambda 'return VALUE_SEND_WATER_HEATER_TARGET;'
+          entity: !lambda 'return id(selected_item_entity);'
+          value: !lambda 'return id(selected_water_heater_target_temp);'
+          value2: !lambda 'return NAN;'
       - script.execute: update_display
 
   - id: set_water_heater_operation_mode
@@ -621,11 +627,12 @@ script:
                 id(last_media_interaction) = millis();
                 note_local_change();
                 id(updated_ui) = true;
-            - homeassistant.action:
-                action: media_player.volume_set
-                data:
-                  entity_id: !lambda 'return id(selected_item_entity);'
-                  volume_level: !lambda 'return id(selected_media_volume_pct) / 100.0f;'
+            - script.execute:
+                id: send_setting_value
+                kind: !lambda 'return VALUE_SEND_MEDIA_VOLUME;'
+                entity: !lambda 'return id(selected_item_entity);'
+                value: !lambda 'return id(selected_media_volume_pct);'
+                value2: !lambda 'return NAN;'
             - script.execute: update_display
 
   - id: media_volume_up
@@ -641,3 +648,43 @@ script:
       - script.execute:
           id: adjust_media_volume
           delta: -5
+
+  # MODE in the footer: the thermostat's HVAC modes. The screen shows the new
+  # mode at once; it goes out once the presses stop (send_option_after_pause),
+  # so stepping from heat past cool to auto never switches the system to cool.
+  - id: step_climate_hvac_mode
+    parameters:
+      step: int
+    then:
+      - lambda: |-
+          std::string next =
+              step_delimited_option(selected_climate_hvac_modes(id(selected_climate_index)), id(selected_item_state), step);
+          if (next.empty()) {
+            return;
+          }
+          id(selected_item_state) = next;
+          id(last_climate_interaction) = millis();
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = esphome::str_upper_case(next);
+          note_local_change();
+          id(updated_ui) = true;
+          id(send_option_after_pause).execute(OPTION_SEND_HVAC_MODE, id(selected_item_entity), next);
+      - script.execute: update_display
+
+  - id: media_set_mute
+    parameters:
+      enabled: bool
+    mode: queued
+    then:
+      - lambda: |-
+          id(last_media_interaction) = millis();
+          id(last_setting_interaction) = millis();
+          id(selected_setting_detail) = enabled ? "ON" : "OFF";
+          note_local_change();
+          id(updated_ui) = true;
+      - homeassistant.action:
+          action: media_player.volume_mute
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            is_volume_muted: !lambda 'return enabled;'
+      - script.execute: update_display

@@ -6,6 +6,29 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+- Hold `Previous` or `Next` to move through a list (it stops at the ends), and `Plus` or
+  `Minus` to keep changing a value with a range. A held value changes on screen and goes
+  to Home Assistant once, when you let go.
+- Thermostats: `MODE` steps through the HVAC modes. The mode goes out 1.5 seconds after
+  the last press, so stepping past one never switches the system to it.
+- Covers: while a cover or valve that can stop is moving, the footer shows `STOP` and a
+  tap of either button stops it.
+- Lights with a colour temperature get `WARMTH`; media players that report mute get
+  `MUTE`. These add three subscriptions per light and one per media player, which a wake
+  spends a little longer syncing; `#define LIGHT_WARMTH 0` in `local_entities.h` drops
+  the light ones.
+- Waking from sleep shows the item the remote went to sleep on, as it was, until the live
+  values arrive, instead of the connecting screens. The screen dims 10 seconds before the
+  remote sleeps; any button brings it back.
+- A new diagnostic sensor, **Wake to Home Assistant**, records how long each wake takes to
+  connect, and `settings-example.yaml` shows how to give the remote a fixed IP address to
+  shorten it.
+- New favorites: `input_boolean` (as a switch), `valve` (as a cover), `person` and
+  `device_tracker` (`HOME`, `AWAY` or the zone), `button` and `input_button` (hold
+  `Circle` to press), `number`, `input_number`, `select` and `input_select`, `vacuum` and
+  `lawn_mower`, and `timer` (with a live countdown).
+- The switch toggle is an even pill: its round ends no longer stand a row below the
+  middle.
 
 ## 4.5 — 2026-10-03
 - A screen update draws the frame and sends it to the panel in separate passes of

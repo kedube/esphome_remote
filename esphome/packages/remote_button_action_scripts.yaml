@@ -118,3 +118,9 @@ script:
     then:
       - lambda: |-
           id(last_active) = millis() / 1000;
+          // Whatever the press does shows at once, not the frame from before sleep.
+          id(snapshot_hold_until) = 0;
+          if (id(idle_dimmed)) {
+            id(idle_dimmed) = false;
+            id(oled_display).set_contrast(id(contrast) / 10.0f);
+          }

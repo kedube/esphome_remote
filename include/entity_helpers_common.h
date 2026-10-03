@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cmath>
+#include <initializer_list>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -88,21 +89,34 @@ inline constexpr bool cstr_starts_with_constexpr(const char *value, const char *
 
 inline constexpr RemoteMode favorite_entity_mode_constexpr(const char *entity_id) {
   return cstr_starts_with_constexpr(entity_id, "light.")            ? REMOTE_MODE_LIGHTS :
-         cstr_starts_with_constexpr(entity_id, "switch.")           ? REMOTE_MODE_SWITCHES :
+         (cstr_starts_with_constexpr(entity_id, "switch.") ||
+          cstr_starts_with_constexpr(entity_id, "input_boolean."))  ? REMOTE_MODE_SWITCHES :
          cstr_starts_with_constexpr(entity_id, "climate.")          ? REMOTE_MODE_CLIMATE :
          cstr_starts_with_constexpr(entity_id, "water_heater.")     ? REMOTE_MODE_WATER_HEATERS :
          cstr_starts_with_constexpr(entity_id, "humidifier.")       ? REMOTE_MODE_HUMIDIFIERS :
          cstr_starts_with_constexpr(entity_id, "fan.")              ? REMOTE_MODE_FANS :
-         cstr_starts_with_constexpr(entity_id, "cover.")            ? REMOTE_MODE_COVERS :
+         (cstr_starts_with_constexpr(entity_id, "cover.") ||
+          cstr_starts_with_constexpr(entity_id, "valve."))          ? REMOTE_MODE_COVERS :
          cstr_starts_with_constexpr(entity_id, "lock.")             ? REMOTE_MODE_LOCKS :
          cstr_starts_with_constexpr(entity_id, "media_player.")     ? REMOTE_MODE_MEDIA :
          (cstr_starts_with_constexpr(entity_id, "sensor.") ||
-          cstr_starts_with_constexpr(entity_id, "binary_sensor."))  ? REMOTE_MODE_SENSORS :
+          cstr_starts_with_constexpr(entity_id, "binary_sensor.") ||
+          cstr_starts_with_constexpr(entity_id, "person.") ||
+          cstr_starts_with_constexpr(entity_id, "device_tracker.")) ? REMOTE_MODE_SENSORS :
          (cstr_starts_with_constexpr(entity_id, "automation.") ||
           cstr_starts_with_constexpr(entity_id, "script.") ||
-          cstr_starts_with_constexpr(entity_id, "scene."))          ? REMOTE_MODE_AUTOMATION :
+          cstr_starts_with_constexpr(entity_id, "scene.") ||
+          cstr_starts_with_constexpr(entity_id, "button.") ||
+          cstr_starts_with_constexpr(entity_id, "input_button."))   ? REMOTE_MODE_AUTOMATION :
          cstr_starts_with_constexpr(entity_id, "alarm_control_panel.") ? REMOTE_MODE_ALARMS :
          cstr_starts_with_constexpr(entity_id, "weather.")          ? REMOTE_MODE_WEATHER :
+         (cstr_starts_with_constexpr(entity_id, "number.") ||
+          cstr_starts_with_constexpr(entity_id, "input_number.") ||
+          cstr_starts_with_constexpr(entity_id, "select.") ||
+          cstr_starts_with_constexpr(entity_id, "input_select."))   ? REMOTE_MODE_INPUTS :
+         (cstr_starts_with_constexpr(entity_id, "vacuum.") ||
+          cstr_starts_with_constexpr(entity_id, "lawn_mower."))     ? REMOTE_MODE_VACUUMS :
+         cstr_starts_with_constexpr(entity_id, "timer.")            ? REMOTE_MODE_TIMERS :
                                                                         REMOTE_MODE_INFO;
 }
 
@@ -188,6 +202,9 @@ inline constexpr int SENSOR_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_
 inline constexpr int AUTOMATION_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_AUTOMATION);
 inline constexpr int ALARM_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_ALARMS);
 inline constexpr int WEATHER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_WEATHER);
+inline constexpr int INPUT_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_INPUTS);
+inline constexpr int VACUUM_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_VACUUMS);
+inline constexpr int TIMER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_TIMERS);
 
 inline constexpr auto LIGHT_LIST_STORAGE = make_mode_entity_array<LIGHT_LIST_COUNT>(REMOTE_MODE_LIGHTS);
 inline constexpr auto SWITCH_LIST_STORAGE = make_mode_entity_array<SWITCH_LIST_COUNT>(REMOTE_MODE_SWITCHES);
@@ -202,6 +219,9 @@ inline constexpr auto SENSOR_LIST_STORAGE = make_mode_entity_array<SENSOR_LIST_C
 inline constexpr auto AUTOMATION_LIST_STORAGE = make_mode_entity_array<AUTOMATION_LIST_COUNT>(REMOTE_MODE_AUTOMATION);
 inline constexpr auto ALARM_LIST_STORAGE = make_mode_entity_array<ALARM_LIST_COUNT>(REMOTE_MODE_ALARMS);
 inline constexpr auto WEATHER_LIST_STORAGE = make_mode_entity_array<WEATHER_LIST_COUNT>(REMOTE_MODE_WEATHER);
+inline constexpr auto INPUT_LIST_STORAGE = make_mode_entity_array<INPUT_LIST_COUNT>(REMOTE_MODE_INPUTS);
+inline constexpr auto VACUUM_LIST_STORAGE = make_mode_entity_array<VACUUM_LIST_COUNT>(REMOTE_MODE_VACUUMS);
+inline constexpr auto TIMER_LIST_STORAGE = make_mode_entity_array<TIMER_LIST_COUNT>(REMOTE_MODE_TIMERS);
 
 inline constexpr const EntityEntry *LIGHT_LIST = LIGHT_LIST_STORAGE.data();
 inline constexpr const EntityEntry *SWITCH_LIST = SWITCH_LIST_STORAGE.data();
@@ -216,6 +236,9 @@ inline constexpr const EntityEntry *SENSOR_LIST = SENSOR_LIST_STORAGE.data();
 inline constexpr const EntityEntry *AUTOMATION_LIST = AUTOMATION_LIST_STORAGE.data();
 inline constexpr const EntityEntry *ALARM_LIST = ALARM_LIST_STORAGE.data();
 inline constexpr const EntityEntry *WEATHER_LIST = WEATHER_LIST_STORAGE.data();
+inline constexpr const EntityEntry *INPUT_LIST = INPUT_LIST_STORAGE.data();
+inline constexpr const EntityEntry *VACUUM_LIST = VACUUM_LIST_STORAGE.data();
+inline constexpr const EntityEntry *TIMER_LIST = TIMER_LIST_STORAGE.data();
 inline constexpr const char *INFO_ITEM_NAMES[] = {"Time & Date", "Wireless", "Network", "Device Name", "Battery", "Version"};
 inline constexpr const char *INFO_ITEM_ENTITIES[] = {
     "info.date", "info.wireless", "info.network", "info.device_name", "info.battery", "info.version"};
@@ -226,6 +249,13 @@ inline constexpr int INFO_ITEM_COUNT = sizeof(INFO_ITEM_NAMES) / sizeof(INFO_ITE
 #endif
 
 inline constexpr int NOTIFICATION_FEED_MAX_ITEMS = REMOTE_NOTIFICATION_FEED_MAX_ITEMS;
+
+// WARMTH for lights with a colour temperature. Following it costs three
+// subscriptions per light, so a wake takes a little longer to sync every light;
+// #define LIGHT_WARMTH 0 in local_entities.h to go without.
+#ifndef LIGHT_WARMTH
+#define LIGHT_WARMTH 1
+#endif
 
 #ifndef NOTIFICATION_FEED_ENTITY
 #define NOTIFICATION_FEED_ENTITY ""
@@ -576,9 +606,8 @@ inline bool entity_id_matches_domain(const char *entity_id, const char *domain) 
 }
 
 template <typename Entity>
-inline void validate_entity_list(
-    const char *label, const Entity *entities, int count, const char *primary_domain,
-    const char *secondary_domain = nullptr, const char *tertiary_domain = nullptr) {
+inline void validate_entity_list(const char *label, const Entity *entities, int count,
+                                 std::initializer_list<const char *> domains) {
   for (int i = 0; i < count; i++) {
     const char *name = entities[i].name;
     const char *entity_id = entities[i].entity_id;
@@ -589,9 +618,10 @@ inline void validate_entity_list(
       ESP_LOGW("remote_config", "%s[%d] is missing an entity_id", label, i);
       continue;
     }
-    bool valid_domain = entity_id_matches_domain(entity_id, primary_domain) ||
-                        entity_id_matches_domain(entity_id, secondary_domain) ||
-                        entity_id_matches_domain(entity_id, tertiary_domain);
+    bool valid_domain = false;
+    for (const char *domain : domains) {
+      valid_domain = valid_domain || entity_id_matches_domain(entity_id, domain);
+    }
     if (!valid_domain) {
       ESP_LOGW("remote_config", "%s[%d] has unexpected domain: %s", label, i, entity_id);
     }
@@ -608,19 +638,24 @@ inline void validate_notification_config() {
 }
 
 inline void validate_remote_configuration() {
-  validate_entity_list("LIGHT_LIST", LIGHT_LIST, LIGHT_LIST_COUNT, "light");
-  validate_entity_list("SWITCH_LIST", SWITCH_LIST, SWITCH_LIST_COUNT, "switch");
-  validate_entity_list("CLIMATE_LIST", CLIMATE_LIST, CLIMATE_LIST_COUNT, "climate");
-  validate_entity_list("WATER_HEATER_LIST", WATER_HEATER_LIST, WATER_HEATER_LIST_COUNT, "water_heater");
-  validate_entity_list("HUMIDIFIER_LIST", HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, "humidifier");
-  validate_entity_list("FAN_LIST", FAN_LIST, FAN_LIST_COUNT, "fan");
-  validate_entity_list("COVER_LIST", COVER_LIST, COVER_LIST_COUNT, "cover");
-  validate_entity_list("LOCK_LIST", LOCK_LIST, LOCK_LIST_COUNT, "lock");
-  validate_entity_list("MEDIA_PLAYER_LIST", MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, "media_player");
-  validate_entity_list("SENSOR_LIST", SENSOR_LIST, SENSOR_LIST_COUNT, "sensor", "binary_sensor");
-  validate_entity_list("AUTOMATION_LIST", AUTOMATION_LIST, AUTOMATION_LIST_COUNT, "automation", "script", "scene");
-  validate_entity_list("ALARM_LIST", ALARM_LIST, ALARM_LIST_COUNT, "alarm_control_panel");
-  validate_entity_list("WEATHER_LIST", WEATHER_LIST, WEATHER_LIST_COUNT, "weather");
+  validate_entity_list("LIGHT_LIST", LIGHT_LIST, LIGHT_LIST_COUNT, {"light"});
+  validate_entity_list("SWITCH_LIST", SWITCH_LIST, SWITCH_LIST_COUNT, {"switch", "input_boolean"});
+  validate_entity_list("CLIMATE_LIST", CLIMATE_LIST, CLIMATE_LIST_COUNT, {"climate"});
+  validate_entity_list("WATER_HEATER_LIST", WATER_HEATER_LIST, WATER_HEATER_LIST_COUNT, {"water_heater"});
+  validate_entity_list("HUMIDIFIER_LIST", HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, {"humidifier"});
+  validate_entity_list("FAN_LIST", FAN_LIST, FAN_LIST_COUNT, {"fan"});
+  validate_entity_list("COVER_LIST", COVER_LIST, COVER_LIST_COUNT, {"cover", "valve"});
+  validate_entity_list("LOCK_LIST", LOCK_LIST, LOCK_LIST_COUNT, {"lock"});
+  validate_entity_list("MEDIA_PLAYER_LIST", MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, {"media_player"});
+  validate_entity_list("SENSOR_LIST", SENSOR_LIST, SENSOR_LIST_COUNT,
+                       {"sensor", "binary_sensor", "person", "device_tracker"});
+  validate_entity_list("AUTOMATION_LIST", AUTOMATION_LIST, AUTOMATION_LIST_COUNT,
+                       {"automation", "script", "scene", "button", "input_button"});
+  validate_entity_list("ALARM_LIST", ALARM_LIST, ALARM_LIST_COUNT, {"alarm_control_panel"});
+  validate_entity_list("WEATHER_LIST", WEATHER_LIST, WEATHER_LIST_COUNT, {"weather"});
+  validate_entity_list("INPUT_LIST", INPUT_LIST, INPUT_LIST_COUNT, {"number", "input_number", "select", "input_select"});
+  validate_entity_list("VACUUM_LIST", VACUUM_LIST, VACUUM_LIST_COUNT, {"vacuum", "lawn_mower"});
+  validate_entity_list("TIMER_LIST", TIMER_LIST, TIMER_LIST_COUNT, {"timer"});
   validate_notification_config();
 }
 
@@ -693,6 +728,12 @@ inline int favorite_entity_mode_index(RemoteMode mode, const char *entity_id) {
       return index_of_entity_id(ALARM_LIST, ALARM_LIST_COUNT, entity_id);
     case REMOTE_MODE_WEATHER:
       return index_of_entity_id(WEATHER_LIST, WEATHER_LIST_COUNT, entity_id);
+    case REMOTE_MODE_INPUTS:
+      return index_of_entity_id(INPUT_LIST, INPUT_LIST_COUNT, entity_id);
+    case REMOTE_MODE_VACUUMS:
+      return index_of_entity_id(VACUUM_LIST, VACUUM_LIST_COUNT, entity_id);
+    case REMOTE_MODE_TIMERS:
+      return index_of_entity_id(TIMER_LIST, TIMER_LIST_COUNT, entity_id);
     default:
       return -1;
   }
@@ -846,6 +887,12 @@ inline int mode_item_count(RemoteMode mode) {
       return WEATHER_LIST_COUNT;
     case REMOTE_MODE_INFO:
       return INFO_ITEM_COUNT;
+    case REMOTE_MODE_INPUTS:
+      return INPUT_LIST_COUNT;
+    case REMOTE_MODE_VACUUMS:
+      return VACUUM_LIST_COUNT;
+    case REMOTE_MODE_TIMERS:
+      return TIMER_LIST_COUNT;
     default:
       return 0;
   }
@@ -917,6 +964,12 @@ inline const char *mode_item_name_cstr(RemoteMode mode, int idx) {
       return indexed_entity_name_cstr(WEATHER_LIST, WEATHER_LIST_COUNT, idx);
     case REMOTE_MODE_INFO:
       return indexed_value_cstr(INFO_ITEM_NAMES, INFO_ITEM_COUNT, idx);
+    case REMOTE_MODE_INPUTS:
+      return indexed_entity_name_cstr(INPUT_LIST, INPUT_LIST_COUNT, idx);
+    case REMOTE_MODE_VACUUMS:
+      return indexed_entity_name_cstr(VACUUM_LIST, VACUUM_LIST_COUNT, idx);
+    case REMOTE_MODE_TIMERS:
+      return indexed_entity_name_cstr(TIMER_LIST, TIMER_LIST_COUNT, idx);
     case REMOTE_MODE_NOTIFICATIONS:
     default:
       return nullptr;
@@ -953,6 +1006,12 @@ inline const char *mode_item_entity_cstr(RemoteMode mode, int idx) {
       return indexed_entity_id_cstr(WEATHER_LIST, WEATHER_LIST_COUNT, idx);
     case REMOTE_MODE_INFO:
       return indexed_value_cstr(INFO_ITEM_ENTITIES, INFO_ITEM_COUNT, idx);
+    case REMOTE_MODE_INPUTS:
+      return indexed_entity_id_cstr(INPUT_LIST, INPUT_LIST_COUNT, idx);
+    case REMOTE_MODE_VACUUMS:
+      return indexed_entity_id_cstr(VACUUM_LIST, VACUUM_LIST_COUNT, idx);
+    case REMOTE_MODE_TIMERS:
+      return indexed_entity_id_cstr(TIMER_LIST, TIMER_LIST_COUNT, idx);
     case REMOTE_MODE_NOTIFICATIONS:
     default:
       return nullptr;
@@ -991,6 +1050,9 @@ struct ModeSelectionStateRefs {
   int &alarm_idx;
   int &notification_idx;
   int &info_idx;
+  int &input_idx;
+  int &vacuum_idx;
+  int &timer_idx;
 };
 
 struct CurrentModeSelectionContext {
@@ -1014,9 +1076,10 @@ struct CurrentUiSelectionContext {
 inline ModeSelectionStateRefs make_mode_selection_state_refs(
     int &light_idx, int &switch_idx, int &climate_idx, int &water_heater_idx, int &lock_idx, int &cover_idx, int &media_idx,
     int &automation_idx, int &weather_idx, int &fan_idx, int &humidifier_idx, int &sensor_idx, int &alarm_idx,
-    int &notification_idx, int &info_idx) {
+    int &notification_idx, int &info_idx, int &input_idx, int &vacuum_idx, int &timer_idx) {
   return {light_idx, switch_idx, climate_idx, water_heater_idx, lock_idx, cover_idx, media_idx, automation_idx,
-          weather_idx, fan_idx, humidifier_idx, sensor_idx, alarm_idx, notification_idx, info_idx};
+          weather_idx, fan_idx, humidifier_idx, sensor_idx, alarm_idx, notification_idx, info_idx, input_idx,
+          vacuum_idx, timer_idx};
 }
 
 inline AutomationKind automation_kind(int idx) {
@@ -1034,6 +1097,9 @@ inline AutomationKind automation_kind(int idx) {
   if (entity_id_matches_domain(entity_id, "scene")) {
     return AUTOMATION_KIND_SCENE;
   }
+  if (entity_id_matches_domain(entity_id, "button") || entity_id_matches_domain(entity_id, "input_button")) {
+    return AUTOMATION_KIND_BUTTON;
+  }
   return AUTOMATION_KIND_SCRIPT;
 }
 
@@ -1047,6 +1113,8 @@ inline const char *automation_kind_label(int idx) {
       return "AUTOMATION";
     case AUTOMATION_KIND_SCENE:
       return "SCENE";
+    case AUTOMATION_KIND_BUTTON:
+      return "BUTTON";
     case AUTOMATION_KIND_SCRIPT:
     default:
       return "SCRIPT";
@@ -1083,6 +1151,12 @@ inline int &selected_mode_index_ref(RemoteMode mode, ModeSelectionStateRefs refs
       return refs.notification_idx;
     case REMOTE_MODE_WEATHER:
       return refs.weather_idx;
+    case REMOTE_MODE_INPUTS:
+      return refs.input_idx;
+    case REMOTE_MODE_VACUUMS:
+      return refs.vacuum_idx;
+    case REMOTE_MODE_TIMERS:
+      return refs.timer_idx;
     case REMOTE_MODE_INFO:
     default:
       return refs.info_idx;

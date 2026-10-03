@@ -140,6 +140,9 @@ static bool tracked_entity_unavailable(RemoteMode mode, int idx) {
     case REMOTE_MODE_AUTOMATION: return automation_state_for_index(idx) == "unavailable";
     case REMOTE_MODE_ALARMS: return alarm_state_for_index(idx) == "unavailable";
     case REMOTE_MODE_WEATHER: return weather_state_for_index(idx) == "unavailable";
+    case REMOTE_MODE_INPUTS: return input_state_for_index(idx) == "unavailable";
+    case REMOTE_MODE_VACUUMS: return vacuum_state_for_index(idx) == "unavailable";
+    case REMOTE_MODE_TIMERS: return timer_state_for_index(idx) == "unavailable";
     default: return false;
   }
 }
@@ -315,10 +318,11 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
   if (mode == REMOTE_MODE_AUTOMATION) {
     const std::string &state = automation_state_for_index(idx);
     // Automations report on/off for enabled/disabled and scripts for
-    // running/idle; a scene's state is only the time it last ran ("unknown"
-    // if it never has), so any state means it is ready.
-    std::string next_state =
-        automation_kind(idx) == AUTOMATION_KIND_SCENE && !state.empty() ? std::string("ready") : state;
+    // running/idle; a scene's or a button's state is only the time it was last
+    // used ("unknown" if it never has been), so any state means it is ready.
+    AutomationKind kind = automation_kind(idx);
+    bool stateless = kind == AUTOMATION_KIND_SCENE || kind == AUTOMATION_KIND_BUTTON;
+    std::string next_state = stateless && !state.empty() ? std::string("ready") : state;
     bool changed = false;
     changed = assign_string_if_changed(ui.selected_item_state, next_state) || changed;
     if (changed) *ui.updated_ui = true;
@@ -383,6 +387,23 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
       changed = assign_float_if_changed(ui.selected_weather_precipitation, precipitation) || changed;
       if (changed) *ui.updated_ui = true;
     }
+    return;
+  }
+
+  // A number's value and a vacuum's fan speed are read from the trackers when
+  // the frame is drawn; only the state is copied here.
+  if (mode == REMOTE_MODE_INPUTS) {
+    sync_simple_state(ui, input_state_for_index(idx));
+    return;
+  }
+
+  if (mode == REMOTE_MODE_VACUUMS) {
+    sync_simple_state(ui, vacuum_state_for_index(idx));
+    return;
+  }
+
+  if (mode == REMOTE_MODE_TIMERS) {
+    sync_simple_state(ui, timer_state_for_index(idx));
     return;
   }
 
