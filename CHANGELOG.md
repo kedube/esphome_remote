@@ -6,6 +6,8 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+
+## 4.8 — 2026-10-04
 - A press made while the remote is still connecting after a wake now waits and goes out
   once Home Assistant has sent that item's values, so you can wake it and press straight
   away. The footer says `WAITING TO SEND…`, or `NOT SENT` if the item no longer shows
