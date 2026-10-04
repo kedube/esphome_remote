@@ -589,13 +589,81 @@ int main(int argc, char **argv) {
     tm.selected_media_volume_pct = 25;
     add("ak_tv_muted", tm);
 
+    // TV remotes, events, lock OPEN, light COLOR and climate SWING.
+    auto rk = base(REMOTE_MODE_REMOTES, "DEN", "Apple TV", "on", 2, 3);
+    rk.remote_has_commands = true;
+    rk.remote_activity = S("");
+    rk.selected_setting_option = REMOTE_SETTING_REMOTE_KEYS;
+    add("b0_remote_keys", rk);
+    auto rn = rk;
+    rn.selected_setting_option = REMOTE_SETTING_REMOTE_NAVIGATE;
+    add("b1_remote_navigate", rn);
+    auto rf = rn;
+    rf.remote_key_flash = REMOTE_KEY_DOWN;
+    rf.remote_key_flash_at = NOW - 50;
+    add("b2_remote_down", rf);
+    auto ro = rn;
+    ro.remote_key_flash = REMOTE_KEY_SELECT;
+    ro.remote_key_flash_at = NOW - 50;
+    add("b3_remote_ok", ro);
+    auto rb = rk;
+    rb.remote_key_flash = REMOTE_KEY_BACK;
+    rb.remote_key_flash_at = NOW - 50;
+    add("b4_remote_back", rb);
+    auto ra = base(REMOTE_MODE_REMOTES, "LIVING ROOM", "Harmony Hub", "on", 0, 3);
+    ra.remote_activity = S("Watch TV");
+    ra.selected_setting_option = REMOTE_SETTING_REMOTE_ACTIVITY;
+    add("b5_remote_activity", ra);
+    auto rx = base(REMOTE_MODE_REMOTES, "LIVING ROOM", "Harmony Hub", "off", 0, 3);
+    rx.remote_activity = S("");
+    add("b6_remote_no_commands", rx);
+    auto ev = base(REMOTE_MODE_SENSORS, "HOUSE", "Front Doorbell", "8:41 PM", 2, 7);
+    ev.sensor_is_event = true;
+    ev.event_type = S("ring");
+    ev.event_device_class = S("doorbell");
+    ev.event_seconds_ago = 4 * 60 + 12;
+    add("b7_event_doorbell", ev);
+    auto eb = ev;
+    eb.selected_item_name = S("Hallway Button");
+    eb.event_type = S("double_press");
+    eb.event_device_class = S("button");
+    eb.event_seconds_ago = 30;
+    add("b8_event_button", eb);
+    auto en = ev;
+    en.selected_item_state = S("unknown");
+    add("b9_event_none", en);
+    auto lo = base(REMOTE_MODE_LOCKS, "ENTRY", "Front Door", "locked", 1, 3);
+    lo.selected_setting_option = REMOTE_SETTING_LOCK_OPEN;
+    add("ba_lock_open_setting", lo);
+    auto lp = lo;
+    lp.selected_item_state = S("open");
+    add("bb_lock_opened", lp);
+    auto lc = base(REMOTE_MODE_LIGHTS, "LIVING ROOM", "Accent Strip", "on", 1, 5);
+    lc.selected_brightness_pct = 80;
+    lc.selected_setting_option = REMOTE_SETTING_LIGHT_COLOR;
+    lc.light_color_name = "BLUE";
+    add("bc_light_color", lc);
+    auto sw = base(REMOTE_MODE_CLIMATE, "BEDROOM", "Mini Split", "cool", 0, 2);
+    sw.selected_climate_current_temp = 76;
+    sw.selected_climate_target_temp = 72;
+    sw.selected_climate_hvac_action = S("COOLING");
+    sw.selected_setting_option = REMOTE_SETTING_CLIMATE_SWING;
+    sw.climate_swing_mode = S("vertical");
+    add("bd_climate_swing", sw);
+
     // Waking: the frame from before sleep, without its clock, while the
     // remote connects (what boot_screen and update_display draw).
     auto snap = base(REMOTE_MODE_LIGHTS, "OFFICE", "Desk Lamp", "on", 0, 4);
     snap.selected_brightness_pct = 70;
     snap.selected_setting_option = REMOTE_SETTING_LIGHT_DIMMER;
-    for (const char *status : {"WAITING FOR WI-FI\u2026", "CONNECTING\u2026", "SYNCING\u2026"}) {
-      std::string name = std::string("al_snapshot_") + (status[0] == 'W' ? "wifi" : status[0] == 'C' ? "api" : "sync");
+    for (const char *status :
+         {"WAITING FOR WI-FI\u2026", "CONNECTING\u2026", "SYNCING\u2026", "WAITING TO SEND\u2026", "SENDING\u2026"}) {
+      const char *kind = status[8] == 'F'   ? "wifi"
+                         : status[8] == 'T' ? "queued"
+                         : status[0] == 'C' ? "api"
+                         : status[1] == 'Y' ? "sync"
+                                            : "sending";
+      std::string name = std::string("al_snapshot_") + kind;
       list.push_back({name, [snap, status](SimDisplay &d, const RemoteUiFonts &fonts) {
                         render_remote_ui(&d, fonts, snap);
                         int clock_x = 0, clock_w = 0;

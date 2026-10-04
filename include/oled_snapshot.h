@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace esphome {
 namespace display {
@@ -18,8 +19,11 @@ inline constexpr uint32_t SNAPSHOT_SYNC_HOLD_MS = 2000;
 
 // Copies the frame just drawn. clock_x and clock_width say where the header's
 // clock is (width 0 for none): it would be out of date on waking, so it is
-// blanked when the frame comes back.
-void oled_snapshot_capture(display::DisplayBuffer *display, int clock_x, int clock_width);
+// blanked when the frame comes back. entity is the selected item, setting the
+// setting drawn for it (selected_setting_option), and preferred the one last
+// picked with Settings (preferred_setting_option).
+void oled_snapshot_capture(display::DisplayBuffer *display, int clock_x, int clock_width, const std::string &entity,
+                           int setting, int preferred);
 
 // Whether a frame from before sleep is waiting.
 bool oled_snapshot_valid();
@@ -27,5 +31,13 @@ bool oled_snapshot_valid();
 // Puts that frame back in the display's buffer, without the clock. The caller
 // draws over it and sends it to the panel. Returns false when there is none.
 bool oled_snapshot_restore(display::DisplayBuffer *display);
+
+// Whether the frame from before sleep shows this item, with preferred still
+// the setting last picked (Settings hasn't been pressed since): a press made
+// while it is on screen acts on what it shows.
+bool oled_snapshot_shows(const std::string &entity, int preferred);
+
+// The setting the frame from before sleep shows; -1 when there is none.
+int oled_snapshot_setting();
 
 }  // namespace esphome

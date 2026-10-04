@@ -1,8 +1,9 @@
 script:
-  # Action buttons do nothing until Home Assistant is connected: it drops
-  # actions sent earlier, while the screen still shows CONNECTING, so the remote
-  # would show a change that never happens. On an entity Home Assistant reports
-  # as unavailable they show UNAVAILABLE instead of sending a command.
+  # Action buttons only send once Home Assistant is connected: it drops actions
+  # sent earlier. A press made before then, while the frame from before sleep
+  # is up, waits for the connection instead (queue_press). On an entity Home
+  # Assistant reports as unavailable they show UNAVAILABLE instead of sending a
+  # command.
   - id: primary_mode_action
     then:
       - if:
@@ -10,6 +11,7 @@ script:
             api.connected:
               state_subscription_only: true
           then:
+            - lambda: 'clear_queued_press();'
             - if:
                 condition:
                   lambda: 'return id(selected_item_state) == "unavailable";'
@@ -19,6 +21,10 @@ script:
                       text: "UNAVAILABLE"
                 else:
                   - script.execute: execute_square_button_action
+          else:
+            - script.execute:
+                id: queue_press
+                kind: !lambda 'return QUEUED_PRESS_SQUARE;'
 
   - id: secondary_mode_action
     then:
@@ -47,6 +53,7 @@ script:
             api.connected:
               state_subscription_only: true
           then:
+            - lambda: 'clear_queued_press();'
             - if:
                 condition:
                   lambda: 'return id(selected_item_state) == "unavailable";'
@@ -56,6 +63,10 @@ script:
                       text: "UNAVAILABLE"
                 else:
                   - script.execute: execute_circle_button_action
+          else:
+            - script.execute:
+                id: queue_press
+                kind: !lambda 'return QUEUED_PRESS_CIRCLE;'
 
   - id: increase_mode_value
     then:
@@ -73,6 +84,7 @@ script:
                   api.connected:
                     state_subscription_only: true
                 then:
+                  - lambda: 'clear_queued_press();'
                   - if:
                       condition:
                         lambda: 'return id(selected_item_state) == "unavailable";'
@@ -84,6 +96,10 @@ script:
                         - script.execute:
                             id: adjust_selected_setting
                             step: 1
+                else:
+                  - script.execute:
+                      id: queue_press
+                      kind: !lambda 'return QUEUED_PRESS_PLUS;'
 
   - id: decrease_mode_value
     then:
@@ -101,6 +117,7 @@ script:
                   api.connected:
                     state_subscription_only: true
                 then:
+                  - lambda: 'clear_queued_press();'
                   - if:
                       condition:
                         lambda: 'return id(selected_item_state) == "unavailable";'
@@ -112,6 +129,126 @@ script:
                         - script.execute:
                             id: adjust_selected_setting
                             step: -1
+                else:
+                  - script.execute:
+                      id: queue_press
+                      kind: !lambda 'return QUEUED_PRESS_MINUS;'
+
+  # A press while the remote is still connecting after a wake, on the item the
+  # frame from before sleep shows: it waits for Home Assistant to send that
+  # item's values, then goes out as if pressed then, provided the item shows
+  # the setting the frame did (see RemoteQueuedPress). Not a press that must be
+  # held, such as unlocking a door: that waits for the person holding it, not
+  # for a connection. Nor one that would do nothing there, nor while a popup or
+  # system page covers the frame.
+  - id: queue_press
+    parameters:
+      kind: int
+    then:
+      - if:
+          condition:
+            lambda: |-
+              if (!id(show_boot_screen) || id(low_battery_popup_active) || id(system_screen_active) ||
+                  id(wake_button_press_started_at) != 0 ||
+                  !oled_snapshot_shows(id(selected_item_entity), id(preferred_setting_option))) {
+                return false;
+              }
+              RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+              int shown = oled_snapshot_setting();
+              switch (kind) {
+                case QUEUED_PRESS_MINUS:
+                case QUEUED_PRESS_PLUS:
+                  return remote_setting_adjustable(shown) && mode != REMOTE_MODE_WEATHER;
+                case QUEUED_PRESS_PREVIOUS:
+                case QUEUED_PRESS_NEXT:
+                  return shown == REMOTE_SETTING_REMOTE_NAVIGATE;
+                default:
+                  break;
+              }
+              bool square = kind == QUEUED_PRESS_SQUARE;
+              if (!remote_mode_has_action(mode, square)) {
+                return false;
+              }
+              auto prompt = describe_remote_button_prompt(
+                  mode, square ? 0 : 2, id(selected_item_state), id(selected_alarm_arm_mode), ${LONG_PRESS_DURATION_MS},
+                  ${EXTENDED_HOLD_DURATION_MS},
+                  selected_entity_traits(mode, id(selected_alarm_index), id(selected_cover_index),
+                                         id(selected_automation_index), shown));
+              return !prompt.requires_long_press;
+          then:
+            - lambda: |-
+                remote_queued_press = kind;
+                remote_queued_press_at = millis() | 1;
+                remote_queued_press_entity = id(selected_item_entity);
+                remote_queued_press_setting = id(preferred_setting_option);
+                remote_queued_press_shown = oled_snapshot_setting();
+                remote_queued_press_synced_at = 0;
+            - script.execute: boot_screen
+            - script.execute: await_queued_press
+
+  # Ends as soon as the press can be decided on, or is dropped (another item
+  # or setting chosen, or a press sent directly).
+  - id: await_queued_press
+    mode: restart
+    then:
+      - wait_until:
+          condition:
+            lambda: |-
+              if (!queued_press_waiting_for(millis(), id(selected_item_entity), id(preferred_setting_option))) {
+                return true;
+              }
+              auto refs = make_mode_selection_state_refs(
+                  id(selected_light_index), id(selected_switch_index), id(selected_climate_index),
+                  id(selected_water_heater_index), id(selected_lock_index), id(selected_cover_index),
+                  id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
+                  id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index),
+                  id(selected_alarm_index), id(selected_notification_index), id(selected_info_index),
+                  id(selected_input_index), id(selected_vacuum_index), id(selected_timer_index),
+                  id(selected_remote_index));
+              RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+              return queued_press_ready(millis(), mode, selected_mode_index_ref(mode, refs));
+          timeout: 11s  # QUEUED_PRESS_TIMEOUT_MS, and a second to spare
+      - lambda: |-
+          auto refs = make_mode_selection_state_refs(
+              id(selected_light_index), id(selected_switch_index), id(selected_climate_index),
+              id(selected_water_heater_index), id(selected_lock_index), id(selected_cover_index),
+              id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
+              id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index),
+              id(selected_alarm_index), id(selected_notification_index), id(selected_info_index),
+              id(selected_input_index), id(selected_vacuum_index), id(selected_timer_index),
+              id(selected_remote_index));
+          RemoteMode mode = static_cast<RemoteMode>(id(current_mode));
+          uint32_t now = millis();
+          int kind = remote_queued_press;
+          int shown = remote_queued_press_shown;
+          bool due = queued_press_waiting_for(now, id(selected_item_entity), id(preferred_setting_option)) &&
+                     queued_press_ready(now, mode, selected_mode_index_ref(mode, refs));
+          clear_queued_press();
+          if (!due) {
+            if (id(show_boot_screen) && !id(low_battery_popup_active) && !id(system_screen_active) &&
+                id(wake_button_press_started_at) == 0) {
+              id(boot_screen).execute();
+            }
+            return;
+          }
+          // What just arrived goes on screen first, re-picking the setting,
+          // so the press acts on it.
+          id(sync_current_mode_status).execute();
+          if (id(selected_setting_option) != shown) {
+            // The item now offers something else (a light turned on while the
+            // remote slept): the press could do what the screen didn't show.
+            id(show_toast).execute("NOT SENT");
+            return;
+          }
+          switch (kind) {
+            case QUEUED_PRESS_SQUARE: id(primary_mode_action).execute(); break;
+            case QUEUED_PRESS_CIRCLE: id(play_pause_mode_action).execute(); break;
+            case QUEUED_PRESS_MINUS: id(decrease_mode_value).execute(); break;
+            case QUEUED_PRESS_PLUS: id(increase_mode_value).execute(); break;
+            case QUEUED_PRESS_PREVIOUS: id(previous_button_action).execute(); break;
+            case QUEUED_PRESS_NEXT: id(next_button_action).execute(); break;
+            default: break;
+          }
 
   - id: reset_idle_timer
     mode: restart

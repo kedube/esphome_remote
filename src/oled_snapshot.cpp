@@ -40,6 +40,9 @@ struct Snapshot {
   uint32_t checksum;
   int16_t clock_x;
   int16_t clock_width;
+  uint32_t entity_hash;  // the item on screen, for oled_snapshot_shows
+  int16_t setting;       // the setting drawn
+  int16_t preferred;     // the setting last picked with Settings
   uint8_t frame[FRAME_BYTES];
 };
 
@@ -58,6 +61,20 @@ uint32_t frame_checksum(const Snapshot &snapshot) {
   }
   mix(static_cast<uint8_t>(snapshot.clock_x));
   mix(static_cast<uint8_t>(snapshot.clock_width));
+  for (int shift = 0; shift < 32; shift += 8) {
+    mix(static_cast<uint8_t>(snapshot.entity_hash >> shift));
+  }
+  mix(static_cast<uint8_t>(snapshot.setting));
+  mix(static_cast<uint8_t>(snapshot.preferred));
+  return sum;
+}
+
+uint32_t text_hash(const std::string &text) {
+  uint32_t sum = 2166136261u;  // FNV-1a
+  for (char c : text) {
+    sum ^= static_cast<uint8_t>(c);
+    sum *= 16777619u;
+  }
   return sum;
 }
 
@@ -68,7 +85,8 @@ bool display_matches(display::DisplayBuffer *display) {
 
 }  // namespace
 
-void oled_snapshot_capture(display::DisplayBuffer *display, int clock_x, int clock_width) {
+void oled_snapshot_capture(display::DisplayBuffer *display, int clock_x, int clock_width, const std::string &entity,
+                           int setting, int preferred) {
   if (!display_matches(display)) {
     return;
   }
@@ -76,6 +94,9 @@ void oled_snapshot_capture(display::DisplayBuffer *display, int clock_x, int clo
   memcpy(rtc_snapshot.frame, framebuffer(display), FRAME_BYTES);
   rtc_snapshot.clock_x = static_cast<int16_t>(clock_x);
   rtc_snapshot.clock_width = static_cast<int16_t>(clock_width);
+  rtc_snapshot.entity_hash = text_hash(entity);
+  rtc_snapshot.setting = static_cast<int16_t>(setting);
+  rtc_snapshot.preferred = static_cast<int16_t>(preferred);
   rtc_snapshot.checksum = frame_checksum(rtc_snapshot);
   rtc_snapshot.magic = SNAPSHOT_MAGIC;
 }
@@ -95,5 +116,12 @@ bool oled_snapshot_restore(display::DisplayBuffer *display) {
   }
   return true;
 }
+
+bool oled_snapshot_shows(const std::string &entity, int preferred) {
+  return oled_snapshot_valid() && !entity.empty() && rtc_snapshot.entity_hash == text_hash(entity) &&
+         rtc_snapshot.preferred == preferred;
+}
+
+int oled_snapshot_setting() { return oled_snapshot_valid() ? rtc_snapshot.setting : -1; }
 
 }  // namespace esphome

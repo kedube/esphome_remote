@@ -101,6 +101,11 @@ const char *const MOWER = "\uf205";        // grass
 const char *const TIMER = "\ue425";
 const char *const TIMER_PAUSE = "\uf4bb";
 const char *const VOLUME_OFF = "\ue04f";
+const char *const REMOTE = "\uf5d9";      // tv_remote
+const char *const DOOR_OPEN = "\ue77c";   // an opened (unlatched) lock
+const char *const DOORBELL = "\uefff";
+const char *const MOTION = "\ue792";      // motion_sensor_active
+const char *const EVENT = "\ue7f7";       // notifications_active
 }  // namespace icon
 
 const std::string &str(const std::string *value) {
@@ -678,6 +683,9 @@ void draw_setting_footer(Display *it, const RemoteUiFonts &f, const RemoteRender
     case REMOTE_SETTING_LIGHT_EFFECT:
       footer_options(it, f, "EFFECT", label(pending_or(ctx.light_effect), upper, sizeof(upper), "NONE"));
       break;
+    case REMOTE_SETTING_LIGHT_COLOR:
+      footer_options(it, f, "COLOR", ctx.light_color_name);
+      break;
     case REMOTE_SETTING_LIGHT_WARMTH:
       // The meter fills as the light gets warmer, as Plus makes it.
       snprintf(value, sizeof(value), "%.0fK", ctx.light_color_temp_kelvin);
@@ -715,6 +723,9 @@ void draw_setting_footer(Display *it, const RemoteUiFonts &f, const RemoteRender
       break;
     case REMOTE_SETTING_CLIMATE_PRESETS:
       footer_options(it, f, "PRESET", label(str(ctx.selected_climate_preset), upper, sizeof(upper), "NONE"));
+      break;
+    case REMOTE_SETTING_CLIMATE_SWING:
+      footer_options(it, f, "SWING", label(pending_or(ctx.climate_swing_mode), upper, sizeof(upper)));
       break;
     case REMOTE_SETTING_CLIMATE_ACTION:
       footer_info(it, f, "STATUS", label(str(ctx.selected_climate_hvac_action), upper, sizeof(upper)));
@@ -814,6 +825,11 @@ void draw_setting_footer(Display *it, const RemoteUiFonts &f, const RemoteRender
       break;
     case REMOTE_SETTING_VACUUM_FAN_SPEED:
       footer_options(it, f, "FAN", label(pending_or(ctx.vacuum_fan_speed), upper, sizeof(upper)));
+      break;
+    case REMOTE_SETTING_REMOTE_ACTIVITY:
+      // Activities are names (an app, a Harmony activity): kept as written.
+      str_upper_to_buffer(pending_or(ctx.remote_activity), upper, sizeof(upper));
+      footer_options(it, f, "ACTIVITY", upper);
       break;
     case REMOTE_SETTING_ALARM_STATE: {
       // Only the arm modes this panel supports.
@@ -1146,8 +1162,10 @@ void render_lock(Display *it, const RemoteUiFonts &f, const RemoteRenderContext 
   const std::string &state = str(ctx.selected_item_state);
   bool locked = state == "locked";
   bool jammed = state == "jammed";
-  bool unlocked = lock_state_unlocked(state) || state == "unlocking" || state == "opening";
-  draw_badge(it, f, jammed ? icon::ALERT : unlocked ? icon::LOCK_OPEN : icon::LOCK, locked || jammed);
+  bool opened = state == "open" || state == "opening";
+  bool unlocked = lock_state_unlocked(state) || state == "unlocking" || opened;
+  draw_badge(it, f, jammed ? icon::ALERT : opened ? icon::DOOR_OPEN : unlocked ? icon::LOCK_OPEN : icon::LOCK,
+             locked || jammed);
   char word[16];
   hero_word(it, f, label(state, word, sizeof(word), "SYNCING"));
   char buf[32];
@@ -1155,7 +1173,8 @@ void render_lock(Display *it, const RemoteUiFonts &f, const RemoteRenderContext 
                           fresh_feedback(ctx, ctx.last_lock_feedback, ctx.last_lock_interaction, buf, sizeof(buf)))) {
     return;
   }
-  footer_hints(it, f, "UNLOCK", "LOCK", true);
+  // With OPEN selected, Square unlatches the door rather than unlocking it.
+  footer_hints(it, f, ctx.selected_setting_option == REMOTE_SETTING_LOCK_OPEN ? "OPEN" : "UNLOCK", "LOCK", true);
 }
 
 void render_media(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
@@ -1260,9 +1279,43 @@ void render_presence(Display *it, const RemoteUiFonts &f, const RemoteRenderCont
   draw_footer_overlay(it, f, ctx, nullptr);
 }
 
+// An event entity: what last happened and how long ago. The badge lights for
+// the first minute.
+void render_event(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  const std::string &device_class = str(ctx.event_device_class);
+  const char *glyph = device_class == "doorbell" ? icon::DOORBELL
+                      : device_class == "button" ? icon::TOUCH
+                      : device_class == "motion" ? icon::MOTION
+                                                 : icon::EVENT;
+  draw_badge(it, f, glyph, ctx.event_seconds_ago >= 0 && ctx.event_seconds_ago < 60);
+  if (state == "unavailable") {
+    hero_word(it, f, missing_word(state));
+  } else if (ha_state_missing(state)) {
+    // Never fired, or still syncing.
+    hero_word(it, f, state.empty() ? "SYNCING" : "NONE YET");
+  } else {
+    char type[32];
+    text_fit(it, f.title, HERO_X, 38, TextAlign::BASELINE_LEFT, label(str(ctx.event_type), type, sizeof(type), "EVENT"),
+             SCREEN_W - HERO_X);
+    char when[24];
+    if (ctx.event_seconds_ago >= 0) {
+      format_time_ago(ctx.event_seconds_ago, when, sizeof(when));
+    } else {
+      snprintf(when, sizeof(when), "%s", state.c_str());  // the time it happened
+    }
+    text_fit(it, f.small, HERO_X, 49, TextAlign::BASELINE_LEFT, when, SCREEN_W - HERO_X);
+  }
+  draw_footer_overlay(it, f, ctx, nullptr);
+}
+
 void render_sensor(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
   if (ctx.sensor_is_presence) {
     render_presence(it, f, ctx);
+    return;
+  }
+  if (ctx.sensor_is_event) {
+    render_event(it, f, ctx);
     return;
   }
   const std::string &state = str(ctx.selected_item_state);
@@ -1380,6 +1433,77 @@ void render_timer(Display *it, const RemoteUiFonts &f, const RemoteRenderContext
     return;
   }
   footer_hints(it, f, active || paused ? "CANCEL" : nullptr, active ? "PAUSE" : "START", false);
+}
+
+// A remote's arrows round its OK button, the key just sent filled in.
+void draw_dpad(Display *it, int cx, int cy, int flash) {
+  struct Arrow {
+    int key, tip_dx, tip_dy;
+  };
+  for (const Arrow &a : {Arrow{REMOTE_KEY_UP, 0, -12}, Arrow{REMOTE_KEY_DOWN, 0, 12}, Arrow{REMOTE_KEY_LEFT, -12, 0},
+                         Arrow{REMOTE_KEY_RIGHT, 12, 0}}) {
+    // The base sits 5 px in from the tip, 5 px either side of the arm.
+    int bx = cx + a.tip_dx * 7 / 12, by = cy + a.tip_dy * 7 / 12;
+    int sx = a.tip_dy != 0 ? 5 : 0, sy = a.tip_dx != 0 ? 5 : 0;
+    if (a.key == flash) {
+      it->filled_triangle(cx + a.tip_dx, cy + a.tip_dy, bx - sx, by - sy, bx + sx, by + sy, ON);
+    } else {
+      it->triangle(cx + a.tip_dx, cy + a.tip_dy, bx - sx, by - sy, bx + sx, by + sy, ON);
+    }
+  }
+  if (flash == REMOTE_KEY_SELECT) {
+    it->filled_circle(cx, cy, 4, ON);
+  } else {
+    it->circle(cx, cy, 4, ON);
+  }
+}
+
+// TV and streaming-box remotes. KEYS: Square goes back and Circle home.
+// NAVIGATE: the arrow and value buttons are the remote's arrows, Circle OK
+// and Square back. ACTIVITY: Plus and Minus pick one.
+void render_remote(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  const std::string &state = str(ctx.selected_item_state);
+  bool on = state == "on";
+  draw_badge(it, f, icon::REMOTE, on);
+  bool navigate = ctx.remote_has_commands && ctx.selected_setting_option == REMOTE_SETTING_REMOTE_NAVIGATE;
+  int flash = recent(ctx.now, ctx.remote_key_flash_at, REMOTE_KEY_FLASH_MS) ? ctx.remote_key_flash : -1;
+  int room = (navigate ? 88 : SCREEN_W) - HERO_X;
+  const std::string &activity = str(ctx.remote_activity);
+  if (ha_state_missing(state)) {
+    text_fit(it, f.title, HERO_X, HERO_WORD_BASELINE, TextAlign::BASELINE_LEFT, missing_word(state), room);
+  } else if (!activity.empty()) {
+    char name[48];
+    str_upper_to_buffer(activity, name, sizeof(name));
+    text_fit(it, f.title, HERO_X, HERO_WORD_BASELINE, TextAlign::BASELINE_LEFT, name, room);
+  } else {
+    hero_value(it, f, on ? "ON" : "OFF");
+  }
+  if (navigate) {
+    draw_dpad(it, SCREEN_W - 20, HERO_CY, flash);
+  }
+  if (draw_footer_overlay(it, f, ctx, nullptr)) {
+    return;
+  }
+  // Back and home have nothing on screen to light up: the footer names them.
+  if (flash == REMOTE_KEY_BACK || flash == REMOTE_KEY_HOME) {
+    footer_toast(it, f, flash == REMOTE_KEY_BACK ? "BACK" : "HOME");
+    return;
+  }
+  switch (ctx.selected_setting_option) {
+    case REMOTE_SETTING_REMOTE_NAVIGATE:
+      footer_hints(it, f, "BACK", "OK", false);
+      break;
+    case REMOTE_SETTING_REMOTE_ACTIVITY:
+      draw_setting_footer(it, f, ctx);
+      break;
+    case REMOTE_SETTING_REMOTE_KEYS:
+      footer_hints(it, f, "BACK", "HOME", false);
+      break;
+    default:
+      // Neither a command set nor activities: nothing to send.
+      footer_info(it, f, "REMOTE", "NO COMMANDS");
+      break;
+  }
 }
 
 void render_alarm(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
@@ -1827,6 +1951,9 @@ void render_remote_ui(display::Display *it, const RemoteUiFonts &fonts, const Re
       break;
     case REMOTE_MODE_TIMERS:
       render_timer(it, fonts, ctx);
+      break;
+    case REMOTE_MODE_REMOTES:
+      render_remote(it, fonts, ctx);
       break;
     case REMOTE_MODE_INFO:
     default:

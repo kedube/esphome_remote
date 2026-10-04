@@ -31,7 +31,7 @@ script:
       - script.execute:
           id: verify_selected_lock_result
           lock_index: !lambda 'return lock_index;'
-          locking: true
+          request: !lambda 'return LOCK_REQUEST_LOCK;'
           start_state: !lambda 'return selected_lock_state(lock_index);'
       - homeassistant.action:
           action: lock.lock
@@ -74,7 +74,7 @@ script:
       - script.execute:
           id: verify_selected_lock_result
           lock_index: !lambda 'return lock_index;'
-          locking: false
+          request: !lambda 'return LOCK_REQUEST_UNLOCK;'
           start_state: !lambda 'return selected_lock_state(lock_index);'
       - homeassistant.action:
           action: lock.unlock
@@ -90,16 +90,56 @@ script:
                       id: set_lock_feedback
                       feedback: "UNLOCK FAILED"
 
+  # OPEN: unlatches the door, on a lock with the open feature.
+  - id: open_selected_lock
+    mode: queued
+    parameters:
+      lock_index: int
+    then:
+      - if:
+          condition:
+            lambda: |-
+              const std::string &state = selected_lock_state(lock_index);
+              return state == "open" || state == "opening";
+          then:
+            - script.execute:
+                id: set_lock_feedback
+                feedback: !lambda |-
+                  return std::string(selected_lock_state(lock_index) == "opening" ? "OPENING..." : "ALREADY OPEN");
+            - script.stop: open_selected_lock
+      - script.execute:
+          id: set_lock_feedback
+          feedback: "OPENING..."
+      - script.execute:
+          id: verify_selected_lock_result
+          lock_index: !lambda 'return lock_index;'
+          request: !lambda 'return LOCK_REQUEST_OPEN;'
+          start_state: !lambda 'return selected_lock_state(lock_index);'
+      - homeassistant.action:
+          action: lock.open
+          data:
+            entity_id: !lambda 'return std::string(mode_item_entity_cstr(REMOTE_MODE_LOCKS, lock_index));'
+          on_error:
+            - if:
+                condition:
+                  lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS && id(selected_lock_index) == lock_index;'
+                then:
+                  - script.stop: verify_selected_lock_result
+                  - script.execute:
+                      id: set_lock_feedback
+                      feedback: "OPEN FAILED"
+
   # The verifiers poll the tracker for the device that was acted on. Once the
   # user selects a different item its feedback has been reset, so they stop
-  # quietly rather than report one device's result on another. start_state is
-  # the device's state when the command went out: a lock that was already
-  # jammed isn't taken to have jammed again until the time is up.
+  # quietly rather than report one device's result on another. request is a
+  # LockRequest; start_state is the device's state when the command went out:
+  # a lock that was already jammed isn't taken to have jammed again until the
+  # time is up.
   - id: verify_selected_lock_result
     mode: restart
     parameters:
       lock_index: int
-      locking: bool
+      request: int
       start_state: std::string
     then:
       - lambda: |-
@@ -118,7 +158,7 @@ script:
                         id(lock_verification_complete) = true;
                         return;
                       }
-                      auto progress = evaluate_lock_request(locking, selected_lock_state(lock_index), start_state, false);
+                      auto progress = evaluate_lock_request(request, selected_lock_state(lock_index), start_state, false);
                       id(set_lock_feedback).execute(progress.feedback);
                       id(lock_verification_complete) = progress.complete;
       - lambda: |-
@@ -130,7 +170,7 @@ script:
             return;
           }
           // Still moving says so; anything else short of the goal didn't take.
-          auto progress = evaluate_lock_request(locking, selected_lock_state(lock_index), start_state, true);
+          auto progress = evaluate_lock_request(request, selected_lock_state(lock_index), start_state, true);
           id(set_lock_feedback).execute(progress.feedback);
 
   # start_position is where the cover was when the command went out (NAN for

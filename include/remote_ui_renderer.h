@@ -72,6 +72,9 @@ struct RemoteRenderContext {
   float light_color_temp_kelvin = NAN;
   float light_min_kelvin = NAN;
   float light_max_kelvin = NAN;
+  // The COLOR preset nearest the light's colour, or the one just sent; null
+  // while it reports none (it is off).
+  const char *light_color_name = nullptr;
 
   // Switches.
   const std::string *last_switch_feedback = nullptr;
@@ -90,6 +93,7 @@ struct RemoteRenderContext {
   float climate_target_focus_value = NAN;
   uint32_t last_climate_target_focus_interaction = 0;
   int climate_mode_count = 0;  // HVAC modes offered: MODE can be changed when there are two or more
+  const std::string *climate_swing_mode = nullptr;
 
   // Water heaters.
   float selected_water_heater_target_temp = NAN;
@@ -137,6 +141,13 @@ struct RemoteRenderContext {
   // Sensors.
   const std::string *selected_sensor_unit = nullptr;
   bool sensor_is_presence = false;  // a person or device tracker
+  // An event entity: what last happened ("ring"), what kind of thing it is
+  // ("doorbell"), and how many seconds ago (-1 unknown). The selected item
+  // state holds when it happened, in local time.
+  bool sensor_is_event = false;
+  const std::string *event_type = nullptr;
+  const std::string *event_device_class = nullptr;
+  int64_t event_seconds_ago = -1;
 
   // Automations, scripts and scenes.
   AutomationKind automation_kind = AUTOMATION_KIND_SCRIPT;
@@ -164,6 +175,14 @@ struct RemoteRenderContext {
 
   // Timers: seconds left (active or paused) or the duration (idle); -1 unknown.
   int64_t timer_seconds = -1;
+
+  // TV remotes. The activity is the one just picked while it is fresh,
+  // otherwise the remote's (empty for none). The key flashes on screen for
+  // REMOTE_KEY_FLASH_MS after it is sent (-1: none).
+  const std::string *remote_activity = nullptr;
+  bool remote_has_commands = false;
+  int remote_key_flash = -1;
+  uint32_t remote_key_flash_at = 0;
 
   // Notifications (the message is the selected item state).
   uint32_t last_notification_dismiss_interaction = 0;

@@ -6,6 +6,25 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+- A press made while the remote is still connecting after a wake now waits and goes out
+  once Home Assistant has sent that item's values, so you can wake it and press straight
+  away. The footer says `WAITING TO SEND…`, or `NOT SENT` if the item no longer shows
+  what the screen did. Presses that must be held (locks, covers, automations, alarms)
+  don't wait.
+- TV remotes: `remote` favorites send `BACK` and `HOME`, and on `NAVIGATE` the arrow,
+  value and `Circle` buttons become the remote's arrows and `OK`. Give the favorite its
+  command set as a third field (`apple_tv`, `android_tv`, `roku`, `samsung`, `bravia`,
+  `philips`, or seven commands of your own, as for a Harmony hub). Harmony and Android TV
+  activities can be picked with `ACTIVITY`.
+- `event` favorites (doorbells, buttons) show what last happened and how long ago.
+- Locks that can unlatch the door get `OPEN`: `Settings` switches `Square` from unlocking
+  to opening (held).
+- Lights that take a colour get `COLOR` (ten named colours); thermostats that swing their
+  louvres get `SWING`. These add a subscription per light, two per thermostat and one per
+  lock; `#define LIGHT_COLOR 0` in `local_entities.h` drops the light ones.
+- Fixed: the vacuum, lawn mower and timer buttons added in 4.7 could pick up Home
+  Assistant's answer to another action, so a failure could be missed or shown on the
+  wrong item.
 
 ## 4.7 — 2026-10-03
 - Hold `Previous` or `Next` to move through a list (it stops at the ends), and `Plus` or

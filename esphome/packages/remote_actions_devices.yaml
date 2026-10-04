@@ -611,6 +611,25 @@ script:
           id(send_setting_value).execute(VALUE_SEND_LIGHT_COLOR_TEMP, id(selected_item_entity), next, NAN);
       - script.execute: update_display
 
+  # COLOR: the next or previous of LIGHT_COLOR_PRESETS, from the one just sent
+  # while Home Assistant hasn't reported it, else the nearest to the light's.
+  - id: adjust_light_color
+    parameters:
+      step: int
+    then:
+      - lambda: |-
+          int idx = id(selected_light_index);
+          uint32_t now = millis();
+          int current = static_cast<int>(pending_value_or(now, REMOTE_MODE_LIGHTS, idx, REMOTE_SETTING_LIGHT_COLOR,
+                                                          selected_light_color_index(idx)));
+          int next = light_color_step(current, step);
+          note_pending_value(REMOTE_MODE_LIGHTS, idx, REMOTE_SETTING_LIGHT_COLOR, next);
+          id(last_setting_interaction) = now;
+          note_local_change();
+          id(updated_ui) = true;
+          id(send_setting_value).execute(VALUE_SEND_LIGHT_COLOR, id(selected_item_entity), next, NAN);
+      - script.execute: update_display
+
   # Vacuums and lawn mowers. Circle starts one, or pauses one at work; Square
   # sends it back to its dock. The state shown is the one asked for until
   # Home Assistant reports.
@@ -631,7 +650,8 @@ script:
           note_local_change();
           id(updated_ui) = true;
           id(show_toast).execute(working ? "PAUSING..." : "STARTING...");
-          id(call_entity_action).execute(action, id(selected_item_entity), working ? "PAUSE FAILED" : "START FAILED");
+          id(call_entity_action).execute(
+              queue_entity_request(action, id(selected_item_entity), working ? "PAUSE FAILED" : "START FAILED"));
 
   - id: vacuum_square_action
     then:
@@ -650,8 +670,9 @@ script:
           note_local_change();
           id(updated_ui) = true;
           id(show_toast).execute("RETURNING...");
-          id(call_entity_action).execute(mower ? "lawn_mower.dock" : "vacuum.return_to_base", id(selected_item_entity),
-                                         "DOCK FAILED");
+          id(call_entity_action).execute(
+              queue_entity_request(mower ? "lawn_mower.dock" : "vacuum.return_to_base", id(selected_item_entity),
+                                   "DOCK FAILED"));
 
   # FAN in the footer: the vacuum's fan speeds, from the one just sent while
   # Home Assistant hasn't reported it.

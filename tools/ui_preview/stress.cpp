@@ -185,6 +185,18 @@ RemoteRenderContext hostile_context(int mode, int setting, const std::string &s,
   c.vacuum_is_mower = variant == 1;
   c.vacuum_fan_speed = &s;
   c.timer_seconds = variant == 0 ? -1 : variant == 1 ? int64_t(r.percent) * 100000000 : r.percent;
+  // A colour name always comes from LIGHT_COLOR_PRESETS; nullptr when none.
+  c.light_color_name = variant == 0 ? nullptr : LIGHT_COLOR_PRESETS[(r.percent % LIGHT_COLOR_PRESET_COUNT +
+                                                                     LIGHT_COLOR_PRESET_COUNT) % LIGHT_COLOR_PRESET_COUNT].name;
+  c.climate_swing_mode = &s;
+  c.sensor_is_event = variant == 1;
+  c.event_type = &s;
+  c.event_device_class = variant == 2 ? &s : nullptr;
+  c.event_seconds_ago = variant == 0 ? -1 : variant == 1 ? int64_t(r.percent) * 100000000 : r.percent;
+  c.remote_activity = &s;
+  c.remote_has_commands = variant != 0;
+  c.remote_key_flash = variant == 0 ? r.percent : (r.percent + variant * 3) % 8;  // every key, and none
+  c.remote_key_flash_at = just_now;
   return c;
 }
 

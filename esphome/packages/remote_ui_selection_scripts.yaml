@@ -12,7 +12,7 @@ script:
               id(selected_cover_index), id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
               id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index), id(selected_alarm_index),
               id(selected_notification_index), id(selected_info_index), id(selected_input_index),
-              id(selected_vacuum_index), id(selected_timer_index));
+              id(selected_vacuum_index), id(selected_timer_index), id(selected_remote_index));
             auto selection = resolve_current_ui_selection_context(id(current_mode), id(current_menu_index), selection_refs);
 
           if (selection.count <= 0) {
@@ -145,7 +145,7 @@ script:
               id(selected_cover_index), id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
               id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index), id(selected_alarm_index),
               id(selected_notification_index), id(selected_info_index), id(selected_input_index),
-              id(selected_vacuum_index), id(selected_timer_index));
+              id(selected_vacuum_index), id(selected_timer_index), id(selected_remote_index));
             auto selection = resolve_current_ui_selection_context(id(current_mode), id(current_menu_index), selection_refs);
           const RemoteUiBindings &bindings = remote_ui_bindings;
           RemoteUiSyncState ui = make_remote_ui_sync_state(bindings);

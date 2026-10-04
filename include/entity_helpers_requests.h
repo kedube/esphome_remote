@@ -11,7 +11,7 @@ inline FanStatusTracker fan_status_tracker_storage;
 inline HumidifierStatusTracker humidifier_status_tracker_storage;
 inline ClimateStatusTracker climate_status_tracker_storage;
 inline WaterHeaterStatusTracker water_heater_status_tracker_storage;
-inline LockStatusTracker lock_status_tracker_storage(LOCK_LIST);
+inline LockStatusTracker lock_status_tracker_storage;
 inline CoverStatusTracker cover_status_tracker_storage;
 inline MediaStatusTracker media_status_tracker_storage;
 inline SensorStatusTracker sensor_status_tracker_storage;
@@ -23,6 +23,7 @@ inline SunStateTracker sun_state_tracker_storage;
 inline InputStatusTracker input_status_tracker_storage;
 inline VacuumStatusTracker vacuum_status_tracker_storage;
 inline TimerStatusTracker timer_status_tracker_storage;
+inline RemoteStatusTracker remote_status_tracker_storage;
 inline bool remote_status_trackers_initialized = false;
 
 // Order in which entities announce their subscriptions. Home Assistant answers
@@ -113,6 +114,7 @@ inline void ensure_remote_status_trackers(const TrackerSubscriptionOrder &order 
     subscribe_tracker_rank(input_status_tracker_storage, order, rank);
     subscribe_tracker_rank(vacuum_status_tracker_storage, order, rank);
     subscribe_tracker_rank(timer_status_tracker_storage, order, rank);
+    subscribe_tracker_rank(remote_status_tracker_storage, order, rank);
   }
   if (WEATHER_LIST_COUNT > 0) {
     sun_state_tracker_storage.subscribe();
@@ -175,6 +177,25 @@ inline float selected_light_min_kelvin(int idx) {
 inline float selected_light_max_kelvin(int idx) {
   ensure_remote_status_trackers();
   return light_status_tracker_storage.max_color_temp_kelvin(idx);
+}
+
+inline bool selected_light_supports_color(int idx) {
+  ensure_remote_status_trackers();
+  return light_status_tracker_storage.supports_color(idx);
+}
+
+// The LIGHT_COLOR_PRESETS entry nearest the light's colour; -1 when it
+// reports none (it is off). Home Assistant reports an hs_color for a light in
+// its colour-temperature mode too (a warm white is orange), but a colour
+// temperature only then: that light is white.
+inline int selected_light_color_index(int idx) {
+  ensure_remote_status_trackers();
+  if (light_status_tracker_storage.supports_color_temp(idx) &&
+      !std::isnan(light_status_tracker_storage.color_temp_kelvin(idx)) &&
+      !std::isnan(light_status_tracker_storage.hue(idx))) {
+    return 0;
+  }
+  return light_color_preset_index(light_status_tracker_storage.hue(idx), light_status_tracker_storage.saturation(idx));
 }
 
 inline const std::string &selected_switch_state(int idx) {
@@ -314,6 +335,16 @@ inline float climate_target_humidity_for_index(int idx) {
 inline const std::string &selected_climate_preset_modes(int idx) {
   ensure_remote_status_trackers();
   return climate_status_tracker_storage.preset_modes(idx);
+}
+
+inline const std::string &climate_swing_mode_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return climate_status_tracker_storage.swing_mode(idx);
+}
+
+inline const std::string &climate_swing_modes_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return climate_status_tracker_storage.swing_modes(idx);
 }
 
 // HVAC mode to send when turning a thermostat back on: the last active mode
@@ -496,6 +527,12 @@ inline const std::string &selected_lock_state(int idx) {
   return lock_status_tracker_storage.state(idx);
 }
 
+// The lock can be opened (unlatched); false until its features have synced.
+inline bool selected_lock_supports_open(int idx) {
+  ensure_remote_status_trackers();
+  return lock_status_tracker_storage.supports_open(idx);
+}
+
 inline const std::string &selected_cover_state(int idx) {
   ensure_remote_status_trackers();
   return cover_status_tracker_storage.state(idx);
@@ -623,6 +660,35 @@ inline const std::string &sensor_unit_for_index(int idx) {
 
 inline bool sensor_is_presence(int idx) {
   return sensor_status_tracker_storage.is_presence(idx);
+}
+
+inline bool sensor_is_event(int idx) {
+  return sensor_status_tracker_storage.is_event(idx);
+}
+
+inline const std::string &sensor_event_type_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return sensor_status_tracker_storage.event_type(idx);
+}
+
+inline const std::string &sensor_device_class_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return sensor_status_tracker_storage.device_class(idx);
+}
+
+// Seconds since an event entity last fired, by the clock Home Assistant sets;
+// -1 when that isn't known (it never has, or the clock isn't set).
+inline int64_t sensor_event_seconds_ago(int idx) {
+  ensure_remote_status_trackers();
+  int64_t epoch = 0;
+  bool date_only = false;
+  time_t now = ::time(nullptr);
+  if (!sensor_is_event(idx) || now < 1600000000 ||
+      !parse_ha_timestamp(sensor_status_tracker_storage.state(idx), &epoch, &date_only) || date_only) {
+    return -1;
+  }
+  int64_t ago = static_cast<int64_t>(now) - epoch;
+  return ago < 0 ? 0 : ago;
 }
 
 inline const std::string &automation_state_for_index(int idx) {
@@ -932,11 +998,78 @@ inline int64_t timer_seconds_left_for_index(int idx) {
   return timer_status_tracker_storage.seconds_left(idx, now > 1600000000 ? static_cast<int64_t>(now) : 0);
 }
 
+inline const std::string &remote_state_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return remote_status_tracker_storage.state(idx);
+}
+
+inline const std::string &remote_activity_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return remote_status_tracker_storage.activity(idx);
+}
+
+inline const std::string &remote_activity_list_for_index(int idx) {
+  ensure_remote_status_trackers();
+  return remote_status_tracker_storage.activity_list(idx);
+}
+
+// The remote has a command set, so its keys and arrows can be sent.
+inline bool remote_has_commands(int idx) {
+  const char *commands = remote_status_tracker_storage.commands(idx);
+  return commands != nullptr && commands[0] != '\0';
+}
+
+// What remote.send_command takes for key on this remote; empty for none.
+inline std::string remote_command_for_index(int idx, int key) {
+  return remote_command_for_key(remote_status_tracker_storage.commands(idx), key);
+}
+
+// The device its commands go to, for a remote that needs one; else empty.
+inline std::string remote_device_for_index(int idx) {
+  return remote_command_device(remote_status_tracker_storage.commands(idx));
+}
+
+// Whether Home Assistant has sent this entity's state since the remote woke.
+inline bool selected_entity_synced(RemoteMode mode, int idx) {
+  switch (mode) {
+    case REMOTE_MODE_LIGHTS: return !selected_light_state(idx).empty();
+    case REMOTE_MODE_SWITCHES: return !selected_switch_state(idx).empty();
+    case REMOTE_MODE_CLIMATE: return !selected_climate_state(idx).empty();
+    case REMOTE_MODE_WATER_HEATERS: return !selected_water_heater_state(idx).empty();
+    case REMOTE_MODE_HUMIDIFIERS: return !selected_humidifier_state(idx).empty();
+    case REMOTE_MODE_FANS: return !selected_fan_state(idx).empty();
+    case REMOTE_MODE_COVERS: return !selected_cover_state(idx).empty();
+    case REMOTE_MODE_LOCKS: return !selected_lock_state(idx).empty();
+    case REMOTE_MODE_MEDIA: return !selected_media_state(idx).empty();
+    case REMOTE_MODE_SENSORS: return !sensor_state_for_index(idx).empty();
+    case REMOTE_MODE_AUTOMATION: return !automation_state_for_index(idx).empty();
+    case REMOTE_MODE_ALARMS: return !alarm_state_for_index(idx).empty();
+    case REMOTE_MODE_WEATHER: return !weather_state_for_index(idx).empty();
+    case REMOTE_MODE_INPUTS: return !input_state_for_index(idx).empty();
+    case REMOTE_MODE_VACUUMS: return !vacuum_state_for_index(idx).empty();
+    case REMOTE_MODE_TIMERS: return !timer_state_for_index(idx).empty();
+    case REMOTE_MODE_REMOTES: return !remote_state_for_index(idx).empty();
+    default: return true;
+  }
+}
+
+// A queued press (see RemoteQueuedPress) can be decided on: Home Assistant is
+// connected, and the selected item's state arrived QUEUED_PRESS_SETTLE_MS ago.
+// mode and idx are the selected item's.
+inline bool queued_press_ready(uint32_t now, RemoteMode mode, int idx) {
+  bool connected = ha_api_ready() && esphome::api::global_api_server->is_connected_with_state_subscription();
+  return esphome::queued_press_settled(now, connected && selected_entity_synced(mode, idx));
+}
+
 // What the button prompts need about the selected entity of mode. Takes the
-// selected index of each mode that has any.
-inline RemoteEntityTraits selected_entity_traits(RemoteMode mode, int alarm_idx, int cover_idx, int automation_idx) {
+// selected index of each mode that has any, and the selected setting.
+inline RemoteEntityTraits selected_entity_traits(RemoteMode mode, int alarm_idx, int cover_idx, int automation_idx,
+                                                 int setting = REMOTE_SETTING_NONE) {
   RemoteEntityTraits traits;
   switch (mode) {
+    case REMOTE_MODE_LOCKS:
+      traits.lock_open = setting == REMOTE_SETTING_LOCK_OPEN;
+      break;
     case REMOTE_MODE_ALARMS:
       traits.alarm_features = alarm_supported_features_for_index(alarm_idx);
       break;

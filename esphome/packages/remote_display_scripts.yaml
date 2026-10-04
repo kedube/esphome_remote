@@ -31,7 +31,7 @@ script:
                     id(selected_weather_index), id(selected_fan_index), id(selected_humidifier_index),
                     id(selected_sensor_index), id(selected_alarm_index), id(selected_notification_index),
                     id(selected_info_index), id(selected_input_index), id(selected_vacuum_index),
-                    id(selected_timer_index));
+                    id(selected_timer_index), id(selected_remote_index));
                 auto selection = resolve_current_ui_selection_context(id(current_mode), id(current_menu_index), selection_refs);
                 RemoteMode mode = selection.mode;
                 int idx = selection.resolved_index;
@@ -43,7 +43,11 @@ script:
                 if (id(snapshot_hold_until) != 0) {
                   if (id(selected_item_state).empty() && static_cast<int32_t>(id(snapshot_hold_until) - now) > 0 &&
                       oled_snapshot_restore(it)) {
-                    render_snapshot_status(it, remote_ui_fonts, "SYNCING\u2026");
+                    render_snapshot_status(it, remote_ui_fonts,
+                                           queued_press_waiting_for(now, id(selected_item_entity),
+                                                                    id(preferred_setting_option))
+                                               ? "SENDING\u2026"
+                                               : "SYNCING\u2026");
                     id(display_push_pending) = true;
                     return;
                   }
@@ -90,7 +94,7 @@ script:
                 };
                 std::string hold_label;
                 // idx is the selection within the current mode, whichever that is.
-                RemoteEntityTraits traits = selected_entity_traits(mode, idx, idx, idx);
+                RemoteEntityTraits traits = selected_entity_traits(mode, idx, idx, idx, id(selected_setting_option));
                 int alarm_features = traits.alarm_features;
                 if (describe_active_hold(mode, now, holds, id(selected_item_state), id(selected_alarm_arm_mode),
                                          ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS}, hold_label,
@@ -169,9 +173,17 @@ script:
                                                                    selected_light_color_temp(idx));
                     ctx.light_min_kelvin = selected_light_min_kelvin(idx);
                     ctx.light_max_kelvin = selected_light_max_kelvin(idx);
+                    {
+                      int color = static_cast<int>(pending_value_or(now, REMOTE_MODE_LIGHTS, idx, REMOTE_SETTING_LIGHT_COLOR,
+                                                                    selected_light_color_index(idx)));
+                      if (color >= 0 && color < LIGHT_COLOR_PRESET_COUNT) {
+                        ctx.light_color_name = LIGHT_COLOR_PRESETS[color].name;
+                      }
+                    }
                     break;
                   case REMOTE_MODE_CLIMATE:
                     ctx.climate_mode_count = climate_hvac_mode_count(idx);
+                    ctx.climate_swing_mode = &climate_swing_mode_for_index(idx);
                     break;
                   case REMOTE_MODE_MEDIA:
                     ctx.media_muted = media_muted_for_index(idx);
@@ -183,6 +195,18 @@ script:
                     break;
                   case REMOTE_MODE_SENSORS:
                     ctx.sensor_is_presence = sensor_is_presence(idx);
+                    ctx.sensor_is_event = sensor_is_event(idx);
+                    if (ctx.sensor_is_event) {
+                      ctx.event_type = &sensor_event_type_for_index(idx);
+                      ctx.event_device_class = &sensor_device_class_for_index(idx);
+                      ctx.event_seconds_ago = sensor_event_seconds_ago(idx);
+                    }
+                    break;
+                  case REMOTE_MODE_REMOTES:
+                    ctx.remote_activity = &remote_activity_for_index(idx);
+                    ctx.remote_has_commands = remote_has_commands(idx);
+                    ctx.remote_key_flash = remote_key_flash;
+                    ctx.remote_key_flash_at = remote_key_flash_at;
                     break;
                   case REMOTE_MODE_INPUTS:
                     ctx.input_is_select = input_is_select(idx);
@@ -245,7 +269,8 @@ script:
                 int clock_x = 0;
                 int clock_width = 0;
                 remote_ui_header_clock_box(&clock_x, &clock_width);
-                oled_snapshot_capture(it, clock_x, clock_width);
+                oled_snapshot_capture(it, clock_x, clock_width, id(selected_item_entity), id(selected_setting_option),
+                                      id(preferred_setting_option));
                 id(updated_ui) = false;
                 id(display_push_pending) = true;
       # Sending the frame to the panel takes about 30 ms of I2C on its own (88

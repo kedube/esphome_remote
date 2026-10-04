@@ -135,6 +135,17 @@ class LightStatusTracker : public EntityTracker<LIGHT_LIST_COUNT> {
       ha_track_float(entity_id, "min_color_temp_kelvin", this->min_color_temp_kelvin_[idx]);
       ha_track_float(entity_id, "max_color_temp_kelvin", this->max_color_temp_kelvin_[idx]);
     }
+    // "(30.0, 70.0)"; "None" while the light is off.
+    if (LIGHT_COLOR) {
+      float *hue = &this->hue_[idx];
+      float *saturation = &this->saturation_[idx];
+      ha_subscribe(entity_id, "hs_color", [hue, saturation](esphome::StringRef state) {
+        if (!parse_hs_color(state.c_str(), state.size(), hue, saturation)) {
+          *hue = NAN;
+          *saturation = NAN;
+        }
+      });
+    }
   }
 
   const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
@@ -152,6 +163,10 @@ class LightStatusTracker : public EntityTracker<LIGHT_LIST_COUNT> {
   float color_temp_kelvin(int idx) const { return at_(this->color_temp_kelvin_, idx); }
   float min_color_temp_kelvin(int idx) const { return at_(this->min_color_temp_kelvin_, idx); }
   float max_color_temp_kelvin(int idx) const { return at_(this->max_color_temp_kelvin_, idx); }
+  bool supports_color(int idx) const { return LIGHT_COLOR && light_modes_color(at_(this->color_modes_, idx)); }
+  // NAN while the light is off.
+  float hue(int idx) const { return at_(this->hue_, idx); }
+  float saturation(int idx) const { return at_(this->saturation_, idx); }
 
  protected:
   std::array<std::string, LIGHT_LIST_COUNT> state_{};
@@ -162,6 +177,8 @@ class LightStatusTracker : public EntityTracker<LIGHT_LIST_COUNT> {
   std::array<float, LIGHT_LIST_COUNT> color_temp_kelvin_ = filled_array<float, LIGHT_LIST_COUNT>(NAN);
   std::array<float, LIGHT_LIST_COUNT> min_color_temp_kelvin_ = filled_array<float, LIGHT_LIST_COUNT>(NAN);
   std::array<float, LIGHT_LIST_COUNT> max_color_temp_kelvin_ = filled_array<float, LIGHT_LIST_COUNT>(NAN);
+  std::array<float, LIGHT_LIST_COUNT> hue_ = filled_array<float, LIGHT_LIST_COUNT>(NAN);
+  std::array<float, LIGHT_LIST_COUNT> saturation_ = filled_array<float, LIGHT_LIST_COUNT>(NAN);
 };
 
 using SwitchStatusTracker = SingleStateTracker<SWITCH_LIST_COUNT>;
@@ -268,6 +285,9 @@ class ClimateStatusTracker : public EntityTracker<CLIMATE_LIST_COUNT> {
     ha_track_float(entity_id, "humidity", this->target_humidity_[idx]);
     ha_track_text(entity_id, "preset_mode", this->preset_mode_[idx]);
     ha_track_list(entity_id, "preset_modes", this->preset_modes_[idx]);
+    // Only thermostats that swing their louvres have swing_modes.
+    ha_track_text(entity_id, "swing_mode", this->swing_mode_[idx]);
+    ha_track_list(entity_id, "swing_modes", this->swing_modes_[idx]);
     // Home Assistant rejects a setpoint outside these.
     ha_track_float(entity_id, "min_temp", this->min_temperature_[idx]);
     ha_track_float(entity_id, "max_temp", this->max_temperature_[idx]);
@@ -285,6 +305,8 @@ class ClimateStatusTracker : public EntityTracker<CLIMATE_LIST_COUNT> {
   const std::string &preset_mode(int idx) const { return at_(this->preset_mode_, idx); }
   const std::string &preset_modes(int idx) const { return at_(this->preset_modes_, idx); }
   bool supports_preset(int idx) const { return !this->preset_modes(idx).empty(); }
+  const std::string &swing_mode(int idx) const { return at_(this->swing_mode_, idx); }
+  const std::string &swing_modes(int idx) const { return at_(this->swing_modes_, idx); }
   float target_humidity(int idx) const { return at_(this->target_humidity_, idx); }
   float target_temperature(int idx) const { return at_(this->target_temperature_, idx); }
   float target_temperature_low(int idx) const { return at_(this->target_temperature_low_, idx); }
@@ -312,6 +334,8 @@ class ClimateStatusTracker : public EntityTracker<CLIMATE_LIST_COUNT> {
   std::array<std::string, CLIMATE_LIST_COUNT> fan_modes_{};
   std::array<std::string, CLIMATE_LIST_COUNT> preset_mode_{};
   std::array<std::string, CLIMATE_LIST_COUNT> preset_modes_{};
+  std::array<std::string, CLIMATE_LIST_COUNT> swing_mode_{};
+  std::array<std::string, CLIMATE_LIST_COUNT> swing_modes_{};
   std::array<float, CLIMATE_LIST_COUNT> target_temperature_ = filled_array<float, CLIMATE_LIST_COUNT>(NAN);
   std::array<float, CLIMATE_LIST_COUNT> target_temperature_low_ = filled_array<float, CLIMATE_LIST_COUNT>(NAN);
   std::array<float, CLIMATE_LIST_COUNT> target_temperature_high_ = filled_array<float, CLIMATE_LIST_COUNT>(NAN);
@@ -323,7 +347,23 @@ class ClimateStatusTracker : public EntityTracker<CLIMATE_LIST_COUNT> {
   std::array<float, CLIMATE_LIST_COUNT> max_humidity_ = filled_array<float, CLIMATE_LIST_COUNT>(NAN);
 };
 
-using LockStatusTracker = SingleStateTracker<LOCK_LIST_COUNT>;
+class LockStatusTracker : public SingleStateTracker<LOCK_LIST_COUNT> {
+ public:
+  LockStatusTracker() : SingleStateTracker(LOCK_LIST) {}
+
+  // Whether the lock can be opened (unlatched), not just unlocked.
+  void subscribe(int idx) {
+    SingleStateTracker<LOCK_LIST_COUNT>::subscribe(idx);
+    ha_track_int(this->entity_id(idx), "supported_features", this->supported_features_[idx]);
+  }
+
+  bool supports_open(int idx) const {
+    return in_range_(idx) && this->supported_features_[idx] >= 0 && (this->supported_features_[idx] & LOCK_FEATURE_OPEN) != 0;
+  }
+
+ protected:
+  std::array<int, LOCK_LIST_COUNT> supported_features_ = filled_array<int, LOCK_LIST_COUNT>(-1);
+};
 
 class SensorStatusTracker : public SingleStateTracker<SENSOR_LIST_COUNT> {
  public:
@@ -332,9 +372,16 @@ class SensorStatusTracker : public SingleStateTracker<SENSOR_LIST_COUNT> {
   // suggested_unit_of_measurement is an entity-registry option, not a state
   // attribute, so Home Assistant never sends it; unit_of_measurement already
   // reflects any unit override. Binary sensors, people and device trackers
-  // have no unit, so they don't spend a subscription on one.
+  // have no unit, so they don't spend a subscription on one. An event's state
+  // is when it last happened; its event_type says what happened ("ring") and
+  // its device_class what kind of thing it is ("doorbell").
   void subscribe(int idx) {
     SingleStateTracker<SENSOR_LIST_COUNT>::subscribe(idx);
+    if (this->is_event(idx)) {
+      ha_track_text(this->entity_id(idx), "event_type", this->event_type_[idx]);
+      ha_track_text(this->entity_id(idx), "device_class", this->device_class_[idx]);
+      return;
+    }
     if (entity_id_matches_domain(this->entity_id(idx), "binary_sensor") || this->is_presence(idx)) {
       return;
     }
@@ -352,6 +399,9 @@ class SensorStatusTracker : public SingleStateTracker<SENSOR_LIST_COUNT> {
   }
 
   const std::string &unit(int idx) const { return at_(this->unit_, idx); }
+  const std::string &event_type(int idx) const { return at_(this->event_type_, idx); }
+  const std::string &device_class(int idx) const { return at_(this->device_class_, idx); }
+  bool is_event(int idx) const { return in_range_(idx) && entity_id_matches_domain(this->entity_id(idx), "event"); }
   // A person or device tracker: home, away or a zone.
   bool is_presence(int idx) const {
     return in_range_(idx) && (entity_id_matches_domain(this->entity_id(idx), "person") ||
@@ -360,6 +410,8 @@ class SensorStatusTracker : public SingleStateTracker<SENSOR_LIST_COUNT> {
 
  protected:
   std::array<std::string, SENSOR_LIST_COUNT> unit_{};
+  std::array<std::string, SENSOR_LIST_COUNT> event_type_{};
+  std::array<std::string, SENSOR_LIST_COUNT> device_class_{};
 };
 
 class CoverStatusTracker : public EntityTracker<COVER_LIST_COUNT> {
@@ -834,6 +886,36 @@ class TimerStatusTracker : public EntityTracker<TIMER_LIST_COUNT> {
   std::array<std::string, TIMER_LIST_COUNT> duration_{};
   std::array<std::string, TIMER_LIST_COUNT> remaining_{};
   std::array<std::string, TIMER_LIST_COUNT> finishes_at_{};
+};
+
+// TV and streaming-box remotes. Only some report activities: a Harmony hub's,
+// or the apps set up in the Android TV Remote integration. A Harmony hub
+// reports "PowerOff" as its activity while everything is off.
+class RemoteStatusTracker : public EntityTracker<REMOTE_LIST_COUNT> {
+ public:
+  RemoteStatusTracker() : EntityTracker(REMOTE_LIST) {}
+
+  void subscribe(int idx) {
+    const char *entity_id = this->entity_id(idx);
+    ha_track_state(entity_id, nullptr, this->state_[idx]);
+    ha_track_text(entity_id, "current_activity", this->activity_[idx]);
+    ha_track_list(entity_id, "activity_list", this->activity_list_[idx]);
+  }
+
+  const std::string &state(int idx) const { return at_(this->state_, idx, unknown_string()); }
+  // Empty when there is none, or everything is off.
+  const std::string &activity(int idx) const {
+    const std::string &activity = at_(this->activity_, idx);
+    return activity == "PowerOff" || ha_state_missing(activity) ? empty_string() : activity;
+  }
+  const std::string &activity_list(int idx) const { return at_(this->activity_list_, idx); }
+  // The favorite's third field: a command set, or none.
+  const char *commands(int idx) const { return in_range_(idx) ? this->entities_[idx].sources : nullptr; }
+
+ protected:
+  std::array<std::string, REMOTE_LIST_COUNT> state_{};
+  std::array<std::string, REMOTE_LIST_COUNT> activity_{};
+  std::array<std::string, REMOTE_LIST_COUNT> activity_list_{};
 };
 
 class NotificationFeedTracker {

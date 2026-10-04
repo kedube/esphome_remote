@@ -74,6 +74,7 @@ script:
               if (off || selected_light_dimmable(id(selected_light_index)) != 0) add_option(REMOTE_SETTING_LIGHT_DIMMER);
               if (!off && selected_light_has_effect(id(selected_light_index))) add_option(REMOTE_SETTING_LIGHT_EFFECT);
               if (!off && selected_light_supports_color_temp(id(selected_light_index))) add_option(REMOTE_SETTING_LIGHT_WARMTH);
+              if (!off && selected_light_supports_color(id(selected_light_index))) add_option(REMOTE_SETTING_LIGHT_COLOR);
               break;
             }
             case REMOTE_MODE_CLIMATE:
@@ -85,6 +86,7 @@ script:
                 add_option(REMOTE_SETTING_CLIMATE_TARGET);
               }
               if (!selected_climate_fan_modes(id(selected_climate_index)).empty()) add_option(REMOTE_SETTING_CLIMATE_FAN);
+              if (!climate_swing_modes_for_index(id(selected_climate_index)).empty()) add_option(REMOTE_SETTING_CLIMATE_SWING);
               if (!isnan(id(selected_climate_target_humidity))) add_option(REMOTE_SETTING_CLIMATE_HUMIDITY);
               if (climate_supports_preset(id(selected_climate_index))) add_option(REMOTE_SETTING_CLIMATE_PRESETS);
               if (!id(selected_climate_hvac_action).empty() && id(selected_climate_hvac_action) != "unknown") add_option(REMOTE_SETTING_CLIMATE_ACTION);
@@ -161,8 +163,25 @@ script:
                 add_option(REMOTE_SETTING_VACUUM_FAN_SPEED);
               }
               break;
-            case REMOTE_MODE_SWITCHES:
             case REMOTE_MODE_LOCKS:
+              // A lock that can be opened: UNLOCK first, OPEN one press away.
+              if (selected_lock_supports_open(id(selected_lock_index))) {
+                add_option(REMOTE_SETTING_LOCK_ACTIONS);
+                add_option(REMOTE_SETTING_LOCK_OPEN);
+              }
+              break;
+            case REMOTE_MODE_REMOTES:
+              // BACK and HOME first: there Previous and Next still move
+              // between items, which in NAVIGATE are the remote's arrows.
+              if (remote_has_commands(id(selected_remote_index))) {
+                add_option(REMOTE_SETTING_REMOTE_KEYS);
+                add_option(REMOTE_SETTING_REMOTE_NAVIGATE);
+              }
+              if (!remote_activity_list_for_index(id(selected_remote_index)).empty()) {
+                add_option(REMOTE_SETTING_REMOTE_ACTIVITY);
+              }
+              break;
+            case REMOTE_MODE_SWITCHES:
             case REMOTE_MODE_SENSORS:
             case REMOTE_MODE_AUTOMATION:
             case REMOTE_MODE_TIMERS:
@@ -526,6 +545,34 @@ script:
                 step: !lambda 'return step > 0 ? 1 : -1;'
       - if:
           condition:
+            lambda: 'return id(selected_setting_option) == REMOTE_SETTING_LIGHT_COLOR;'
+          then:
+            - script.execute:
+                id: adjust_light_color
+                step: !lambda 'return step > 0 ? 1 : -1;'
+      - if:
+          condition:
+            lambda: 'return id(selected_setting_option) == REMOTE_SETTING_CLIMATE_SWING;'
+          then:
+            - script.execute:
+                id: step_climate_swing_mode
+                step: !lambda 'return step > 0 ? 1 : -1;'
+      - if:
+          condition:
+            lambda: 'return id(selected_setting_option) == REMOTE_SETTING_REMOTE_NAVIGATE;'
+          then:
+            - script.execute:
+                id: remote_nav_key
+                key: !lambda 'return step > 0 ? REMOTE_KEY_UP : REMOTE_KEY_DOWN;'
+      - if:
+          condition:
+            lambda: 'return id(selected_setting_option) == REMOTE_SETTING_REMOTE_ACTIVITY;'
+          then:
+            - script.execute:
+                id: step_remote_activity
+                step: !lambda 'return step > 0 ? 1 : -1;'
+      - if:
+          condition:
             lambda: 'return id(selected_setting_option) == REMOTE_SETTING_MEDIA_MUTE;'
           then:
             - script.execute:
@@ -850,9 +897,24 @@ script:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_LOCKS;'
           then:
+            - if:
+                condition:
+                  lambda: 'return id(selected_setting_option) == REMOTE_SETTING_LOCK_OPEN;'
+                then:
+                  - script.execute:
+                      id: open_selected_lock
+                      lock_index: !lambda 'return id(selected_lock_index);'
+                else:
+                  - script.execute:
+                      id: unlock_selected_lock
+                      lock_index: !lambda 'return id(selected_lock_index);'
+      - if:
+          condition:
+            lambda: 'return id(current_mode) == REMOTE_MODE_REMOTES;'
+          then:
             - script.execute:
-                id: unlock_selected_lock
-                lock_index: !lambda 'return id(selected_lock_index);'
+                id: remote_nav_key
+                key: !lambda 'return REMOTE_KEY_BACK;'
       - if:
           condition:
             lambda: 'return id(current_mode) == REMOTE_MODE_MEDIA;'
@@ -998,6 +1060,15 @@ script:
             lambda: 'return id(current_mode) == REMOTE_MODE_TIMERS;'
           then:
             - script.execute: timer_circle_action
+      - if:
+          condition:
+            lambda: 'return id(current_mode) == REMOTE_MODE_REMOTES;'
+          then:
+            - script.execute:
+                id: remote_nav_key
+                key: !lambda |-
+                  return id(selected_setting_option) == REMOTE_SETTING_REMOTE_NAVIGATE ? REMOTE_KEY_SELECT
+                                                                                       : REMOTE_KEY_HOME;
 
   # wrap: past the last item comes the first. A held Previous or Next stops
   # at the ends instead (see button_repeat).
@@ -1015,7 +1086,7 @@ script:
               id(selected_cover_index), id(selected_media_index), id(selected_automation_index), id(selected_weather_index),
               id(selected_fan_index), id(selected_humidifier_index), id(selected_sensor_index), id(selected_alarm_index),
               id(selected_notification_index), id(selected_info_index), id(selected_input_index),
-              id(selected_vacuum_index), id(selected_timer_index));
+              id(selected_vacuum_index), id(selected_timer_index), id(selected_remote_index));
           auto selection = resolve_current_ui_selection_context(id(current_mode), id(current_menu_index), selection_refs);
           if (selection.count <= 0 || selection.selected_index == nullptr) {
             return;
@@ -1027,6 +1098,12 @@ script:
           id(last_navigation_requested_at) = millis();
           *selection.selected_index = wrapped_mode_index(selection.index, selection.count, step);
           shift_selected_item_moved = true;
+          // Moving on from a TV remote's arrows, or onto another remote, lands
+          // on its BACK/HOME keys: in NAVIGATE, Previous and Next would send
+          // arrows instead of moving on.
+          if (id(preferred_setting_option) == REMOTE_SETTING_REMOTE_NAVIGATE) {
+            id(preferred_setting_option) = REMOTE_SETTING_REMOTE_KEYS;
+          }
       # The lambda's return can't skip this, so it checks the flag.
       - if:
           condition:
@@ -1048,13 +1125,30 @@ script:
           step: -1
           wrap: true
 
+  # On a TV remote's NAVIGATE, Previous and Next are its left and right arrows.
   - id: previous_button_action
     then:
-      - script.execute: select_previous_item
+      - if:
+          condition:
+            lambda: 'return id(selected_setting_option) == REMOTE_SETTING_REMOTE_NAVIGATE;'
+          then:
+            - script.execute:
+                id: remote_nav_key
+                key: !lambda 'return REMOTE_KEY_LEFT;'
+          else:
+            - script.execute: select_previous_item
 
   - id: next_button_action
     then:
-      - script.execute: select_next_item
+      - if:
+          condition:
+            lambda: 'return id(selected_setting_option) == REMOTE_SETTING_REMOTE_NAVIGATE;'
+          then:
+            - script.execute:
+                id: remote_nav_key
+                key: !lambda 'return REMOTE_KEY_RIGHT;'
+          else:
+            - script.execute: select_next_item
 
   - id: dismiss_selected_notification
     mode: queued

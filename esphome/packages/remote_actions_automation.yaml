@@ -312,8 +312,9 @@ script:
           note_local_change();
           id(updated_ui) = true;
           id(show_toast).execute(active ? "PAUSED" : "STARTED");
-          id(call_entity_action).execute(active ? "timer.pause" : "timer.start", id(selected_item_entity),
-                                         active ? "PAUSE FAILED" : "START FAILED");
+          id(call_entity_action).execute(queue_entity_request(active ? "timer.pause" : "timer.start",
+                                                              id(selected_item_entity),
+                                                              active ? "PAUSE FAILED" : "START FAILED"));
 
   - id: timer_square_action
     then:
@@ -331,4 +332,4 @@ script:
           note_local_change();
           id(updated_ui) = true;
           id(show_toast).execute("CANCELLED");
-          id(call_entity_action).execute("timer.cancel", id(selected_item_entity), "CANCEL FAILED");
+          id(call_entity_action).execute(queue_entity_request("timer.cancel", id(selected_item_entity), "CANCEL FAILED"));

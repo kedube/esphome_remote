@@ -102,4 +102,9 @@ font:
       "\ue425", # timer
       "\uf4bb", # timer_pause
       "\ue04f", # volume_off
+      "\uf5d9", # tv_remote
+      "\ue77c", # door_open
+      "\uefff", # doorbell
+      "\ue792", # motion_sensor_active
+      "\ue7f7", # notifications_active
     ]

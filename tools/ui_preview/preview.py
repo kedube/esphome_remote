@@ -69,6 +69,11 @@ README_SHOTS = [
     "a6_number",
     "a7_select",
     "al_snapshot_api",
+    "b2_remote_down",
+    "b7_event_doorbell",
+    "ba_lock_open_setting",
+    "bc_light_color",
+    "al_snapshot_queued",
 ]
 
 # Compiler flags for --stress. float-cast-overflow (which catches NaN cast to

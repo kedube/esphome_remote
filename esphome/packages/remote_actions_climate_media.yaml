@@ -225,6 +225,40 @@ script:
                   fan_mode: !lambda 'return mode_name;'
             - script.execute: update_display
 
+  # SWING: the thermostat's swing modes, from the one just sent while Home
+  # Assistant hasn't reported it.
+  - id: step_climate_swing_mode
+    parameters:
+      step: int
+    then:
+      - lambda: |-
+          int idx = id(selected_climate_index);
+          const std::string &current = local_change_hold_active(millis()) && !id(selected_setting_detail).empty()
+              ? id(selected_setting_detail)
+              : climate_swing_mode_for_index(idx);
+          std::string next = step_delimited_option(climate_swing_modes_for_index(idx), current, step);
+          if (next.empty()) {
+            return;
+          }
+          id(selected_setting_detail) = next;
+          id(last_climate_interaction) = millis();
+          id(last_setting_interaction) = millis();
+          note_local_change();
+          id(updated_ui) = true;
+          id(set_climate_swing_mode).execute(next);
+      - script.execute: update_display
+
+  - id: set_climate_swing_mode
+    mode: queued
+    parameters:
+      swing_mode: std::string
+    then:
+      - homeassistant.action:
+          action: climate.set_swing_mode
+          data:
+            entity_id: !lambda 'return id(selected_item_entity);'
+            swing_mode: !lambda 'return swing_mode;'
+
   - id: adjust_selected_climate_humidity
     parameters:
       delta: float
@@ -669,6 +703,82 @@ script:
           note_local_change();
           id(updated_ui) = true;
           id(send_option_after_pause).execute(OPTION_SEND_HVAC_MODE, id(selected_item_entity), next);
+      - script.execute: update_display
+
+  # TV remotes. Sends one key of the remote's command set (remote.send_command)
+  # and lights it up on screen. Previous and Next come here straight from the
+  # buttons, so a press before Home Assistant has connected is queued here;
+  # the other buttons queue theirs on the way.
+  - id: remote_nav_key
+    mode: queued
+    parameters:
+      key: int
+    then:
+      - if:
+          condition:
+            api.connected:
+              state_subscription_only: true
+          then:
+            - lambda: |-
+                clear_queued_press();
+                if (id(selected_item_state) == "unavailable") {
+                  id(show_toast).execute("UNAVAILABLE");
+                  return;
+                }
+                int idx = id(selected_remote_index);
+                std::string command = remote_command_for_index(idx, key);
+                if (command.empty()) {
+                  id(show_toast).execute("NO COMMANDS");
+                  return;
+                }
+                remote_key_flash = key;
+                remote_key_flash_at = millis() | 1;
+                id(updated_ui) = true;
+                id(call_entity_action).execute(queue_entity_request("remote.send_command", id(selected_item_entity),
+                                                                    "COMMAND FAILED", command,
+                                                                    remote_device_for_index(idx)));
+                id(update_display).execute();
+                id(clear_remote_key_flash).execute();
+          else:
+            - script.execute:
+                id: queue_press
+                kind: !lambda |-
+                  return key == REMOTE_KEY_LEFT    ? QUEUED_PRESS_PREVIOUS
+                         : key == REMOTE_KEY_RIGHT ? QUEUED_PRESS_NEXT
+                         : key == REMOTE_KEY_UP    ? QUEUED_PRESS_PLUS
+                         : key == REMOTE_KEY_DOWN  ? QUEUED_PRESS_MINUS
+                         : key == REMOTE_KEY_BACK  ? QUEUED_PRESS_SQUARE
+                                                   : QUEUED_PRESS_CIRCLE;
+
+  # Redraws once the key sent has been lit up long enough.
+  - id: clear_remote_key_flash
+    mode: restart
+    then:
+      - delay: !lambda 'return REMOTE_KEY_FLASH_MS + 20;'
+      - lambda: 'id(updated_ui) = true;'
+      - script.execute: update_display
+
+  # ACTIVITY: the remote's activities, from the one just picked while Home
+  # Assistant hasn't reported it. Started once the presses pause, so stepping
+  # past one doesn't start it.
+  - id: step_remote_activity
+    parameters:
+      step: int
+    then:
+      - lambda: |-
+          int idx = id(selected_remote_index);
+          const std::string &current = local_change_hold_active(millis()) && !id(selected_setting_detail).empty()
+              ? id(selected_setting_detail)
+              : remote_activity_for_index(idx);
+          std::string next = step_delimited_option(remote_activity_list_for_index(idx), current, step);
+          if (next.empty()) {
+            return;
+          }
+          id(selected_setting_detail) = next;
+          id(last_setting_interaction) = millis();
+          note_local_change();
+          id(updated_ui) = true;
+          id(send_option_after_pause).execute(OPTION_SEND_ACTIVITY, id(selected_item_entity), next);
       - script.execute: update_display
 
   - id: media_set_mute

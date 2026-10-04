@@ -80,6 +80,104 @@ struct RemotePendingOption {
 };
 inline RemotePendingOption remote_pending_option;
 
+// An action on one entity for call_entity_action: the service, the entity,
+// what the footer says if Home Assistant refuses it, and for a TV remote the
+// command (and the device a Harmony hub needs). The script takes only the
+// slot's number: ESPHome numbers the requests it waits on per parameter list,
+// so every script that waits for Home Assistant's answer takes one int (see
+// lock_selected_lock).
+struct RemoteEntityRequest {
+  std::string action;
+  std::string entity;
+  std::string failed;
+  std::string command;
+  std::string device;
+};
+inline constexpr int ENTITY_REQUEST_SLOTS = 8;
+inline RemoteEntityRequest remote_entity_requests[ENTITY_REQUEST_SLOTS];
+inline int remote_entity_request_numbers[ENTITY_REQUEST_SLOTS];
+inline int remote_entity_request_next = 0;
+
+// Stores a request and returns its number, to pass to call_entity_action. The
+// slots are reused in turn, and a held arrow can go round them before a slow
+// integration answers: an answer for a reused slot then finds an empty
+// request, so its failure shows on no item rather than on the wrong one.
+inline int queue_entity_request(const std::string &action, const std::string &entity, const char *failed,
+                                const std::string &command = std::string(), const std::string &device = std::string()) {
+  int number = remote_entity_request_next;
+  remote_entity_request_next = (number + 1) & 0x3FFFFFFF;
+  int slot = number % ENTITY_REQUEST_SLOTS;
+  remote_entity_requests[slot] = {action, entity, failed, command, device};
+  remote_entity_request_numbers[slot] = number;
+  return number;
+}
+
+inline const RemoteEntityRequest &entity_request(int number) {
+  static const RemoteEntityRequest none;
+  int slot = number >= 0 ? number % ENTITY_REQUEST_SLOTS : 0;
+  return number >= 0 && remote_entity_request_numbers[slot] == number ? remote_entity_requests[slot] : none;
+}
+
+// A press made while the remote is still connecting after a wake, on the item
+// the frame from before sleep shows. It goes out once Home Assistant has sent
+// that item's state, and QUEUED_PRESS_SETTLE_MS later its other values (a
+// light's colour modes, a thermostat's HVAC modes: the item's subscriptions
+// come first, one per loop pass), so a toggle acts on what the item is doing
+// now, and only if the item then shows the setting the frame did. Otherwise,
+// or after QUEUED_PRESS_TIMEOUT_MS, it is dropped. Only the latest press is
+// kept.
+enum RemoteQueuedPress {
+  QUEUED_PRESS_NONE = 0,
+  QUEUED_PRESS_SQUARE,
+  QUEUED_PRESS_CIRCLE,
+  QUEUED_PRESS_MINUS,
+  QUEUED_PRESS_PLUS,
+  QUEUED_PRESS_PREVIOUS,  // a TV remote's left arrow
+  QUEUED_PRESS_NEXT,      // and right arrow
+};
+inline constexpr uint32_t QUEUED_PRESS_TIMEOUT_MS = 10000;
+inline constexpr uint32_t QUEUED_PRESS_SETTLE_MS = 500;
+inline int remote_queued_press = QUEUED_PRESS_NONE;
+inline uint32_t remote_queued_press_at = 0;
+inline std::string remote_queued_press_entity;
+inline int remote_queued_press_setting = 0;  // preferred_setting_option when it was made
+inline int remote_queued_press_shown = 0;    // the setting the frame showed
+inline uint32_t remote_queued_press_synced_at = 0;  // when the item's state arrived; 0 not yet
+
+inline bool queued_press_pending(uint32_t now) {
+  return remote_queued_press != QUEUED_PRESS_NONE && now - remote_queued_press_at < QUEUED_PRESS_TIMEOUT_MS;
+}
+
+// A queued press is still waiting, for the item and setting now selected:
+// choosing another item or setting drops it.
+inline bool queued_press_waiting_for(uint32_t now, const std::string &entity, int setting) {
+  return queued_press_pending(now) && entity == remote_queued_press_entity && setting == remote_queued_press_setting;
+}
+
+inline void clear_queued_press() {
+  remote_queued_press = QUEUED_PRESS_NONE;
+  remote_queued_press_entity.clear();
+  remote_queued_press_synced_at = 0;
+}
+
+// Whether the item's other values have had time to arrive, given whether its
+// state has (synced). Starts timing when the state first arrives.
+inline bool queued_press_settled(uint32_t now, bool synced) {
+  if (!synced) {
+    remote_queued_press_synced_at = 0;
+    return false;
+  }
+  if (remote_queued_press_synced_at == 0) {
+    remote_queued_press_synced_at = now | 1;
+  }
+  return now - remote_queued_press_synced_at >= QUEUED_PRESS_SETTLE_MS;
+}
+
+// The TV remote key just sent (a RemoteKey), which the screen lights up for
+// REMOTE_KEY_FLASH_MS; -1 for none.
+inline int remote_key_flash = -1;
+inline uint32_t remote_key_flash_at = 0;
+
 // The screen dims this long before the remote goes to sleep, as a warning; any
 // button brings it back. Only when SLEEP_DURATION leaves room for it.
 inline constexpr uint32_t IDLE_DIM_BEFORE_SLEEP_S = 10;

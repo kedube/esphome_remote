@@ -8,6 +8,9 @@ inline constexpr FavoriteEntity LIVING_ROOM_FAVORITES[] = {
     // media players, list the sources yourself with an optional third field to
     // get a SOURCE setting on the remote; omit it and no SOURCE setting appears.
     {"Speaker", "media_player.living_room_speaker", "Spotify|Radio|Line In"},
+    // A TV or streaming box's remote takes its command set as the third
+    // field: apple_tv, android_tv, roku, samsung, bravia or philips.
+    {"Apple TV", "remote.living_room_apple_tv", "apple_tv"},
     {"Home Alarm", "alarm_control_panel.home"},
 };
 
@@ -30,6 +33,7 @@ inline constexpr FavoriteEntity HOUSE_FAVORITES[] = {
     {"Robot Vacuum", "vacuum.robot"},
     {"Garden Water", "valve.garden"},
     {"Alex", "person.alex"},
+    {"Doorbell", "event.front_doorbell_ring"},
 };
 
 inline constexpr FavoriteList FAVORITE_LISTS[] = {
@@ -42,6 +46,10 @@ inline constexpr FavoriteList FAVORITE_LISTS[] = {
 // three subscriptions per light, which a wake spends a little longer syncing;
 // uncomment to go without.
 // #define LIGHT_WARMTH 0
+
+// Lights that take a colour get a COLOR setting, which costs one subscription
+// per light; uncomment to go without.
+// #define LIGHT_COLOR 0
 
 // Optional notifications mode. Leave NOTIFICATION_FEED_ENTITY undefined or set it
 // to an empty string to hide Notifications from the UI entirely.

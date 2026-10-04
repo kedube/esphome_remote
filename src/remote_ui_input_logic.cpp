@@ -12,7 +12,8 @@ RemoteButtonPrompt describe_remote_button_prompt(
         prompt.requires_long_press = true;
         prompt.hold_duration_ms = default_hold_ms;
         prompt.feedback_target = REMOTE_INPUT_FEEDBACK_LOCK;
-        prompt.feedback = action == 2 ? "HOLD TO LOCK" : "HOLD TO UNLOCK";
+        // With OPEN selected, Square unlatches the door.
+        prompt.feedback = action == 2 ? "HOLD TO LOCK" : traits.lock_open ? "HOLD TO OPEN" : "HOLD TO UNLOCK";
       }
       break;
     case REMOTE_MODE_COVERS:

@@ -2,7 +2,7 @@
 
 Replacement firmware for [Pawel Lugowski's ESPHome OLED Remote Control](https://tech.lugowski.dev/guides/smart-oled-remote-esphome/). The hardware is built around an ESP32 Lolin32 WROOM (WIFI + Bluetooth) board, a 1.3-inch SH1106 128x64 OLED display, and physical buttons that provide a compact, battery-friendly UI for controlling Home Assistant entities directly from the handheld remote. 
 
-The firmware has been entirely rewritten from scratch based on a newly designed codebase and architecture. It is designed to let you cycle through Home Assistant entities directly from the remote without needing a touchscreen or a phone. The remote now uses mixed-entity favorite lists as the primary navigation model, while still supporting controls for lights, switches, climate devices, humidifiers, fans, covers and valves, locks, media players, vacuums and lawn mowers, timers, number and select helpers, buttons, sensors and people, automations, alarms, weather, notifications, and info screens.
+The firmware has been entirely rewritten from scratch based on a newly designed codebase and architecture. It is designed to let you cycle through Home Assistant entities directly from the remote without needing a touchscreen or a phone. The remote now uses mixed-entity favorite lists as the primary navigation model, while still supporting controls for lights, switches, climate devices, humidifiers, fans, covers and valves, locks, media players, TV and streaming-box remotes, vacuums and lawn mowers, timers, number and select helpers, buttons, sensors, events and people, automations, alarms, weather, notifications, and info screens.
 
 ## Gallery
 
@@ -18,6 +18,7 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 | ![Switch](images/remote_UI-11.png)<br><sub>Switch</sub> | ![Sensor](images/remote_UI-12.png)<br><sub>Sensor</sub> | ![Automation hold to run](images/remote_UI-13.png)<br><sub>Automation hold to run</sub> | ![Alarm arm modes](images/remote_UI-14.png)<br><sub>Alarm arm modes</sub> | ![Notification](images/remote_UI-15.png)<br><sub>Notification</sub> <tr></tr> |
 | ![Weather](images/remote_UI-16.png)<br><sub>Weather</sub> | ![Wind](images/remote_UI-17.png)<br><sub>Wind</sub> | ![Time and date](images/remote_UI-18.png)<br><sub>Time and date</sub> | ![Wi-Fi](images/remote_UI-19.png)<br><sub>Wi-Fi</sub> | ![Hold to reboot](images/remote_UI-20.png)<br><sub>Hold to reboot</sub> <tr></tr> |
 | ![Robot vacuum](images/remote_UI-21.png)<br><sub>Robot vacuum</sub> | ![Timer](images/remote_UI-22.png)<br><sub>Timer</sub> | ![Number](images/remote_UI-23.png)<br><sub>Number</sub> | ![Select](images/remote_UI-24.png)<br><sub>Select</sub> | ![Waking up](images/remote_UI-25.png)<br><sub>Waking up</sub> <tr></tr> |
+| ![TV remote arrows](images/remote_UI-26.png)<br><sub>TV remote arrows</sub> | ![Doorbell](images/remote_UI-27.png)<br><sub>Doorbell</sub> | ![Lock open](images/remote_UI-28.png)<br><sub>Lock open</sub> | ![Light colour](images/remote_UI-29.png)<br><sub>Light colour</sub> | ![Press waiting to send](images/remote_UI-30.png)<br><sub>Press waiting to send</sub> <tr></tr> |
 
 ## Features
 
@@ -25,7 +26,8 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 - Hold-to-confirm progress bar for protected actions (locks, covers, automations, alarm)
 - Hold `Previous`, `Next`, `Plus` or `Minus` to keep stepping; a held `Plus` or `Minus` sends Home Assistant only the value it stops on
 - Deep sleep support for battery-powered remotes
-- Wakes straight into the item it went to sleep on, shown as it was until the live values arrive, and dims the screen shortly before it sleeps
+- Wakes straight into the item it went to sleep on, shown as it was until the live values arrive; a press made meanwhile goes out once Home Assistant has connected. Dims the screen shortly before it sleeps
+- Arrows, OK, Back and Home for Apple TV, Android TV, Roku, Samsung, Bravia and Philips TVs through Home Assistant's remote entities
 - Multiple board package options for different PCB revisions
 - Favorite-list navigation with mixed Home Assistant entity types in each list
 - Automatic hiding of empty favorite lists and optional Notifications mode
@@ -294,9 +296,9 @@ esphome_remote/
 The `esphome/packages/` folder is split by responsibility:
 
 - `remote_actions_*.yaml`
-  Entity actions and feedback flows grouped by domain. `remote_actions_values.yaml` sends what `Plus` and `Minus` change: a held value once the hold ends, an HVAC mode or select option once the presses pause.
+  Entity actions and feedback flows grouped by domain. `remote_actions_values.yaml` sends what `Plus` and `Minus` change: a held value once the hold ends, an HVAC mode, select option or remote activity once the presses pause. Its `call_entity_action` sends one entity's action or a TV remote's command; like every script that waits for Home Assistant's answer it takes a single int (a slot from `queue_entity_request`), since ESPHome numbers those requests separately for each script parameter list.
 - `remote_button_*.yaml`
-  Button press handling and action wrapper scripts.
+  Button press handling and action wrapper scripts, including the press made while connecting after a wake, which waits for Home Assistant (`queue_press`).
 - `remote_display_*.yaml`
   UI globals and the `update_display` script that fills the render context and calls the renderer.
 - `remote_fonts.yaml`
@@ -395,13 +397,42 @@ inline constexpr FavoriteList FAVORITE_LISTS[] = {
 };
 ```
 
-### Light warmth (optional)
+### Light warmth and colour (optional)
 
-Lights with a colour temperature get a `WARMTH` setting. Following it costs three Home Assistant subscriptions per light, so with many lights a wake takes a little longer before every light has synced (the item the remote wakes into, and its list, still sync first). To go without, add this line to `esphome/local_entities.h`:
+Lights with a colour temperature get a `WARMTH` setting, and lights that take a colour a `COLOR` setting. Following them costs Home Assistant subscriptions: three per light for warmth and one per light for colour. With many lights a wake takes a little longer before every light has synced (the item the remote wakes into, and its list, still sync first). To go without either, add these lines to `esphome/local_entities.h`:
 
 ```cpp
 #define LIGHT_WARMTH 0
+#define LIGHT_COLOR 0
 ```
+
+### TV remotes (third field)
+
+A TV or streaming box's `remote` entity takes a third field naming the commands it understands, since each Home Assistant integration names its keys differently:
+
+```cpp
+inline constexpr FavoriteEntity DEN_FAVORITES[] = {
+  {"TV", "media_player.den_tv"},
+  {"TV Remote", "remote.den_tv", "samsung"},
+};
+```
+
+| Third field | Integration | Up, down, left, right, OK, back, home |
+| --- | --- | --- |
+| `apple_tv` | Apple TV | `up` `down` `left` `right` `select` `menu` `home` |
+| `android_tv` | Android TV Remote | `DPAD_UP` `DPAD_DOWN` `DPAD_LEFT` `DPAD_RIGHT` `DPAD_CENTER` `BACK` `HOME` |
+| `roku` | Roku | `up` `down` `left` `right` `select` `back` `home` |
+| `samsung` | Samsung Smart TV | `KEY_UP` `KEY_DOWN` `KEY_LEFT` `KEY_RIGHT` `KEY_ENTER` `KEY_RETURN` `KEY_HOME` |
+| `bravia` | Sony Bravia TV | `Up` `Down` `Left` `Right` `Confirm` `Return` `Home` |
+| `philips` | Philips TV | `CursorUp` `CursorDown` `CursorLeft` `CursorRight` `Confirm` `Back` `Home` |
+
+For anything else, list the seven commands yourself, in that order and separated by `|`. A Harmony hub also needs the device the commands go to, as an eighth item (the commands are the ones the Harmony app lists for that device):
+
+```cpp
+  {"Harmony", "remote.living_room", "DirectionUp|DirectionDown|DirectionLeft|DirectionRight|Select|Back|Home|Samsung TV"},
+```
+
+Without a third field, a remote only offers its `ACTIVITY` list, if it has one. A third field that is neither a name above nor seven or eight commands stops the build with an error. Which keys a TV accepts can vary by model; one it rejects shows `COMMAND FAILED`. Turn the TV on and off from its media player favorite: Home Assistant's `remote.turn_on` and `remote.turn_off` mean different things to different integrations (for an Apple TV they only connect or disconnect Home Assistant).
 
 ### Media player sources (optional third field)
 
@@ -686,14 +717,14 @@ The remote is designed around ten physical inputs:
 | --- | --- |
 | Wake / Power | Wakes the remote, straight into the item it went to sleep on. A short press and release puts it to sleep. Hold for `EXTENDED_HOLD_DURATION_MS` to reboot: a bar fills while you hold, and releasing once it is full reboots. |
 | Mode | Cycles to the next favorite list, then Notifications and Info. |
-| Previous | Selects the previous item in the current list. Hold it to keep going; it stops at the first item. |
-| Next | Selects the next item in the current list. Hold it to keep going; it stops at the last item. |
+| Previous | Selects the previous item in the current list. Hold it to keep going; it stops at the first item. On a TV remote's `NAVIGATE`, the remote's left arrow. |
+| Next | Selects the next item in the current list. Hold it to keep going; it stops at the last item. On a TV remote's `NAVIGATE`, the remote's right arrow. |
 | Dimmer | Steps the OLED contrast through ten levels and wraps around; a `CONTRAST` meter shows in the footer for a few seconds. |
 | Settings | Cycles through the settings the current item offers. In alarm mode, hold for `EXTENDED_HOLD_DURATION_MS` to trigger the alarm; a shorter press does nothing there. |
-| Minus | Decreases the selected setting. Hold it to keep decreasing a value with a range (brightness, warmth, temperatures, humidity, speed, volume, positions, numbers). In Weather it steps back through the weather details, and in Notifications it moves to the previous notification. |
-| Plus | Increases the selected setting, and keeps increasing while held, as `Minus` does. In Weather it steps forward through the weather details, and in Notifications it moves to the next notification. |
-| Circle | Positive or activate action in most modes: turn on, open, lock, play/pause, run, press, start, arm, or dismiss. Stops a moving cover or valve. |
-| Square | Negative or deactivate action in most modes: turn off, close, unlock, stop, cancel, dock, or disarm. Stops a moving cover or valve. |
+| Minus | Decreases the selected setting. Hold it to keep decreasing a value with a range (brightness, warmth, temperatures, humidity, speed, volume, positions, numbers). In Weather it steps back through the weather details, and in Notifications it moves to the previous notification. On a TV remote's `NAVIGATE`, the remote's down arrow. |
+| Plus | Increases the selected setting, and keeps increasing while held, as `Minus` does. In Weather it steps forward through the weather details, and in Notifications it moves to the next notification. On a TV remote's `NAVIGATE`, the remote's up arrow. |
+| Circle | Positive or activate action in most modes: turn on, open, lock, play/pause, run, press, start, arm, or dismiss. Stops a moving cover or valve. On a TV remote, `OK` (in `NAVIGATE`) or `HOME`. |
+| Square | Negative or deactivate action in most modes: turn off, close, unlock, open a lock, stop, cancel, dock, or disarm. Stops a moving cover or valve. On a TV remote, `BACK`. |
 
 Common usage pattern:
 
@@ -704,7 +735,7 @@ Common usage pattern:
 - Use `Circle` and `Square` for the main action on the current item.
 - Hold `Previous` or `Next` to get through a long list, and `Plus` or `Minus` to make a big change. A held `Plus` or `Minus` changes the value on screen and sends it to Home Assistant once, when you let go, so a light doesn't step through every level and a thermostat isn't sent every degree. Lists (effects, presets, sources) and toggles step once per press.
 
-`Circle`, `Square`, `Plus` and `Minus` do nothing until Home Assistant has connected after a wake, while the footer shows `CONNECTING…`: Home Assistant would drop the commands.
+`Circle`, `Square`, `Plus` and `Minus` (and a TV remote's arrows) only send once Home Assistant has connected after a wake: it would drop commands sent earlier. A press made before then, on the item shown from before sleep, waits instead. The footer says `WAITING TO SEND…`, and the press goes out half a second after Home Assistant has sent that item's state, so a toggle acts on what the item is doing now. Only the latest press waits, for up to 10 seconds. It is dropped if you choose another item or setting first, or press a button again once connected. If the item no longer offers the setting the screen showed (a light turned on while the remote slept), the footer says `NOT SENT` instead. Presses that must be held (locks, covers, automations, alarms) don't wait.
 
 Long-press protection:
 
@@ -717,16 +748,17 @@ Long-press protection:
 
 | Mode | Primary actions |
 | --- | --- |
-| Favorites: Lights | `Circle` on (at its last brightness), `Square` off. `Settings` picks `BRIGHTNESS`, `EFFECT` or `WARMTH`; `Plus` / `Minus` adjust it, brightness in 10% steps (`Minus` at 10% turns the light off). `WARMTH`, on lights with a colour temperature, goes warmer with `Plus` and cooler with `Minus`, a tenth of the light's range at a time. While the light is off, `Plus` turns it on. A light that can't dim shows `ON` / `OFF`. |
+| Favorites: Lights | `Circle` on (at its last brightness), `Square` off. `Settings` picks `BRIGHTNESS`, `EFFECT`, `WARMTH` or `COLOR`; `Plus` / `Minus` adjust it, brightness in 10% steps (`Minus` at 10% turns the light off). `WARMTH`, on lights with a colour temperature, goes warmer with `Plus` and cooler with `Minus`, a tenth of the light's range at a time. `COLOR`, on lights that take a colour, steps through white, red, orange, yellow, green, cyan, blue, purple, magenta and pink, starting from the one nearest the light's colour; each press changes the light. While the light is off, `Plus` turns it on. A light that can't dim shows `ON` / `OFF`. |
 | Favorites: Switches | `Circle` on, `Square` off. `input_boolean` helpers work the same way. |
-| Favorites: Climate | `Circle` on (in the thermostat's last active mode), `Square` off. `Settings` cycles `TARGET` (or `LOW` and `HIGH` in heat/cool), `FAN`, `HUMIDITY`, `PRESET`, `STATUS` and `MODE`; `STATUS` is read-only. `MODE` steps through the thermostat's HVAC modes: the screen changes at once, and the mode goes to the thermostat 1.5 seconds after the last press, so stepping from heat past cool to auto never switches the system to cool. |
+| Favorites: Climate | `Circle` on (in the thermostat's last active mode), `Square` off. `Settings` cycles `TARGET` (or `LOW` and `HIGH` in heat/cool), `FAN`, `SWING`, `HUMIDITY`, `PRESET`, `STATUS` and `MODE`; `STATUS` is read-only, and `SWING` steps through the louvre settings of a thermostat that swings them. `MODE` steps through the thermostat's HVAC modes: the screen changes at once, and the mode goes to the thermostat 1.5 seconds after the last press, so stepping from heat past cool to auto never switches the system to cool. |
 | Favorites: Humidifiers | `Circle` on, `Square` off. `Settings` cycles `TARGET` humidity, `MODE`, `STATUS` and `POWER`; `STATUS` and `POWER` are read-only. |
 | Favorites: Fans | `Circle` on (at its last speed), `Square` off. `Settings` cycles `SPEED`, `PRESET`, `OSCILLATE` and `DIRECTION`; `Plus` / `Minus` step the speed by the fan's own speed increments, and `Minus` below the lowest speed turns it off. While the fan is off, `Plus` turns it on at its last speed. |
 | Favorites: Covers and valves | `Circle` open, `Square` close (both held). While one that can stop is moving, the footer shows `STOP` and either button stops it straight away. `Settings` selects `POSITION` or `TILT` when the cover has them (valves have no tilt); `Plus` / `Minus` move it 10% at a time, and `Minus` at 10% or less closes it. |
-| Favorites: Locks | `Circle` lock, `Square` unlock (both held). A lock that is `OPEN` (unlatched) counts as unlocked. |
+| Favorites: Locks | `Circle` lock, `Square` unlock (both held). On a lock that can unlatch the door, `Settings` switches `Square` to `OPEN` (held), which calls `lock.open`. A lock that is `OPEN` (unlatched) counts as unlocked. |
+| Favorites: TV remotes | Home Assistant `remote` entities (Apple TV, Android TV, Roku, Samsung, Bravia, Philips, Harmony). `Square` sends `BACK` and `Circle` `HOME`. `Settings` picks `NAVIGATE`, where `Previous` / `Next` / `Minus` / `Plus` are the remote's left / right / down / up arrows and `Circle` is `OK`; the arrow just sent lights up on screen, and holding one keeps sending it. `ACTIVITY`, on a Harmony hub or the apps set up in Android TV Remote, steps through activities and starts the one shown 1.5 seconds after the last press. Moving to another item never lands in `NAVIGATE`, so `Previous` and `Next` still move through the list; waking does return to it. Power stays with the TV's own media player. See [TV remotes](#tv-remotes-third-field). |
 | Favorites: Media | `Circle` play/pause, or turns on a player that is off or in standby. `Square` stops, or turns off a TV or receiver. `Settings` cycles `TRACK` (`CHANNEL` on TVs), `VOLUME`, `MUTE`, `SOURCE`, `SHUFFLE`, `REPEAT`, `SOUND` and `STATE`; on `TRACK` / `CHANNEL`, `Plus` / `Minus` skip, and on `MUTE`, `Plus` mutes and `Minus` unmutes. A muted player shows a crossed-out speaker (`MUTED` on a TV). |
 | Favorites: Water Heaters | `Circle` on, `Square` off (through the heater's operation modes when it has no on/off of its own). `Settings` cycles `TARGET`, `MODE` and `AWAY`; `Plus` / `Minus` adjust the target within the heater's own minimum and maximum. |
-| Favorites: Sensors | Read-only: the value, rounded to the decimals it needs, and its unit, or `ON` / `OFF` for binary sensors. Timestamp sensors show the local time. People and device trackers show `HOME`, `AWAY`, or the zone they are in. |
+| Favorites: Sensors | Read-only: the value, rounded to the decimals it needs, and its unit, or `ON` / `OFF` for binary sensors. Timestamp sensors show the local time. People and device trackers show `HOME`, `AWAY`, or the zone they are in. Events (a doorbell's ring, a button's press) show what last happened and how long ago (`RING`, `4 MIN AGO`), with the badge lit for the first minute; `NONE YET` for one that has never fired. |
 | Favorites: Automation / Script / Scene / Button | `Circle` (held) runs it, or presses a `button` or `input_button` (`PRESSED` when Home Assistant has passed the press on). |
 | Favorites: Numbers and selects | `number` and `input_number`: `Plus` / `Minus` step the value by its own step, within its minimum and maximum, with the value and unit large and a meter across its range. `select` and `input_select`: `Plus` / `Minus` step through the options; the option goes out 1.5 seconds after the last press, since picking one can set off automations. |
 | Favorites: Vacuums and lawn mowers | `Circle` starts it, or pauses it while it works; `Square` sends it back to its dock. `Settings` switches the footer between those hints and `FAN`, a vacuum's fan speeds. |
@@ -751,11 +783,11 @@ Mode-specific details:
 ## UI Notes
 
 - The remote restores the previously selected menu, item, contrast, and the setting you last picked after wake or reboot.
-- Waking from sleep, the screen shows the item the remote went to sleep on, as it looked then (without the clock, which would be out of date), with `WAITING FOR WI-FI…` and then `CONNECTING…` in the footer. It changes to the live values as soon as Home Assistant sends them, showing `SYNCING…` for at most 2 seconds until then. The frame is kept in the ESP32's RTC memory, which only survives deep sleep: after a power cut, a reboot or an update the remote shows the connecting screens instead.
+- Waking from sleep, the screen shows the item the remote went to sleep on, as it looked then (without the clock, which would be out of date), with `WAITING FOR WI-FI…` and then `CONNECTING…` in the footer, or `WAITING TO SEND…` once you have pressed a button on it. It changes to the live values as soon as Home Assistant sends them, showing `SYNCING…` (`SENDING…` with a press waiting) for at most 2 seconds until then. The frame is kept in the ESP32's RTC memory, which only survives deep sleep: after a power cut, a reboot or an update the remote shows the connecting screens instead.
 - Empty favorite lists are skipped automatically.
 - Holding the wake/power button for `EXTENDED_HOLD_DURATION_MS` reboots the remote. The screen shows `HOLD TO REBOOT` with a bar that fills while you hold, then `REBOOTING` briefly before restart. Releasing before the bar is full puts the remote to sleep.
 - Lock, cover, automation, script and scene actions use long-press protection: the footer's hold bar fills while you hold, and the action fires when it is full. A tap that is too short leaves a `HOLD TO …` reminder in the footer. In automation mode only `Circle` runs the automation; `Square` does nothing.
-- When a favorite entry resolves to a lock, circle locks and square unlocks. The footer shows feedback such as `LOCKING...`, `UNLOCKING...`, `OPENING...`, `LOCKED`, `UNLOCKED`, `OPENED`, `JAMMED`, `ALREADY LOCKED`, `ALREADY UNLOCKED`, and `ALREADY OPEN`, or `LOCK FAILED` / `UNLOCK FAILED` if the lock hasn't changed within 15 seconds. (Home Assistant doesn't report a device's own errors back, so the remote watches the lock's state.)
+- When a favorite entry resolves to a lock, circle locks and square unlocks. The footer shows feedback such as `LOCKING...`, `UNLOCKING...`, `OPENING...`, `LOCKED`, `UNLOCKED`, `OPENED`, `JAMMED`, `ALREADY LOCKED`, `ALREADY UNLOCKED`, and `ALREADY OPEN`, or `LOCK FAILED` / `UNLOCK FAILED` / `OPEN FAILED` if the lock hasn't changed within 15 seconds. A lock opened with `OPEN` goes back to unlocked once the door has been pulled; ending unlocked shows `UNLOCKED`. (Home Assistant doesn't report a device's own errors back, so the remote watches the lock's state.)
 - When a favorite entry resolves to a cover, circle opens and square closes. The footer shows feedback such as `OPENING...`, `CLOSING...`, `OPENED`, `CLOSED`, and `OPEN xx%` (moved, then stopped part-way), or `OPEN FAILED` / `CLOSE FAILED` if the cover hasn't moved within 20 seconds. A cover without state feedback, which Home Assistant reports as `unknown`, shows `SENT`.
 - When a favorite entry resolves to an automation, script, or scene, the remote shows temporary feedback such as `TRIGGERING...`, `ACTIVATING...`, `RUNNING...`, `TRIGGERED`, `ACTIVATED`, `STARTED`, and `COMPLETED`. A script shows `RUNNING` while it runs, and a running script in single mode shows `ALREADY RUNNING` instead of starting again. An automation shows `TRIGGERED` once Home Assistant records the run (the remote doesn't wait for it to finish), or `NOT RUN` if that hasn't happened within 5 seconds: a single-mode automation that is already running ignores the request. A scene or script request Home Assistant doesn't answer within 10 seconds shows `NO RESPONSE`. Home Assistant ignores every request when the remote may not perform actions (see [A Home Assistant entity does not respond](#a-home-assistant-entity-does-not-respond)).
 - When a favorite entry resolves to a switch, the screen shows `TURNING ON` / `TURNING OFF` until Home Assistant confirms, and `FAILED` if the switch hasn't changed within 5 seconds.
@@ -777,8 +809,9 @@ Mode-specific details:
 - `cover.*` and `valve.*`
 - `lock.*`
 - `media_player.*`
+- `remote.*`
 - `vacuum.*` and `lawn_mower.*`
-- `sensor.*`, `binary_sensor.*`, `person.*` and `device_tracker.*`
+- `sensor.*`, `binary_sensor.*`, `event.*`, `person.*` and `device_tracker.*`
 - `automation.*`, `script.*`, `scene.*`, `button.*` and `input_button.*`
 - `number.*`, `input_number.*`, `select.*` and `input_select.*`
 - `timer.*`
@@ -870,6 +903,10 @@ Make sure both of these are true:
 ### The build stops with "a favorite has no entity_id, or its domain isn't supported"
 
 A favorite in `esphome/local_entities.h` is missing its `entity_id`, or uses a domain the remote can't control (for example `camera.`, or a typo such as `lights.`). Fix or remove that entry; see [Supported Home Assistant Entity Domains](#supported-home-assistant-entity-domains).
+
+### The build stops with "a remote's third field must be apple_tv, android_tv, …"
+
+A `remote.` favorite's third field isn't one of the command set names, or doesn't list seven commands (eight with a device) separated by `|`. See [TV remotes](#tv-remotes-third-field).
 
 ### ESPHome compile or upload fails
 

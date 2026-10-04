@@ -31,9 +31,10 @@ enum RemoteMode {
   REMOTE_MODE_INPUTS = 15,   // number, input_number, select, input_select
   REMOTE_MODE_VACUUMS = 16,  // vacuum, lawn_mower
   REMOTE_MODE_TIMERS = 17,
+  REMOTE_MODE_REMOTES = 18,  // remote: a TV or streaming box's remote control
 };
 
-inline constexpr int REMOTE_MODE_COUNT = 18;
+inline constexpr int REMOTE_MODE_COUNT = 19;
 inline constexpr RemoteMode MENU_MODE_ORDER[] = {
     REMOTE_MODE_LIGHTS,
     REMOTE_MODE_SWITCHES,
@@ -44,6 +45,7 @@ inline constexpr RemoteMode MENU_MODE_ORDER[] = {
     REMOTE_MODE_COVERS,
     REMOTE_MODE_LOCKS,
     REMOTE_MODE_MEDIA,
+    REMOTE_MODE_REMOTES,
     REMOTE_MODE_VACUUMS,
     REMOTE_MODE_SENSORS,
     REMOTE_MODE_INPUTS,
@@ -221,6 +223,101 @@ inline bool light_modes_color_temp(const std::string &modes) {
   return false;
 }
 
+// Whether a light's supported_color_modes ('|'-joined) include one that takes
+// a colour (hs, rgb, rgbw, rgbww or xy), so it can be sent an hs_color.
+inline bool light_modes_color(const std::string &modes) {
+  bool found = false;
+  size_t start = 0;
+  while (!found && start <= modes.size()) {
+    size_t end = modes.find('|', start);
+    size_t len = (end == std::string::npos ? modes.size() : end) - start;
+    for (const char *mode : {"hs", "rgb", "rgbw", "rgbww", "xy"}) {
+      found = found || modes.compare(start, len, mode) == 0;
+    }
+    if (end == std::string::npos) {
+      break;
+    }
+    start = end + 1;
+  }
+  return found;
+}
+
+// The colours COLOR steps through, as hue (0-360) and saturation (0-100).
+struct LightColorPreset {
+  const char *name;
+  float hue;
+  float saturation;
+};
+
+inline constexpr LightColorPreset LIGHT_COLOR_PRESETS[] = {
+    {"WHITE", 0, 0},     {"RED", 0, 100},      {"ORANGE", 30, 100}, {"YELLOW", 52, 100},
+    {"GREEN", 120, 100}, {"CYAN", 185, 100},   {"BLUE", 225, 100},  {"PURPLE", 270, 100},
+    {"MAGENTA", 300, 100}, {"PINK", 335, 55},
+};
+inline constexpr int LIGHT_COLOR_PRESET_COUNT = sizeof(LIGHT_COLOR_PRESETS) / sizeof(LIGHT_COLOR_PRESETS[0]);
+
+// The preset nearest a light's hs_color; -1 when it has none (NAN).
+// Saturation under 20 counts as white; otherwise the nearest hue, with
+// saturation telling pink from red and magenta.
+inline int light_color_preset_index(float hue, float saturation) {
+  if (!std::isfinite(hue) || !std::isfinite(saturation)) {
+    return -1;
+  }
+  if (saturation < 20.0f) {
+    return 0;
+  }
+  int best = 1;
+  float best_distance = 1e9f;
+  for (int i = 1; i < LIGHT_COLOR_PRESET_COUNT; i++) {
+    float d = std::fabs(std::fmod(hue - LIGHT_COLOR_PRESETS[i].hue + 540.0f, 360.0f) - 180.0f);
+    d += std::fabs(saturation - LIGHT_COLOR_PRESETS[i].saturation) * 0.5f;
+    if (d < best_distance) {
+      best_distance = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
+// The preset after (direction > 0) or before current, wrapping round. From
+// none, Plus starts at the first colour and Minus at the last.
+inline int light_color_step(int current, int direction) {
+  if (current < 0 || current >= LIGHT_COLOR_PRESET_COUNT) {
+    return direction > 0 ? 1 : LIGHT_COLOR_PRESET_COUNT - 1;
+  }
+  return (current + (direction > 0 ? 1 : -1) + LIGHT_COLOR_PRESET_COUNT) % LIGHT_COLOR_PRESET_COUNT;
+}
+
+// Reads Home Assistant's hs_color, "(30.0, 70.0)" or "[30.0, 70.0]".
+inline bool parse_hs_color(const char *text, size_t len, float *hue, float *saturation) {
+  char buffer[48];
+  if (len == 0 || len >= sizeof(buffer)) {
+    return false;
+  }
+  memcpy(buffer, text, len);
+  buffer[len] = '\0';
+  const char *p = buffer;
+  while (*p == '(' || *p == '[' || *p == ' ') {
+    p++;
+  }
+  char *end = nullptr;
+  float h = strtof(p, &end);
+  if (end == p) {
+    return false;
+  }
+  p = end;
+  while (*p == ',' || *p == ' ') {
+    p++;
+  }
+  float s = strtof(p, &end);
+  if (end == p || !std::isfinite(h) || !std::isfinite(s)) {
+    return false;
+  }
+  *hue = h;
+  *saturation = s;
+  return true;
+}
+
 // How warm a colour temperature is within the light's range: 0 at its coolest
 // (highest kelvin), 100 at its warmest.
 inline int warmth_percent(float kelvin, float min_kelvin, float max_kelvin) {
@@ -353,6 +450,149 @@ inline const char *presence_state_word(const std::string &state) {
 
 // A vacuum or lawn mower at work.
 inline bool vacuum_state_working(const std::string &state) { return state == "cleaning" || state == "mowing"; }
+
+// How long ago something happened: "JUST NOW", "4 MIN AGO", "3 HR AGO",
+// "2 DAYS AGO", at most 999. Negative (a clock behind Home Assistant's) is
+// "JUST NOW".
+inline void format_time_ago(int64_t seconds, char *buf, size_t size) {
+  if (seconds < 60) {
+    snprintf(buf, size, "JUST NOW");
+  } else if (seconds < 3600) {
+    snprintf(buf, size, "%d MIN AGO", static_cast<int>(seconds / 60));
+  } else if (seconds < 86400) {
+    snprintf(buf, size, "%d HR AGO", static_cast<int>(seconds / 3600));
+  } else {
+    int days = seconds / 86400 > 999 ? 999 : static_cast<int>(seconds / 86400);
+    snprintf(buf, size, "%d DAY%s AGO", days, days == 1 ? "" : "S");
+  }
+}
+
+// The keys of a TV or streaming box's remote, in the order a command set
+// lists them.
+enum RemoteKey {
+  REMOTE_KEY_UP = 0,
+  REMOTE_KEY_DOWN,
+  REMOTE_KEY_LEFT,
+  REMOTE_KEY_RIGHT,
+  REMOTE_KEY_SELECT,
+  REMOTE_KEY_BACK,
+  REMOTE_KEY_HOME,
+};
+inline constexpr int REMOTE_KEY_COUNT = 7;
+
+// How long the screen lights up a key just sent.
+inline constexpr uint32_t REMOTE_KEY_FLASH_MS = 250;
+
+struct RemoteCommandSet {
+  const char *name;
+  const char *keys[REMOTE_KEY_COUNT];
+};
+
+// What remote.send_command takes for each key. Each integration passes the
+// command to its own library, so the names differ: these are pyatv's,
+// androidtvremote2's, rokuecp's and samsungtvws's, and Home Assistant's
+// documentation for Bravia and Philips TVs.
+inline constexpr RemoteCommandSet REMOTE_COMMAND_SETS[] = {
+    {"apple_tv", {"up", "down", "left", "right", "select", "menu", "home"}},
+    {"android_tv", {"DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT", "DPAD_CENTER", "BACK", "HOME"}},
+    {"roku", {"up", "down", "left", "right", "select", "back", "home"}},
+    {"samsung", {"KEY_UP", "KEY_DOWN", "KEY_LEFT", "KEY_RIGHT", "KEY_ENTER", "KEY_RETURN", "KEY_HOME"}},
+    {"bravia", {"Up", "Down", "Left", "Right", "Confirm", "Return", "Home"}},
+    {"philips", {"CursorUp", "CursorDown", "CursorLeft", "CursorRight", "Confirm", "Back", "Home"}},
+};
+
+inline constexpr bool remote_text_equal(const char *a, const char *b) {
+  while (*a != '\0' && *a == *b) {
+    a++;
+    b++;
+  }
+  return *a == *b;
+}
+
+inline constexpr const RemoteCommandSet *find_remote_command_set(const char *text) {
+  if (text == nullptr) {
+    return nullptr;
+  }
+  for (const RemoteCommandSet &set : REMOTE_COMMAND_SETS) {
+    if (remote_text_equal(set.name, text)) {
+      return &set;
+    }
+  }
+  return nullptr;
+}
+
+// Items in a '|'-separated list, or -1 when one of them is empty.
+inline constexpr int remote_command_list_count(const char *text) {
+  int count = 1;
+  int item_len = 0;
+  for (const char *p = text; *p != '\0'; p++) {
+    if (*p == '|') {
+      if (item_len == 0) {
+        return -1;
+      }
+      count++;
+      item_len = 0;
+    } else if (*p != ' ') {
+      item_len++;
+    }
+  }
+  return item_len == 0 ? -1 : count;
+}
+
+// A remote favorite's third field: none, a command set's name, or the seven
+// commands for up, down, left, right, select, back and home, '|'-separated,
+// with an eighth item naming the device for a remote that needs one (a
+// Harmony hub).
+inline constexpr bool remote_command_field_valid(const char *text) {
+  if (text == nullptr || text[0] == '\0' || find_remote_command_set(text) != nullptr) {
+    return true;
+  }
+  int count = remote_command_list_count(text);
+  return count == REMOTE_KEY_COUNT || count == REMOTE_KEY_COUNT + 1;
+}
+
+// The trimmed item at index of a '|'-separated list; empty if there is none.
+inline std::string remote_list_item(const char *text, int index) {
+  std::string item;
+  if (text == nullptr) {
+    return item;
+  }
+  int current = 0;
+  for (const char *p = text;; p++) {
+    if (*p == '|' || *p == '\0') {
+      if (current == index) {
+        size_t begin = item.find_first_not_of(' ');
+        size_t end = item.find_last_not_of(' ');
+        return begin == std::string::npos ? std::string() : item.substr(begin, end - begin + 1);
+      }
+      if (*p == '\0') {
+        return std::string();
+      }
+      current++;
+      item.clear();
+    } else if (current == index) {
+      item += *p;
+    }
+  }
+}
+
+// What remote.send_command takes for key, from a remote favorite's third
+// field; empty when it has none.
+inline std::string remote_command_for_key(const char *field, int key) {
+  if (field == nullptr || field[0] == '\0' || key < 0 || key >= REMOTE_KEY_COUNT) {
+    return std::string();
+  }
+  const RemoteCommandSet *set = find_remote_command_set(field);
+  return set != nullptr ? std::string(set->keys[key]) : remote_list_item(field, key);
+}
+
+// The device a custom command list names (its eighth item); empty for none.
+inline std::string remote_command_device(const char *field) {
+  if (field == nullptr || find_remote_command_set(field) != nullptr) {
+    return std::string();
+  }
+  return remote_list_item(field, REMOTE_KEY_COUNT);
+}
 
 // Degrees for a compass point ("NW", "ssw"). Some weather integrations report
 // the wind's direction that way instead of in degrees.
@@ -594,9 +834,16 @@ enum RemoteSettingOption {
   REMOTE_SETTING_INPUT_OPTION,
   REMOTE_SETTING_VACUUM_ACTIONS,  // the footer's START/DOCK hints
   REMOTE_SETTING_VACUUM_FAN_SPEED,
+  REMOTE_SETTING_LIGHT_COLOR,
+  REMOTE_SETTING_CLIMATE_SWING,
+  REMOTE_SETTING_LOCK_ACTIONS,  // the footer's UNLOCK/LOCK hints, beside OPEN
+  REMOTE_SETTING_LOCK_OPEN,
+  REMOTE_SETTING_REMOTE_KEYS,  // a TV remote's BACK and HOME
+  REMOTE_SETTING_REMOTE_NAVIGATE,
+  REMOTE_SETTING_REMOTE_ACTIVITY,
 };
 
-inline constexpr int REMOTE_SETTING_LAST = REMOTE_SETTING_VACUUM_FAN_SPEED;
+inline constexpr int REMOTE_SETTING_LAST = REMOTE_SETTING_REMOTE_ACTIVITY;
 
 // Settings that a held Plus or Minus keeps stepping: values with a range.
 // Lists, toggles and track skips step once per press.
@@ -616,6 +863,7 @@ inline bool remote_setting_repeats(int option) {
     case REMOTE_SETTING_WATER_HEATER_TARGET:
     case REMOTE_SETTING_INPUT_VALUE:
     case REMOTE_SETTING_NOTIFICATION_MESSAGES:
+    case REMOTE_SETTING_REMOTE_NAVIGATE:  // up and down, like a TV remote's arrows
       return true;
     default:
       return false;
@@ -637,6 +885,7 @@ enum RemoteValueSend {
   VALUE_SEND_MEDIA_VOLUME,          // percent
   VALUE_SEND_WATER_HEATER_TARGET,
   VALUE_SEND_NUMBER,                // number or input_number
+  VALUE_SEND_LIGHT_COLOR,           // a LIGHT_COLOR_PRESETS index
 };
 
 // What send_option_after_pause sends: options that take effect the moment
@@ -645,7 +894,44 @@ enum RemoteValueSend {
 enum RemoteOptionSend {
   OPTION_SEND_HVAC_MODE = 0,
   OPTION_SEND_SELECT,  // select or input_select
+  OPTION_SEND_ACTIVITY,  // a remote's activity (remote.turn_on)
 };
+
+// Whether Plus or Minus changes setting (which a read-only one such as
+// STATUS, or a page of button hints, doesn't). Weather's details step without
+// Home Assistant, so they are left out.
+inline bool remote_setting_adjustable(int setting) {
+  switch (setting) {
+    case REMOTE_SETTING_NONE:
+    case REMOTE_SETTING_CLIMATE_ACTION:
+    case REMOTE_SETTING_HUMIDIFIER_ACTION:
+    case REMOTE_SETTING_HUMIDIFIER_STATE:
+    case REMOTE_SETTING_MEDIA_STATE:
+    case REMOTE_SETTING_VACUUM_ACTIONS:
+    case REMOTE_SETTING_LOCK_ACTIONS:
+    case REMOTE_SETTING_LOCK_OPEN:
+    case REMOTE_SETTING_REMOTE_KEYS:
+      return false;
+    default:
+      return setting < REMOTE_SETTING_WEATHER_CONDITIONS || setting > REMOTE_SETTING_WEATHER_LOW_TEMP;
+  }
+}
+
+// Whether Square (square) or Circle has an action in mode.
+inline bool remote_mode_has_action(int mode, bool square) {
+  switch (mode) {
+    case REMOTE_MODE_SENSORS:
+    case REMOTE_MODE_WEATHER:
+    case REMOTE_MODE_INFO:
+    case REMOTE_MODE_INPUTS:
+      return false;
+    case REMOTE_MODE_AUTOMATION:
+    case REMOTE_MODE_NOTIFICATIONS:
+      return !square;
+    default:
+      return true;
+  }
+}
 
 inline const char *mode_title(RemoteMode mode) {
   switch (mode) {
@@ -685,6 +971,8 @@ inline const char *mode_title(RemoteMode mode) {
       return "VACUUMS";
     case REMOTE_MODE_TIMERS:
       return "TIMERS";
+    case REMOTE_MODE_REMOTES:
+      return "REMOTES";
     default:
       return "MODE";
   }
@@ -703,6 +991,7 @@ struct RemoteEntityTraits {
   int alarm_features = -1;  // an alarm panel's supported_features; -1 until synced
   bool cover_stoppable = false;  // moving, can stop, and not just moved by Plus/Minus (selected_cover_stoppable)
   AutomationKind automation_kind = AUTOMATION_KIND_SCRIPT;
+  bool lock_open = false;  // OPEN is selected: Square unlatches the lock instead of unlocking it
 };
 
 enum AlarmArmMode {
@@ -961,12 +1250,43 @@ inline RemoteRequestProgress evaluate_alarm_request(AlarmRequest request, const 
 // Locks. "open" (unlatched) counts as unlocked.
 inline bool lock_state_unlocked(const std::string &state) { return state == "unlocked" || state == "open"; }
 
-// Checked every second after lock.lock or lock.unlock goes out. start_state is
-// the lock's state when the command went out, so a jam reported before it
-// isn't taken for the answer. final is the last check.
-inline RemoteRequestProgress evaluate_lock_request(bool locking, const std::string &state,
+// A lock's supported_features bit for lock.open, which unlatches the door.
+inline constexpr int LOCK_FEATURE_OPEN = 1;
+
+enum LockRequest {
+  LOCK_REQUEST_UNLOCK = 0,
+  LOCK_REQUEST_LOCK = 1,
+  LOCK_REQUEST_OPEN = 2,
+};
+
+// Checked every second after lock.lock, lock.unlock or lock.open goes out.
+// start_state is the lock's state when the command went out, so a jam
+// reported before it isn't taken for the answer. final is the last check. A
+// lock that is opened goes back to unlocked once the door has been pulled, so
+// an open that ends unlocked has done all that can be checked.
+inline RemoteRequestProgress evaluate_lock_request(int request, const std::string &state,
                                                    const std::string &start_state, bool final) {
   RemoteRequestProgress progress;
+  const bool locking = request == LOCK_REQUEST_LOCK;
+  if (request == LOCK_REQUEST_OPEN) {
+    if (state == "open") {
+      progress.feedback = "OPENED";
+      progress.complete = true;
+    } else if (state == "unlocked" && start_state != "unlocked" && start_state != "open") {
+      // It moved, and may have unlatched between checks.
+      progress.feedback = "UNLOCKED";
+      progress.complete = true;
+    } else if (state == "jammed" && (start_state != "jammed" || final)) {
+      progress.feedback = "JAMMED";
+      progress.complete = true;
+    } else if (final) {
+      progress.feedback = state == "unlocked" ? "UNLOCKED" : "OPEN FAILED";
+      progress.complete = true;
+    } else {
+      progress.feedback = "OPENING...";
+    }
+    return progress;
+  }
   if (locking ? state == "locked" : lock_state_unlocked(state)) {
     progress.feedback = locking ? "LOCKED" : (state == "open" ? "OPENED" : "UNLOCKED");
     progress.complete = true;

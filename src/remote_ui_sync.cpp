@@ -143,6 +143,7 @@ static bool tracked_entity_unavailable(RemoteMode mode, int idx) {
     case REMOTE_MODE_INPUTS: return input_state_for_index(idx) == "unavailable";
     case REMOTE_MODE_VACUUMS: return vacuum_state_for_index(idx) == "unavailable";
     case REMOTE_MODE_TIMERS: return timer_state_for_index(idx) == "unavailable";
+    case REMOTE_MODE_REMOTES: return remote_state_for_index(idx) == "unavailable";
     default: return false;
   }
 }
@@ -404,6 +405,12 @@ void sync_remote_ui_state(RemoteMode mode, int idx, RemoteUiSyncState &ui) {
 
   if (mode == REMOTE_MODE_TIMERS) {
     sync_simple_state(ui, timer_state_for_index(idx));
+    return;
+  }
+
+  // A remote's activity is read from its tracker when the frame is drawn.
+  if (mode == REMOTE_MODE_REMOTES) {
+    sync_simple_state(ui, remote_state_for_index(idx));
     return;
   }
 

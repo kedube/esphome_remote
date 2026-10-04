@@ -28,8 +28,10 @@ struct EntityEntry {
 struct FavoriteEntity {
     const char *name;
     const char *entity_id;
-    // Optional '|'-separated source list for media players whose device_class is
-    // not tv/receiver (HA does not report a usable source_list for those).
+    // Optional third field. A media player whose device_class is not
+    // tv/receiver: its '|'-separated source list (HA does not report a usable
+    // source_list for those). A remote: its command set, a name from
+    // REMOTE_COMMAND_SETS or seven '|'-separated commands (see the README).
     const char *sources = nullptr;
 };
 
@@ -102,7 +104,8 @@ inline constexpr RemoteMode favorite_entity_mode_constexpr(const char *entity_id
          (cstr_starts_with_constexpr(entity_id, "sensor.") ||
           cstr_starts_with_constexpr(entity_id, "binary_sensor.") ||
           cstr_starts_with_constexpr(entity_id, "person.") ||
-          cstr_starts_with_constexpr(entity_id, "device_tracker.")) ? REMOTE_MODE_SENSORS :
+          cstr_starts_with_constexpr(entity_id, "device_tracker.") ||
+          cstr_starts_with_constexpr(entity_id, "event."))          ? REMOTE_MODE_SENSORS :
          (cstr_starts_with_constexpr(entity_id, "automation.") ||
           cstr_starts_with_constexpr(entity_id, "script.") ||
           cstr_starts_with_constexpr(entity_id, "scene.") ||
@@ -117,6 +120,7 @@ inline constexpr RemoteMode favorite_entity_mode_constexpr(const char *entity_id
          (cstr_starts_with_constexpr(entity_id, "vacuum.") ||
           cstr_starts_with_constexpr(entity_id, "lawn_mower."))     ? REMOTE_MODE_VACUUMS :
          cstr_starts_with_constexpr(entity_id, "timer.")            ? REMOTE_MODE_TIMERS :
+         cstr_starts_with_constexpr(entity_id, "remote.")           ? REMOTE_MODE_REMOTES :
                                                                         REMOTE_MODE_INFO;
 }
 
@@ -138,6 +142,24 @@ inline constexpr bool favorite_entities_supported() {
 static_assert(favorite_entities_supported(),
               "local_entities.h: a favorite has no entity_id, or its domain isn't supported (see Supported Home "
               "Assistant Entity Domains in the README)");
+
+// A remote's third field names its command set or lists the commands.
+inline constexpr bool favorite_remote_commands_valid() {
+  for (size_t i = 0; i < FAVORITE_LIST_COUNT; i++) {
+    for (size_t j = 0; j < FAVORITE_LISTS[i].count; j++) {
+      const FavoriteEntity &entry = FAVORITE_LISTS[i].entries[j];
+      if (favorite_entity_mode_constexpr(entry.entity_id) == REMOTE_MODE_REMOTES &&
+          !remote_command_field_valid(entry.sources)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+static_assert(favorite_remote_commands_valid(),
+              "local_entities.h: a remote's third field must be apple_tv, android_tv, roku, samsung, bravia, philips "
+              "or seven '|'-separated commands (up|down|left|right|select|back|home), with an optional eighth naming "
+              "the device (see TV remotes in the README)");
 
 inline constexpr bool favorite_entity_seen_earlier(size_t list_index, size_t entry_index, const char *entity_id) {
   for (size_t i = 0; i <= list_index && i < FAVORITE_LIST_COUNT; i++) {
@@ -205,6 +227,7 @@ inline constexpr int WEATHER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE
 inline constexpr int INPUT_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_INPUTS);
 inline constexpr int VACUUM_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_VACUUMS);
 inline constexpr int TIMER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_TIMERS);
+inline constexpr int REMOTE_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_REMOTES);
 
 inline constexpr auto LIGHT_LIST_STORAGE = make_mode_entity_array<LIGHT_LIST_COUNT>(REMOTE_MODE_LIGHTS);
 inline constexpr auto SWITCH_LIST_STORAGE = make_mode_entity_array<SWITCH_LIST_COUNT>(REMOTE_MODE_SWITCHES);
@@ -222,6 +245,7 @@ inline constexpr auto WEATHER_LIST_STORAGE = make_mode_entity_array<WEATHER_LIST
 inline constexpr auto INPUT_LIST_STORAGE = make_mode_entity_array<INPUT_LIST_COUNT>(REMOTE_MODE_INPUTS);
 inline constexpr auto VACUUM_LIST_STORAGE = make_mode_entity_array<VACUUM_LIST_COUNT>(REMOTE_MODE_VACUUMS);
 inline constexpr auto TIMER_LIST_STORAGE = make_mode_entity_array<TIMER_LIST_COUNT>(REMOTE_MODE_TIMERS);
+inline constexpr auto REMOTE_LIST_STORAGE = make_mode_entity_array<REMOTE_LIST_COUNT>(REMOTE_MODE_REMOTES);
 
 inline constexpr const EntityEntry *LIGHT_LIST = LIGHT_LIST_STORAGE.data();
 inline constexpr const EntityEntry *SWITCH_LIST = SWITCH_LIST_STORAGE.data();
@@ -239,6 +263,7 @@ inline constexpr const EntityEntry *WEATHER_LIST = WEATHER_LIST_STORAGE.data();
 inline constexpr const EntityEntry *INPUT_LIST = INPUT_LIST_STORAGE.data();
 inline constexpr const EntityEntry *VACUUM_LIST = VACUUM_LIST_STORAGE.data();
 inline constexpr const EntityEntry *TIMER_LIST = TIMER_LIST_STORAGE.data();
+inline constexpr const EntityEntry *REMOTE_LIST = REMOTE_LIST_STORAGE.data();
 inline constexpr const char *INFO_ITEM_NAMES[] = {"Time & Date", "Wireless", "Network", "Device Name", "Battery", "Version"};
 inline constexpr const char *INFO_ITEM_ENTITIES[] = {
     "info.date", "info.wireless", "info.network", "info.device_name", "info.battery", "info.version"};
@@ -255,6 +280,13 @@ inline constexpr int NOTIFICATION_FEED_MAX_ITEMS = REMOTE_NOTIFICATION_FEED_MAX_
 // #define LIGHT_WARMTH 0 in local_entities.h to go without.
 #ifndef LIGHT_WARMTH
 #define LIGHT_WARMTH 1
+#endif
+
+// COLOR for lights that take a colour. Following the colour costs one
+// subscription per light; #define LIGHT_COLOR 0 in local_entities.h to go
+// without.
+#ifndef LIGHT_COLOR
+#define LIGHT_COLOR 1
 #endif
 
 #ifndef NOTIFICATION_FEED_ENTITY
@@ -648,7 +680,7 @@ inline void validate_remote_configuration() {
   validate_entity_list("LOCK_LIST", LOCK_LIST, LOCK_LIST_COUNT, {"lock"});
   validate_entity_list("MEDIA_PLAYER_LIST", MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, {"media_player"});
   validate_entity_list("SENSOR_LIST", SENSOR_LIST, SENSOR_LIST_COUNT,
-                       {"sensor", "binary_sensor", "person", "device_tracker"});
+                       {"sensor", "binary_sensor", "person", "device_tracker", "event"});
   validate_entity_list("AUTOMATION_LIST", AUTOMATION_LIST, AUTOMATION_LIST_COUNT,
                        {"automation", "script", "scene", "button", "input_button"});
   validate_entity_list("ALARM_LIST", ALARM_LIST, ALARM_LIST_COUNT, {"alarm_control_panel"});
@@ -656,6 +688,7 @@ inline void validate_remote_configuration() {
   validate_entity_list("INPUT_LIST", INPUT_LIST, INPUT_LIST_COUNT, {"number", "input_number", "select", "input_select"});
   validate_entity_list("VACUUM_LIST", VACUUM_LIST, VACUUM_LIST_COUNT, {"vacuum", "lawn_mower"});
   validate_entity_list("TIMER_LIST", TIMER_LIST, TIMER_LIST_COUNT, {"timer"});
+  validate_entity_list("REMOTE_LIST", REMOTE_LIST, REMOTE_LIST_COUNT, {"remote"});
   validate_notification_config();
 }
 
@@ -734,6 +767,8 @@ inline int favorite_entity_mode_index(RemoteMode mode, const char *entity_id) {
       return index_of_entity_id(VACUUM_LIST, VACUUM_LIST_COUNT, entity_id);
     case REMOTE_MODE_TIMERS:
       return index_of_entity_id(TIMER_LIST, TIMER_LIST_COUNT, entity_id);
+    case REMOTE_MODE_REMOTES:
+      return index_of_entity_id(REMOTE_LIST, REMOTE_LIST_COUNT, entity_id);
     default:
       return -1;
   }
@@ -893,6 +928,8 @@ inline int mode_item_count(RemoteMode mode) {
       return VACUUM_LIST_COUNT;
     case REMOTE_MODE_TIMERS:
       return TIMER_LIST_COUNT;
+    case REMOTE_MODE_REMOTES:
+      return REMOTE_LIST_COUNT;
     default:
       return 0;
   }
@@ -970,6 +1007,8 @@ inline const char *mode_item_name_cstr(RemoteMode mode, int idx) {
       return indexed_entity_name_cstr(VACUUM_LIST, VACUUM_LIST_COUNT, idx);
     case REMOTE_MODE_TIMERS:
       return indexed_entity_name_cstr(TIMER_LIST, TIMER_LIST_COUNT, idx);
+    case REMOTE_MODE_REMOTES:
+      return indexed_entity_name_cstr(REMOTE_LIST, REMOTE_LIST_COUNT, idx);
     case REMOTE_MODE_NOTIFICATIONS:
     default:
       return nullptr;
@@ -1012,6 +1051,8 @@ inline const char *mode_item_entity_cstr(RemoteMode mode, int idx) {
       return indexed_entity_id_cstr(VACUUM_LIST, VACUUM_LIST_COUNT, idx);
     case REMOTE_MODE_TIMERS:
       return indexed_entity_id_cstr(TIMER_LIST, TIMER_LIST_COUNT, idx);
+    case REMOTE_MODE_REMOTES:
+      return indexed_entity_id_cstr(REMOTE_LIST, REMOTE_LIST_COUNT, idx);
     case REMOTE_MODE_NOTIFICATIONS:
     default:
       return nullptr;
@@ -1053,6 +1094,7 @@ struct ModeSelectionStateRefs {
   int &input_idx;
   int &vacuum_idx;
   int &timer_idx;
+  int &remote_idx;
 };
 
 struct CurrentModeSelectionContext {
@@ -1076,10 +1118,10 @@ struct CurrentUiSelectionContext {
 inline ModeSelectionStateRefs make_mode_selection_state_refs(
     int &light_idx, int &switch_idx, int &climate_idx, int &water_heater_idx, int &lock_idx, int &cover_idx, int &media_idx,
     int &automation_idx, int &weather_idx, int &fan_idx, int &humidifier_idx, int &sensor_idx, int &alarm_idx,
-    int &notification_idx, int &info_idx, int &input_idx, int &vacuum_idx, int &timer_idx) {
+    int &notification_idx, int &info_idx, int &input_idx, int &vacuum_idx, int &timer_idx, int &remote_idx) {
   return {light_idx, switch_idx, climate_idx, water_heater_idx, lock_idx, cover_idx, media_idx, automation_idx,
           weather_idx, fan_idx, humidifier_idx, sensor_idx, alarm_idx, notification_idx, info_idx, input_idx,
-          vacuum_idx, timer_idx};
+          vacuum_idx, timer_idx, remote_idx};
 }
 
 inline AutomationKind automation_kind(int idx) {
@@ -1157,6 +1199,8 @@ inline int &selected_mode_index_ref(RemoteMode mode, ModeSelectionStateRefs refs
       return refs.vacuum_idx;
     case REMOTE_MODE_TIMERS:
       return refs.timer_idx;
+    case REMOTE_MODE_REMOTES:
+      return refs.remote_idx;
     case REMOTE_MODE_INFO:
     default:
       return refs.info_idx;

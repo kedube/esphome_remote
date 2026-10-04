@@ -49,6 +49,26 @@ script:
                 data:
                   entity_id: !lambda 'return entity;'
                   color_temp_kelvin: !lambda 'return (int) lroundf(value);'
+      # A colour from LIGHT_COLOR_PRESETS. hs_color is a list, which only
+      # reaches Home Assistant as one through a template.
+      - if:
+          condition:
+            lambda: 'return kind == VALUE_SEND_LIGHT_COLOR;'
+          then:
+            - homeassistant.action:
+                action: light.turn_on
+                data:
+                  entity_id: !lambda 'return entity;'
+                data_template:
+                  hs_color: !lambda |-
+                    int preset = static_cast<int>(value);
+                    if (preset < 0 || preset >= LIGHT_COLOR_PRESET_COUNT) {
+                      preset = 0;
+                    }
+                    char hs[40];
+                    snprintf(hs, sizeof(hs), "{{ [%.0f, %.0f] }}", LIGHT_COLOR_PRESETS[preset].hue,
+                             LIGHT_COLOR_PRESETS[preset].saturation);
+                    return std::string(hs);
       - if:
           condition:
             lambda: 'return kind == VALUE_SEND_FAN_PERCENTAGE;'
@@ -212,32 +232,85 @@ script:
                 data:
                   entity_id: !lambda 'return entity;'
                   hvac_mode: !lambda 'return option;'
-          else:
+      - if:
+          condition:
+            lambda: 'return kind == OPTION_SEND_ACTIVITY;'
+          then:
+            - homeassistant.action:
+                action: remote.turn_on
+                data:
+                  entity_id: !lambda 'return entity;'
+                  activity: !lambda 'return option;'
+      - if:
+          condition:
+            lambda: 'return kind == OPTION_SEND_SELECT;'
+          then:
             - homeassistant.action:
                 action: !lambda 'return entity_domain_action(entity.c_str(), "select_option");'
                 data:
                   entity_id: !lambda 'return entity;'
                   option: !lambda 'return option;'
 
-  # An action with nothing to send but the entity (vacuum.start, timer.pause,
-  # valve.stop_valve): shows failed in the footer if Home Assistant refuses
-  # it while that entity is still selected.
+  # An action on one entity (vacuum.start, timer.pause), or a TV remote's
+  # command, made with queue_entity_request: shows its failed text in the
+  # footer if Home Assistant refuses it while that entity is still selected.
+  # Takes the request's slot, one int like every script that waits for Home
+  # Assistant's answer (see lock_selected_lock).
   - id: call_entity_action
     mode: queued
     parameters:
-      action: std::string
-      entity: std::string
-      failed: std::string
+      request: int
     then:
-      - homeassistant.action:
-          action: !lambda 'return action;'
-          data:
-            entity_id: !lambda 'return entity;'
-          on_error:
-            - if:
-                condition:
-                  lambda: 'return entity == id(selected_item_entity);'
-                then:
-                  - script.execute:
-                      id: show_toast
-                      text: !lambda 'return failed;'
+      - if:
+          condition:
+            lambda: 'return entity_request(request).command.empty();'
+          then:
+            - homeassistant.action:
+                action: !lambda 'return entity_request(request).action;'
+                data:
+                  entity_id: !lambda 'return entity_request(request).entity;'
+                on_error:
+                  - if:
+                      condition:
+                        lambda: 'return entity_request(request).entity == id(selected_item_entity);'
+                      then:
+                        - script.execute:
+                            id: show_toast
+                            text: !lambda 'return entity_request(request).failed;'
+      # A Harmony hub needs the device each command is for; nothing else
+      # takes one.
+      - if:
+          condition:
+            lambda: 'return !entity_request(request).command.empty() && entity_request(request).device.empty();'
+          then:
+            - homeassistant.action:
+                action: !lambda 'return entity_request(request).action;'
+                data:
+                  entity_id: !lambda 'return entity_request(request).entity;'
+                  command: !lambda 'return entity_request(request).command;'
+                on_error:
+                  - if:
+                      condition:
+                        lambda: 'return entity_request(request).entity == id(selected_item_entity);'
+                      then:
+                        - script.execute:
+                            id: show_toast
+                            text: !lambda 'return entity_request(request).failed;'
+      - if:
+          condition:
+            lambda: 'return !entity_request(request).command.empty() && !entity_request(request).device.empty();'
+          then:
+            - homeassistant.action:
+                action: !lambda 'return entity_request(request).action;'
+                data:
+                  entity_id: !lambda 'return entity_request(request).entity;'
+                  command: !lambda 'return entity_request(request).command;'
+                  device: !lambda 'return entity_request(request).device;'
+                on_error:
+                  - if:
+                      condition:
+                        lambda: 'return entity_request(request).entity == id(selected_item_entity);'
+                      then:
+                        - script.execute:
+                            id: show_toast
+                            text: !lambda 'return entity_request(request).failed;'

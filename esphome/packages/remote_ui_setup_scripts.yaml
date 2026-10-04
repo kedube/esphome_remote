@@ -122,8 +122,9 @@ script:
           }
 
   # Waking from sleep, the item the remote went to sleep on, as it was then,
-  # with the footer saying what the remote is waiting for. Otherwise (after a
-  # power cut, a reboot or an update) the connecting screens.
+  # with the footer saying what the remote is waiting for, or that a press
+  # made meanwhile will go out once it connects. Otherwise (after a power cut,
+  # a reboot or an update) the connecting screens.
   - id: boot_screen
     then:
       - lambda: |-
@@ -133,7 +134,11 @@ script:
           }
           bool wifi_up = wifi::global_wifi_component != nullptr && wifi::global_wifi_component->is_connected();
           if (oled_snapshot_restore(it)) {
-            render_snapshot_status(it, remote_ui_fonts, wifi_up ? "CONNECTING\u2026" : "WAITING FOR WI-FI\u2026");
+            bool queued = queued_press_waiting_for(millis(), id(selected_item_entity), id(preferred_setting_option));
+            render_snapshot_status(it, remote_ui_fonts,
+                                   queued    ? "WAITING TO SEND\u2026"
+                                   : wifi_up ? "CONNECTING\u2026"
+                                             : "WAITING FOR WI-FI\u2026");
             it->display();
             return;
           }

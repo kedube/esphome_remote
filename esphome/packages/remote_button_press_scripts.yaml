@@ -59,7 +59,8 @@ script:
               static_cast<RemoteMode>(id(current_mode)), action, id(selected_item_state), id(selected_alarm_arm_mode),
               ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS},
               selected_entity_traits(static_cast<RemoteMode>(id(current_mode)), id(selected_alarm_index),
-                                     id(selected_cover_index), id(selected_automation_index)));
+                                     id(selected_cover_index), id(selected_automation_index),
+                                     id(selected_setting_option)));
           switch (prompt.feedback_target) {
             case REMOTE_INPUT_FEEDBACK_LOCK:
               id(set_lock_feedback).execute(prompt.feedback);
@@ -134,7 +135,8 @@ script:
               static_cast<RemoteMode>(id(current_mode)), 0, id(selected_item_state), id(selected_alarm_arm_mode),
               ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS},
               selected_entity_traits(static_cast<RemoteMode>(id(current_mode)), id(selected_alarm_index),
-                                     id(selected_cover_index), id(selected_automation_index)));
+                                     id(selected_cover_index), id(selected_automation_index),
+                                     id(selected_setting_option)));
           if (!prompt.requires_long_press) {
             id(primary_button_press_started_at) = 0;
             id(primary_button_press_mode) = -1;
@@ -181,7 +183,8 @@ script:
               static_cast<RemoteMode>(id(current_mode)), 2, id(selected_item_state), id(selected_alarm_arm_mode),
               ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS},
               selected_entity_traits(static_cast<RemoteMode>(id(current_mode)), id(selected_alarm_index),
-                                     id(selected_cover_index), id(selected_automation_index)));
+                                     id(selected_cover_index), id(selected_automation_index),
+                                     id(selected_setting_option)));
           if (!prompt.requires_long_press) {
             id(play_pause_button_press_started_at) = 0;
             id(play_pause_button_press_mode) = -1;
@@ -228,7 +231,8 @@ script:
               static_cast<RemoteMode>(id(current_mode)), 1, id(selected_item_state), id(selected_alarm_arm_mode),
               ${LONG_PRESS_DURATION_MS}, ${EXTENDED_HOLD_DURATION_MS},
               selected_entity_traits(static_cast<RemoteMode>(id(current_mode)), id(selected_alarm_index),
-                                     id(selected_cover_index), id(selected_automation_index)));
+                                     id(selected_cover_index), id(selected_automation_index),
+                                     id(selected_setting_option)));
           if (!prompt.requires_long_press) {
             id(settings_button_press_started_at) = 0;
             id(settings_button_press_mode) = -1;
@@ -282,7 +286,8 @@ script:
   # round. Minus and Plus repeat on settings with a range (see
   # remote_setting_repeats) and on the weather details; while they do,
   # send_setting_value holds each value back, so Home Assistant only gets the
-  # one the hold ends on. Lists and toggles step once per press.
+  # one the hold ends on. Lists and toggles step once per press. On a TV
+  # remote's NAVIGATE all four are its arrows, and each repeat is sent.
   - id: button_repeat
     mode: restart
     parameters:
@@ -304,8 +309,9 @@ script:
               if (!held || remote_repeat_button != button) {
                 return false;
               }
-              if (button == REMOTE_REPEAT_PREVIOUS || button == REMOTE_REPEAT_NEXT ||
-                  id(current_mode) == REMOTE_MODE_WEATHER) {
+              bool arrows = remote_repeat_setting == REMOTE_SETTING_REMOTE_NAVIGATE;
+              if ((button == REMOTE_REPEAT_PREVIOUS || button == REMOTE_REPEAT_NEXT || id(current_mode) == REMOTE_MODE_WEATHER) &&
+                  !arrows) {
                 return true;
               }
               if (id(selected_setting_option) != remote_repeat_setting || id(selected_item_entity) != remote_repeat_entity) {
@@ -333,10 +339,18 @@ script:
                 condition:
                   lambda: 'return button == REMOTE_REPEAT_PREVIOUS || button == REMOTE_REPEAT_NEXT;'
                 then:
-                  - script.execute:
-                      id: shift_selected_item
-                      step: !lambda 'return button == REMOTE_REPEAT_NEXT ? 1 : -1;'
-                      wrap: false
+                  - if:
+                      condition:
+                        lambda: 'return id(selected_setting_option) == REMOTE_SETTING_REMOTE_NAVIGATE;'
+                      then:
+                        - script.execute:
+                            id: remote_nav_key
+                            key: !lambda 'return button == REMOTE_REPEAT_NEXT ? REMOTE_KEY_RIGHT : REMOTE_KEY_LEFT;'
+                      else:
+                        - script.execute:
+                            id: shift_selected_item
+                            step: !lambda 'return button == REMOTE_REPEAT_NEXT ? 1 : -1;'
+                            wrap: false
                   - delay: !lambda 'return REPEAT_NAVIGATION_INTERVAL_MS;'
                 else:
                   - lambda: 'remote_repeat_active = true;'
