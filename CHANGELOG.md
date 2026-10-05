@@ -6,6 +6,8 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+
+## 4.12 — 2026-10-05
 - The README now matches the firmware in a number of places, among them: a held `Plus`
   or `Minus` sends its first step at once; when the remote restarts for new favorite
   lists; the media settings' order; `Previous` and `Next` going round a list; the
