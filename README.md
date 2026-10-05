@@ -2,7 +2,7 @@
 
 Replacement firmware for [Pawel Lugowski's ESPHome OLED Remote Control](https://tech.lugowski.dev/guides/smart-oled-remote-esphome/). The hardware is built around an ESP32 Lolin32 WROOM (WIFI + Bluetooth) board, a 1.3-inch SH1106 128x64 OLED display, and physical buttons that provide a compact, battery-friendly UI for controlling Home Assistant entities directly from the handheld remote. 
 
-The firmware has been entirely rewritten from scratch based on a newly designed codebase and architecture. It is designed to let you cycle through Home Assistant entities directly from the remote without needing a touchscreen or a phone. The remote now uses mixed-entity favorite lists as the primary navigation model, while still supporting controls for lights, switches, climate devices, humidifiers, fans, covers and valves, locks, media players, TV and streaming-box remotes, vacuums and lawn mowers, timers, number and select helpers, buttons, sensors, events and people, automations, alarms, weather, notifications, and info screens.
+The firmware has been entirely rewritten from scratch based on a newly designed codebase and architecture. It is designed to let you cycle through Home Assistant entities directly from the remote without needing a touchscreen or a phone. The remote now uses mixed-entity favorite lists as the primary navigation model, while still supporting controls for lights, switches, climate devices, water heaters, humidifiers, fans, covers and valves, locks, media players, TV and streaming-box remotes, vacuums and lawn mowers, timers, number and select helpers, buttons, sensors, events and people, automations, alarms, weather, notifications, and info screens.
 
 ## Gallery
 
@@ -24,7 +24,7 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 
 - Graphical, button-driven UI designed for a 128x64 monochrome OLED: large values, icon badges that light up when a device is on, meters, toggles, and a footer that shows what the buttons do
 - Hold-to-confirm progress bar for protected actions (locks, covers, automations, alarm)
-- Hold `Previous`, `Next`, `Plus` or `Minus` to keep stepping; a held `Plus` or `Minus` sends Home Assistant only the value it stops on
+- Hold `Previous`, `Next`, `Plus` or `Minus` to keep stepping; a held `Plus` or `Minus` sends Home Assistant its first step, then only the value it stops on
 - Deep sleep support for battery-powered remotes
 - Wakes straight into the item it went to sleep on, shown as it was until the live values arrive; a press made meanwhile goes out once Home Assistant has connected. Dims the screen shortly before it sleeps
 - Arrows, OK, Back and Home for Apple TV, Android TV, Roku, Samsung, Bravia and Philips TVs through Home Assistant's remote entities
@@ -33,7 +33,7 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 - Favorite lists kept in Home Assistant, so changing them doesn't mean reflashing (optional; otherwise they're built into the firmware)
 - Automatic hiding of empty favorite lists and optional Notifications mode
 - Persistent restore of the current menu, selected item, contrast, and the setting you last picked after wake or reboot
-- Notification, weather, and detailed info screens for time/date, wireless, network, device name, battery, and version
+- Notification, weather, and detailed info screens for time/date, wireless, network, device name, battery, version, and the favorite lists
 - Optional framebuffer download endpoint for capturing clean UI screenshots
 - A preview tool that renders every screen on your computer, without flashing the remote
 
@@ -42,8 +42,8 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 If you just want to get the remote running:
 
 1. Install ESPHome.
-2. Copy [`esphome/examples/secrets-example.yaml`](esphome/examples/secrets-example.yaml) to [`esphome/secrets.yaml`](esphome/secrets.yaml) and fill in your Wi-Fi details and an API encryption key.
-3. Copy [`esphome/examples/local_entities-example.h`](esphome/examples/local_entities-example.h) to [`esphome/local_entities.h`](esphome/local_entities.h), and add your favorite lists to Home Assistant (see [Favorites from Home Assistant](#favorites-from-home-assistant)).
+2. Copy [`esphome/examples/secrets-example.yaml`](esphome/examples/secrets-example.yaml) to `esphome/secrets.yaml` and fill in your Wi-Fi details and an API encryption key.
+3. Copy [`esphome/examples/local_entities-example.h`](esphome/examples/local_entities-example.h) to `esphome/local_entities.h`, and add your favorite lists to Home Assistant (see [Favorites from Home Assistant](#favorites-from-home-assistant)).
 4. Copy [`esphome/examples/settings-example.yaml`](esphome/examples/settings-example.yaml) to `esphome/settings.yaml` and choose the correct PCB package.
 5. Connect the remote over USB and run `esphome run esphome/remote_control.yaml` (the first flash must be over USB).
 6. Add the remote to Home Assistant and allow it to perform Home Assistant actions (see [step 8](#8-add-the-remote-to-home-assistant)).
@@ -77,7 +77,7 @@ Where there is something to control, the footer explains it (sensor and Info scr
 - **Hold bar**: while you hold a protected action, the footer fills from left to right and the action fires when the bar is full.
 - **Toasts**: the result of an action (`LOCKING...`, `TRIGGERED`, `ALREADY ON`) replaces the footer for a few seconds.
 
-The label at the left of the footer (for example `BRIGHTNESS` or `EFFECT`) names the setting `Settings` has selected; press `Settings` to move to the next one. Each item opens on the setting you last picked with `Settings` when it has that setting, otherwise on its first, so `Plus` and `Minus` work straight away. The choice is kept across sleep.
+The label at the left of the footer (for example `BRIGHTNESS` or `EFFECT`) names the setting `Settings` has selected; press `Settings` to move to the next one. Each item opens on the setting you last picked with `Settings` when it has that setting, otherwise on its first, so `Plus` and `Minus` work straight away. The choice is kept across sleep; pressing `Mode` forgets it, so items in the next list open on their first setting.
 
 `SYNCING` in the large value, or `--` in the footer, means Home Assistant hasn't sent that value yet. `UNAVAILABLE` means Home Assistant reports the entity as unavailable; the action buttons then show `UNAVAILABLE` instead of sending a command.
 
@@ -113,7 +113,7 @@ esphome logs esphome/remote_control.yaml
 On a board that isn't running this firmware yet, the first USB flash prints
 `Chip type: ... (revision vX.Y)`.
 
-`esphome/remote_control.yaml` includes your `esphome/settings.yaml`, which holds the common substitutions, the PCB package selection, and the optional `web_server` block. It starts as a copy of [`esphome/examples/settings-example.yaml`](esphome/examples/settings-example.yaml) and is kept out of git, like `secrets.yaml`.
+`esphome/remote_control.yaml` includes your `esphome/settings.yaml`, which holds the common substitutions, the PCB package selection, and the optional `web_server` and fixed-IP `wifi` blocks. It starts as a copy of [`esphome/examples/settings-example.yaml`](esphome/examples/settings-example.yaml) and is kept out of git, like `secrets.yaml`.
 
 Please refer to the [Quick Start Guide](https://tech.lugowski.dev/smart-remote-kit/) for more details:
 
@@ -149,6 +149,7 @@ esphome_remote/
 │   ├── extensions.json
 │   ├── launch.json
 │   └── settings.json          # gitignored; yours is local-only
+├── .gitignore
 ├── .yamllint.yml
 ├── CHANGELOG.md
 ├── LICENSE
@@ -156,6 +157,7 @@ esphome_remote/
 ├── requirements.txt
 ├── assets/
 │   └── fonts/
+│       ├── DMSans-Bold.ttf
 │       ├── LiberationSans-Bold.ttf
 │       └── local/             # your own fonts; gitignored
 ├── esphome/
@@ -249,7 +251,7 @@ esphome_remote/
 - `esphome/remote_control.yaml`
   Main ESPHome entrypoint that pulls together shared packages, secrets, local entity definitions, fonts, and runtime logic. It also holds the firmware `VERSION`, which the release workflow bumps.
 - `esphome/settings.yaml`
-  Your settings: common substitutions, PCB selection, and optional web server settings. This file is ignored by Git; start it from `esphome/examples/settings-example.yaml`.
+  Your settings: common substitutions, PCB selection, and optional web server and fixed IP settings. This file is ignored by Git; start it from `esphome/examples/settings-example.yaml`.
 - `esphome/oled_hold_release.h`
   Releases the deep-sleep hold on the rev 3.1 OLED power pin at boot, so the display can power up.
 - `include/entity_helpers.h`
@@ -269,7 +271,7 @@ esphome_remote/
 - `home_assistant/remote_favorites.yaml`, `home_assistant/remote_favorites_labels.yaml` and `tools/favorites_to_home_assistant.py`
   The Home Assistant template sensor that holds the favorite lists, the same sensor built from a label, and a script that writes the first from your `local_entities.h`.
 - `tools/favorites_tests/`
-  Tests for the favorite lists on your computer: the parser, which lists the remote uses and what it does with new ones, the converter, and the labels template. Run `python3 tools/favorites_tests/run.py` (it needs ESPHome's Python packages).
+  Tests for the favorite lists on your computer: the parser, which lists the remote uses and what it does with new ones, the converter, and the labels template. Run `python3 tools/favorites_tests/run.py`; it needs PyYAML and Jinja2 (`pip install -r requirements.txt` installs them with ESPHome) and a C++20 compiler (`clang++` or `g++`).
 - `esphome/packages/`
   Modular ESPHome packages for actions, button/input handling, runtime behavior, display globals, fonts, and UI scripts.
 - `src/remote_ui_renderer.cpp` and `include/remote_ui_renderer.h`
@@ -294,7 +296,7 @@ esphome_remote/
 - `include/entity_helpers_common.h`
   Favorite-list plumbing (including the build-time check that every favorite in `local_entities.h` has a supported `entity_id`), per-domain indexing, selection helpers, and configuration validation.
 - `include/favorites_lists.h` and `src/favorites_store.cpp`
-  The favorite lists in use, built once at boot from the lists saved from Home Assistant, or from `local_entities.h`, and never changed while the remote is awake: the trackers and Home Assistant's subscriptions keep pointers into them. Lists Home Assistant changes are checked as they arrive, saved to NVS as the remote goes to sleep, and used from the next wake, unless they are the first lists or nobody has pressed a button since the wake (`remote_buttons_pressed_since_boot`): then they are saved at once and the remote restarts, once per list. A saved list the remote crashes with three times running as it starts is set aside, in RTC memory, until Home Assistant sends a different one. `persist_ui_state` keeps a hash of the selected entity, so `follow_saved_selection` finds the item again when the lists change.
+  The favorite lists in use, built once at boot from the lists saved from Home Assistant, or from `local_entities.h`, and never changed while the remote is awake: the trackers and Home Assistant's subscriptions keep pointers into them. Lists Home Assistant changes are checked as they arrive, saved to NVS as the remote shuts down (`favorites_save_pending` in each board's `on_shutdown`: sleep, restart or update), and used from the next wake, unless the remote is still on `local_entities.h` or nobody has pressed a button since the wake (`remote_buttons_pressed_since_boot`): then they are saved at once and the remote restarts, once per list until it loses power (`restarted_for`, in RTC memory). A saved list the remote crashes with three times running as it starts is set aside, in RTC memory, until Home Assistant sends a different one. `persist_ui_state` keeps a hash of the selected entity, so `follow_saved_selection` finds the item again when the lists change.
 - `include/entity_trackers.h`
   Home Assistant tracker classes that subscribe to and cache entity state, one slot per favorite, sized at boot.
 - `include/entity_helpers_requests.h`
@@ -329,7 +331,7 @@ The `esphome/packages/` folder is split by responsibility:
 - `remote_inputs.yaml` and `remote_runtime.yaml`
   Physical input bindings and the runtime loop.
 
-Every favorite's `entity_id` in `local_entities.h` is checked when the firmware is built: a missing one, or one in a domain the remote doesn't support (see [Supported Home Assistant Entity Domains](#supported-home-assistant-entity-domains)), stops the build with an error. Lists from Home Assistant get the same checks as the remote receives them, and one that fails is not used. At startup the remote also logs favorites that have no display name.
+Every favorite's `entity_id` in `local_entities.h` is checked when the firmware is built: a missing one, or one in a domain the remote doesn't support (see [Supported Home Assistant Entity Domains](#supported-home-assistant-entity-domains)), stops the build with an error. Lists from Home Assistant get the same checks as the remote receives them, plus two more (every favorite has a name, and every entity ID is well formed), and one that fails is not used. At startup the remote also logs favorites that have no display name.
 
 ## 1. Install ESPHome
 
@@ -406,7 +408,7 @@ template:
             Pasta Timer|timer.kitchen
 ```
 
-- A line starting with `#` starts a list and names it. Each line after it is a favorite, `Name|entity_id`, with the optional third field ([TV remote](#tv-remotes-third-field) commands, [media player sources](#media-player-sources-optional-third-field)) after another `|`. The remote shows them in this order. Blank lines and spaces around the fields don't matter.
+- A line starting with `#` starts a list and names it. Each line after it is a favorite, `Name|entity_id`, with the optional third field ([TV remote](#tv-remotes-third-field) commands, [media player sources](#media-player-sources-optional-third-field)) after another `|`. The remote shows them in this order. Blank lines and spaces around the fields don't matter. Favorites before the first `#` line go in a list called `FAVORITES`, and a list with no favorites is left out. Every favorite needs a name, and its entity ID as Home Assistant writes it (lower-case letters, digits and `_`, with one dot).
 - To start from the lists you have, run `python3 tools/favorites_to_home_assistant.py`. It prints this sensor with everything in `esphome/local_entities.h`.
 - After editing the lists, reload them in Home Assistant: **Developer tools → YAML → Template entities**.
 
@@ -418,10 +420,10 @@ The remote reads `sensor.remote_favorites`. To give a remote other lists, point 
 
 How the remote uses the lists:
 
-- It saves them in flash and uses them from then on, Home Assistant down or not. `local_entities.h` only counts until the first lists arrive, or if you set `FAVORITES_ENTITY` to `""` to turn this off.
-- The first lists it gets, it restarts to use straight away (`NEW FAVORITES`).
-- After that, the remote picks up a change the next time it's awake. If nobody has pressed a button since it woke, it restarts to use the change straight away; otherwise it saves the change as it goes to sleep and uses it from the next wake (hold the power button to restart it sooner). When the lists change, the remote stays on the item it was on, if that's still in them.
-- It checks the lists as they arrive, the way the build checks `local_entities.h`. If any line is wrong, it ignores the whole update and keeps the lists it has.
+- It saves them in flash and uses them from then on, Home Assistant down or not. `local_entities.h` only counts until the first lists arrive, or if you set `FAVORITES_ENTITY` to `""` to turn this off. Emptying the lists or removing the sensor doesn't bring `local_entities.h` back: the remote ignores an empty or missing value and keeps the lists it saved.
+- While it is still on `local_entities.h`, it restarts to use the lists it gets straight away (`NEW FAVORITES`). Lists the same as `local_entities.h` would change nothing on screen, so it saves those as it goes to sleep instead.
+- After that, the remote picks up a change the next time it's awake. If nobody has pressed a button since it woke, it restarts to use the change straight away; otherwise it saves the change as it goes to sleep and uses it from the next wake (hold the power button to restart it sooner). It restarts by itself only once for the same lists until it loses power, so changing back to lists it has restarted for before waits for the next wake. When the lists change, the remote stays on the item it was on, if that's still in them.
+- It checks the lists as they arrive, the way the build checks `local_entities.h`, and also for the names and entity IDs above. If any line is wrong, it ignores the whole update and keeps the lists it has.
 - The lists must fit the remote: at most `MAX_PERSISTED_FAVORITE_LISTS` lists (16 by default), 64 favorites in a list and 8 KB of text, and no more than it has memory for. How many favorites that is depends on their kind: a thermostat takes far more memory than a switch. The remote turns down lists it can't hold and says so. (Text over 32 KB is more than ESPHome's connection takes in one message: the remote drops its connection to Home Assistant instead, so the status can't say why.)
 - If the remote crashes three times running as it starts with saved lists, it goes back to `local_entities.h` until Home Assistant sends different lists, or the remote loses power.
 
@@ -431,10 +433,10 @@ The remote's **Favorites status** sensor in Home Assistant says which lists it u
 
 Instead of writing the lists out, Home Assistant can build them from a label. Use [`home_assistant/remote_favorites_labels.yaml`](home_assistant/remote_favorites_labels.yaml) in place of `remote_favorites.yaml` (they make the same sensor, so use one), then give the entities you want on the remote the label **Remote** (**Settings → Labels**; its ID must be `remote`, and the label goes on the entities, not their devices):
 
-- Each area with labelled entities becomes a list, in alphabetical order, and entities in no area go in a last list, `OTHER`. Within a list, favorites are in alphabetical order.
-- A favorite's name is the entity's name without its area's in front: `Office Light` in the Office list is `Light`.
+- Each area with labelled entities becomes a list, titled with the area's name in capitals, in alphabetical order, and entities in no area go in a last list, `OTHER`. Within a list, favorites are in alphabetical order.
+- A favorite's name is the entity's name without its area's in front: `Office Light` in the `OFFICE` list is `Light`.
 - Third fields (a TV remote's command set, a media player's sources) go in the `extras` table at the top of the template.
-- Entities the remote can't control are left out, so a label on a camera doesn't stop the update.
+- Entities the remote can't control are left out, so a label on a camera doesn't stop the update. The template doesn't enforce the remote's other limits: more labelled areas than `MAX_PERSISTED_FAVORITE_LISTS`, or more than 64 labelled entities in one area, and the remote turns the update down.
 - The lists are built again whenever a label, name or area changes, so the remote picks the change up as above.
 
 You give up choosing the order and the names, and lists that aren't areas; write the lists out if you want those.
@@ -480,7 +482,7 @@ inline constexpr FavoriteList FAVORITE_LISTS[] = {
 
 ### Light warmth and colour (optional)
 
-Lights with a colour temperature get a `WARMTH` setting, and lights that take a colour a `COLOR` setting. Following them costs Home Assistant subscriptions: three per light for warmth and one per light for colour. With many lights a wake takes a little longer before every light has synced (the item the remote wakes into, and its list, still sync first). To go without either, add these lines to `esphome/local_entities.h`:
+Lights with a colour temperature get a `WARMTH` setting, and lights that take a colour a `COLOR` setting. Following them costs Home Assistant subscriptions: three per light for warmth and one per light for colour. With many lights a wake takes a little longer before every light has synced (the item the remote wakes into, and its list, still sync first), and each subscription takes memory that favorites from Home Assistant could use. To go without either, add these lines to `esphome/local_entities.h`:
 
 ```cpp
 #define LIGHT_WARMTH 0
@@ -556,7 +558,7 @@ that contains one is silently split into two entries, so pick names without it. 
 names arriving from Home Assistant for a TV or receiver are checked and skipped with a
 warning instead.)
 
-Notifications are configured in the same file with optional feed defines:
+Notifications are configured in the same file. They are off unless `NOTIFICATION_FEED_ENTITY` names a feed, as the example file does; the other three defines are optional and default to the values shown:
 
 ```cpp
 #define NOTIFICATION_FEED_ENTITY "sensor.remote_notifications"
@@ -567,7 +569,7 @@ Notifications are configured in the same file with optional feed defines:
 
 Notes:
 
-- Set `NOTIFICATION_FEED_ENTITY` to an empty string to hide Notifications completely.
+- Leave `NOTIFICATION_FEED_ENTITY` out, or set it to an empty string, to hide Notifications completely.
 - `NOTIFICATION_FEED_ENTITY` is the Home Assistant entity the remote reads from.
 - `NOTIFICATION_FEED_ATTRIBUTE` is the attribute on that entity containing the notification payload.
 - `NOTIFICATION_FEED_IDS_ATTRIBUTE` is the attribute on that entity containing notification IDs for dismiss actions.
@@ -582,7 +584,7 @@ Copy [`home_assistant/remote_notifications.yaml`](home_assistant/remote_notifica
 - attribute `messages` = the newest 16 active persistent notifications, each cut to 120 characters, packed into one `||`-separated string (the remote ignores a feed over 8 KB)
 - attribute `ids` = matching persistent notification IDs packed in the same order
 
-This bridge is event-driven. It listens for Home Assistant `persistent_notification` updates, stores the active notification list in the template sensor’s own attributes, and exposes a `messages` attribute that the remote can read. Each item is emitted as `Title: Message`, with newlines flattened to spaces so the remote can render them cleanly.
+This bridge is event-driven. It listens for Home Assistant `persistent_notification` updates, stores the active notification list in the template sensor’s own attributes, and exposes a `messages` attribute that the remote can read. Each item is emitted as `Title: Message`, with newlines and tabs flattened to spaces so the remote can render them cleanly, and any `|` turned into `/` so it can't split a notification.
 
 In Notifications mode, pressing the circle or play/pause action button dismisses the currently selected persistent notification. The display shows `DISMISSED` for 3 seconds, then refreshes and advances to the next remaining notification.
 
@@ -594,13 +596,13 @@ Copy the example settings file, then edit the copy:
 cp esphome/examples/settings-example.yaml esphome/settings.yaml
 ```
 
-This is the main file for device-level customization. Like `secrets.yaml`, it is kept out of git, so pulling updates never overwrites your settings. After an update, compare it with the example for new settings: a setting your copy lacks stops the build with a warning that it `is undefined`.
+This is the main file for device-level customization. Like `secrets.yaml`, it is kept out of git, so pulling updates never overwrites your settings. After an update, compare it with the example for new settings: for a setting your copy lacks, ESPHome warns that it `is undefined`, and the build usually fails further on (see [troubleshooting](#esphome-warns-that-some_setting-is-undefined)).
 
 Use this file for three things:
 
 1. Select the PCB package that matches your hardware.
 2. Set the shared substitutions that control naming, timing, and battery behavior.
-3. Enable optional features such as framebuffer web debugging.
+3. Enable optional features such as a fixed IP address or framebuffer web debugging.
 
 Start by choosing the board package that matches your remote hardware PCB:
 
@@ -637,7 +639,7 @@ packages:
 | `REBOOT_MESSAGE_DURATION_MS` | How long the `REBOOTING...` message stays on screen before the remote restarts. |
 | `ALARM_STATUS_UPDATE_DELAY_MS` | How long an alarm panel has to reach the requested state, or start its exit or entry delay, before the remote shows `FAILED`. |
 | `SAFE_MODE_BOOT_IS_GOOD_AFTER` | How long a new boot must survive before ESPHome considers it successful for safe mode and OTA rollback. |
-| `LOW_BATTERY_VOLTAGE` | Battery warning threshold for battery-monitoring boards. |
+| `LOW_BATTERY_VOLTAGE` | Battery-monitoring boards: at or below this voltage when it wakes, the remote shows `LOW BATTERY` for 10 seconds. |
 | `BATTERY_DIVIDER_MULTIPLIER` | Voltage divider scaling factor for battery-monitoring boards. |
 | `BATTERY_VOLTAGE_MIN` | Battery voltage treated as 0% for the percentage estimate. |
 | `BATTERY_VOLTAGE_MAX` | Battery voltage treated as 100% for the percentage estimate. |
@@ -665,7 +667,7 @@ wifi:
     dns1: 192.168.1.1
 ```
 
-Compare the **Wake to Home Assistant** sensor's history before and after (see [step 8](#8-add-the-remote-to-home-assistant)), or watch `esphome logs`, which says how long Wi-Fi and Home Assistant each took after a wake.
+Compare the **Wake to Home Assistant** sensor's history before and after (see [step 8](#8-add-the-remote-to-home-assistant)). `esphome logs` can't show it: a log client connects over the network too, so it misses the messages from early in a wake.
 
 ### Choosing fonts
 
@@ -684,7 +686,7 @@ The display lights each pixel fully or not at all, so text can't be smoothed. A 
 
 Name sizes from 12 to 15 fit the name line. The other fonts sit in tighter spaces: labels fill 9- to 11-pixel bars, so keep `LABEL_FONT` capitals about 7 pixels tall (Liberation Sans Bold at 9), and a wider `VALUE_FONT` leaves less room for the setpoint beside the value.
 
-Every text font must include the characters the remote uses (Latin-1 plus ‘ ’ “ ” – — • € …); if any are missing, the build stops and lists them. Run `python3 tools/ui_preview/preview.py` to see every screen in your fonts before flashing.
+Every text font must include the characters the remote uses (Latin-1 plus ‘ ’ “ ” – — • € …; `VALUE_FONT` only needs digits, `° % . - :`, a space and `O N F`); if any are missing, the build stops and lists them. Run `python3 tools/ui_preview/preview.py` to see every screen in your fonts before flashing.
 
 `esphome/remote_control.yaml` includes this settings file. The pins shared by every board are in `esphome/remote_control.yaml`; the selected PCB package adds the dimmer, circle, battery and OLED-power pins.
 
@@ -732,18 +734,21 @@ pio run                    # runs: esphome compile esphome/remote_control.yaml
 pio run -t esphome-upload  # runs: esphome run esphome/remote_control.yaml (build + flash)
 ```
 
-The `.vscode/` folder has IntelliSense settings (`c_cpp_properties.json`), extension recommendations, and launch settings for working on the C++ sources in `include/` and `src/`. Its include paths point at the author's own checkout, so adjust them for yours.
+The `.vscode/` folder has extension recommendations, and IntelliSense (`c_cpp_properties.json`) and launch settings (`launch.json`) that PlatformIO IDE writes for your checkout, so don't edit those two by hand. Their include paths cover `include/` and `src/` but not ESPHome's own headers, and the debug configurations don't apply to firmware ESPHome builds.
 
 ## 8. Add The Remote To Home Assistant
 
 1. In Home Assistant, go to **Settings → Devices & services**. The remote is usually discovered as an ESPHome device; otherwise, add the **ESPHome** integration and enter `<DEVICE_NAME>.local` (or its IP address).
 2. Enter the `encryption_key` from `esphome/secrets.yaml` when asked.
-3. Open the ESPHome integration's entry for the remote, choose **Configure**, and turn on **Allow the device to perform Home Assistant actions**. Every button on the remote works by asking Home Assistant to perform an action, so without this nothing responds.
-4. Optionally, add the notifications package (see [step 4](#4-create-your-favorite-lists)).
+3. Open the ESPHome integration's entry for the remote, choose **Configure**, and turn on **Allow the device to perform Home Assistant actions**. Everything the remote does to an entity is a Home Assistant action, so without this you can browse but nothing you press changes anything.
+4. If you haven't yet, add the favorites sensor (see [Favorites from Home Assistant](#favorites-from-home-assistant)): without it, or lists in `local_entities.h`, the remote has no favorites. Optionally, add the notifications package (see [step 4](#4-create-your-favorite-lists)).
 
 The remote has to be awake while you add it: press a button first.
 
-Besides its battery sensors, the remote adds a diagnostic **Wake to Home Assistant** sensor: how many milliseconds each wake took to reach Home Assistant. Its history shows whether a change such as a [fixed IP address](#faster-wakes-with-a-fixed-ip-address) helps.
+The remote adds two diagnostic sensors, plus **Battery** and **Battery Voltage** on rev 2 and rev 3.1 boards:
+
+- **Wake to Home Assistant**: how many milliseconds each wake took to reach Home Assistant. Its history shows whether a change such as a [fixed IP address](#faster-wakes-with-a-fixed-ip-address) helps.
+- **Favorites status**: which favorite lists the remote uses, and why it turned down an update (see [Favorites from Home Assistant](#favorites-from-home-assistant)).
 
 ## Previewing the UI
 
@@ -754,11 +759,12 @@ python3 tools/ui_preview/preview.py              # writes tools/ui_preview/.cach
 python3 tools/ui_preview/preview.py --frames out # also one PNG per screen
 python3 tools/ui_preview/preview.py --readme     # refreshes the screenshots in images/
 python3 tools/ui_preview/preview.py --stress     # also stress-tests the renderer
+python3 tools/ui_preview/preview.py --stats      # prints the drawing work each frame needs
 ```
 
 `--stress` builds `tools/ui_preview/stress.cpp` with AddressSanitizer and UndefinedBehaviorSanitizer and draws every mode and setting with hostile input: empty, huge and malformed text, text cut in the middle of a character, and missing (NaN) or out-of-range readings. It stops with a report on the first out-of-bounds read or undefined behaviour, which on the remote would draw garbage or crash it. CI runs it on every change.
 
-It needs ESPHome, a C++ compiler (`clang++` or `g++`), and network access the first time so ESPHome can download the Google fonts. It runs on macOS and Linux.
+It needs ESPHome, a C++20 compiler (`clang++` or `g++`), and network access the first time so ESPHome can download the Google fonts. It runs on macOS and Linux.
 
 ## Optional Framebuffer Download Debugging
 
@@ -786,7 +792,7 @@ web_server:
     password: !secret web_server_password
 ```
 
-You can also use a CLI substitution override:
+Instead of editing the substitution, you can set it on the command line (the `web_server:` block is still needed):
 
 ```bash
 esphome -s FRAMEBUFFER_WEB_DEBUG 1 config esphome/remote_control.yaml
@@ -812,10 +818,10 @@ The remote is designed around ten physical inputs:
 
 | Button | Default behavior |
 | --- | --- |
-| Wake / Power | Wakes the remote, straight into the item it went to sleep on. A short press and release puts it to sleep. Hold for `EXTENDED_HOLD_DURATION_MS` to reboot: a bar fills while you hold, and releasing once it is full reboots. |
+| Wake / Power | Wakes the remote, straight into the item it went to sleep on. A short press and release puts it to sleep. Hold for `EXTENDED_HOLD_DURATION_MS` to reboot: a bar fills while you hold, and the remote reboots once it is full. |
 | Mode | Cycles to the next favorite list, then Notifications and Info. |
-| Previous | Selects the previous item in the current list. Hold it to keep going; it stops at the first item. On a TV remote's `NAVIGATE`, the remote's left arrow. |
-| Next | Selects the next item in the current list. Hold it to keep going; it stops at the last item. On a TV remote's `NAVIGATE`, the remote's right arrow. |
+| Previous | Selects the previous item in the current list, going round from the first to the last. Hold it to keep going; held, it stops at the first item. On a TV remote's `NAVIGATE`, the remote's left arrow. |
+| Next | Selects the next item in the current list, going round from the last to the first. Hold it to keep going; held, it stops at the last item. On a TV remote's `NAVIGATE`, the remote's right arrow. |
 | Dimmer | Steps the OLED contrast through ten levels and wraps around; a `CONTRAST` meter shows in the footer for a few seconds. |
 | Settings | Cycles through the settings the current item offers. In alarm mode, hold for `EXTENDED_HOLD_DURATION_MS` to trigger the alarm; a shorter press does nothing there. |
 | Minus | Decreases the selected setting. Hold it to keep decreasing a value with a range (brightness, warmth, temperatures, humidity, speed, volume, positions, numbers). In Weather it steps back through the weather details, and in Notifications it moves to the previous notification. On a TV remote's `NAVIGATE`, the remote's down arrow. |
@@ -830,7 +836,7 @@ Common usage pattern:
 - Use `Settings` to pick which setting you want to adjust; the footer names it.
 - Use `Plus` and `Minus` to change the selected value or browse weather details.
 - Use `Circle` and `Square` for the main action on the current item.
-- Hold `Previous` or `Next` to get through a long list, and `Plus` or `Minus` to make a big change. A held `Plus` or `Minus` changes the value on screen and sends it to Home Assistant once, when you let go, so a light doesn't step through every level and a thermostat isn't sent every degree. Lists (effects, presets, sources) and toggles step once per press.
+- Hold `Previous` or `Next` to get through a long list, and `Plus` or `Minus` to make a big change. A held `Plus` or `Minus` sends the first step at once, then changes the value on screen and sends only the value you stop on, when you let go, so a light doesn't step through every level and a thermostat isn't sent every degree. Lists (effects, presets, sources) and toggles step once per press.
 
 `Circle`, `Square`, `Plus` and `Minus` (and a TV remote's arrows) only send once Home Assistant has connected after a wake: it would drop commands sent earlier. A press made before then, on the item shown from before sleep, waits instead. The footer says `WAITING TO SEND…`, and the press goes out half a second after Home Assistant has sent that item's state, so a toggle acts on what the item is doing now. Only the latest press waits, for up to 10 seconds. It is dropped if you choose another item or setting first, or press a button again once connected. If the item no longer offers the setting the screen showed (a light turned on while the remote slept), the footer says `NOT SENT` instead. Presses that must be held (locks, covers, automations, alarms) don't wait.
 
@@ -847,14 +853,14 @@ Long-press protection:
 | --- | --- |
 | Favorites: Lights | `Circle` on (at its last brightness), `Square` off. `Settings` picks `BRIGHTNESS`, `EFFECT`, `WARMTH` or `COLOR`; `Plus` / `Minus` adjust it, brightness in 10% steps (`Minus` at 10% turns the light off). `WARMTH`, on lights with a colour temperature, goes warmer with `Plus` and cooler with `Minus`, a tenth of the light's range at a time. `COLOR`, on lights that take a colour, steps through white, red, orange, yellow, green, cyan, blue, purple, magenta and pink, starting from the one nearest the light's colour; each press changes the light. While the light is off, `Plus` turns it on. A light that can't dim shows `ON` / `OFF`. |
 | Favorites: Switches | `Circle` on, `Square` off. `input_boolean` helpers work the same way. |
-| Favorites: Climate | `Circle` on (in the thermostat's last active mode), `Square` off. `Settings` cycles `TARGET` (or `LOW` and `HIGH` in heat/cool), `FAN`, `SWING`, `HUMIDITY`, `PRESET`, `STATUS` and `MODE`; `STATUS` is read-only, and `SWING` steps through the louvre settings of a thermostat that swings them. `MODE` steps through the thermostat's HVAC modes: the screen changes at once, and the mode goes to the thermostat 1.5 seconds after the last press, so stepping from heat past cool to auto never switches the system to cool. |
-| Favorites: Humidifiers | `Circle` on, `Square` off. `Settings` cycles `TARGET` humidity, `MODE`, `STATUS` and `POWER`; `STATUS` and `POWER` are read-only. |
-| Favorites: Fans | `Circle` on (at its last speed), `Square` off. `Settings` cycles `SPEED`, `PRESET`, `OSCILLATE` and `DIRECTION`; `Plus` / `Minus` step the speed by the fan's own speed increments, and `Minus` below the lowest speed turns it off. While the fan is off, `Plus` turns it on at its last speed. |
+| Favorites: Climate | `Circle` on (in the last mode other than off it was seen in since the remote woke), `Square` off. `Settings` cycles `TARGET` (or `LOW` and `HIGH` in heat/cool), `FAN`, `SWING`, `HUMIDITY`, `PRESET`, `STATUS` and `MODE`; `STATUS` is read-only, and `SWING` steps through the louvre settings of a thermostat that swings them. `MODE` steps through the thermostat's HVAC modes: the screen changes at once, and the mode goes to the thermostat 1.5 seconds after the last press, so stepping from heat past cool to auto never switches the system to cool. |
+| Favorites: Humidifiers | `Circle` on, `Square` off. `Settings` cycles `TARGET` humidity (1% steps), `MODE`, `STATUS` and `POWER`; `STATUS` and `POWER` are read-only. |
+| Favorites: Fans | `Circle` on (at its last speed), `Square` off. `Settings` cycles `SPEED`, `PRESET`, `OSCILLATE` and `DIRECTION`; `Plus` / `Minus` step the speed by the fan's own speed increments, and `Minus` below the lowest speed turns it off. On `OSCILLATE`, `Plus` turns oscillation on and `Minus` off; on `DIRECTION`, `Plus` is forward and `Minus` reverse. While the fan is off, `Plus` turns it on at its last speed. |
 | Favorites: Covers and valves | `Circle` open, `Square` close (both held). While one that can stop is moving, the footer shows `STOP` and either button stops it straight away. `Settings` selects `POSITION` or `TILT` when the cover has them (valves have no tilt); `Plus` / `Minus` move it 10% at a time, and `Minus` at 10% or less closes it. |
 | Favorites: Locks | `Circle` lock, `Square` unlock (both held). On a lock that can unlatch the door, `Settings` switches `Square` to `OPEN` (held), which calls `lock.open`. A lock that is `OPEN` (unlatched) counts as unlocked. |
 | Favorites: TV remotes | Home Assistant `remote` entities (Apple TV, Android TV, Roku, Samsung, Bravia, Philips, Harmony). `Square` sends `BACK` and `Circle` `HOME`. `Settings` picks `NAVIGATE`, where `Previous` / `Next` / `Minus` / `Plus` are the remote's left / right / down / up arrows and `Circle` is `OK`; the arrow just sent lights up on screen, and holding one keeps sending it. `ACTIVITY`, on a Harmony hub or the apps set up in Android TV Remote, steps through activities and starts the one shown 1.5 seconds after the last press. Moving to another item never lands in `NAVIGATE`, so `Previous` and `Next` still move through the list; waking does return to it. Power stays with the TV's own media player. See [TV remotes](#tv-remotes-third-field). |
-| Favorites: Media | `Circle` play/pause, or turns on a player that is off or in standby. `Square` stops, or turns off a TV or receiver. `Settings` cycles `TRACK` (`CHANNEL` on TVs), `VOLUME`, `MUTE`, `SOURCE`, `SHUFFLE`, `REPEAT`, `SOUND` and `STATE`; on `TRACK` / `CHANNEL`, `Plus` / `Minus` skip, and on `MUTE`, `Plus` mutes and `Minus` unmutes. A muted player shows a crossed-out speaker (`MUTED` on a TV). |
-| Favorites: Water Heaters | `Circle` on, `Square` off (through the heater's operation modes when it has no on/off of its own). `Settings` cycles `TARGET`, `MODE` and `AWAY`; `Plus` / `Minus` adjust the target within the heater's own minimum and maximum. |
+| Favorites: Media | `Circle` play/pause, or turns on a player that is off or in standby. `Square` stops, or turns off a TV or receiver. `Settings` cycles `TRACK`, `VOLUME` (5% steps), `MUTE`, `SHUFFLE`, `SOURCE`, `REPEAT`, `SOUND` and `STATE` (read-only); a TV has `CHANNEL` after `SHUFFLE` instead of `TRACK`, so it opens on `VOLUME`. On `TRACK` / `CHANNEL`, `Plus` / `Minus` skip; on `MUTE`, `Plus` mutes and `Minus` unmutes; on `SHUFFLE`, `Plus` turns it on and `Minus` off; `REPEAT` steps through off, all and one. A muted player shows a crossed-out speaker (`MUTED` on a TV). |
+| Favorites: Water Heaters | `Circle` on, `Square` off (through the heater's operation modes when it has no on/off of its own). `Settings` cycles `TARGET`, `MODE` and `AWAY`; `Plus` / `Minus` adjust the target within the heater's own minimum and maximum, and on `AWAY`, `Plus` turns away mode on and `Minus` off. |
 | Favorites: Sensors | Read-only: the value, rounded to the decimals it needs, and its unit, or `ON` / `OFF` for binary sensors. Timestamp sensors show the local time. People and device trackers show `HOME`, `AWAY`, or the zone they are in. Events (a doorbell's ring, a button's press) show what last happened and how long ago (`RING`, `4 MIN AGO`), with the badge lit for the first minute; `NONE YET` for one that has never fired. |
 | Favorites: Automation / Script / Scene / Button | `Circle` (held) runs it, or presses a `button` or `input_button` (`PRESSED` when Home Assistant has passed the press on). |
 | Favorites: Numbers and selects | `number` and `input_number`: `Plus` / `Minus` step the value by its own step, within its minimum and maximum, with the value and unit large and a meter across its range. `select` and `input_select`: `Plus` / `Minus` step through the options; the option goes out 1.5 seconds after the last press, since picking one can set off automations. |
@@ -870,7 +876,7 @@ Settings and details only appear when Home Assistant reports them: a light witho
 Mode-specific details:
 
 - Lights: `Circle` turns the light on at its last brightness, and `Square` turns it off. `Plus` on an off light turns it on at 10%.
-- Climate: `Circle` restores the thermostat's last active mode (or the first of heat/cool, heat, cool and auto it supports); `MODE` picks any other HVAC mode, and `Square` shows `NO OFF MODE` on a thermostat without one. Setpoints and humidity stay within the thermostat's own limits. Celsius setpoints step by whole degrees and show half degrees as `21.5°`.
+- Climate: `Circle` turns the thermostat back on in the last mode other than off it was seen in since the remote woke, or, for one that was already off (every wake starts afresh), the first of heat/cool, heat, cool and auto it supports; `MODE` picks any other HVAC mode, and `Square` shows `NO OFF MODE` on a thermostat without one. Setpoints and humidity stay within the thermostat's own limits. Celsius setpoints step by whole degrees and show half degrees as `21.5°`.
 - Fans: on a 3-speed fan, `Plus` / `Minus` move between low, medium and high (33% steps).
 - Media: on a player that reports no volume (for example one that is off), `VOLUME` shows `--`, and `Plus` / `Minus` ask the player to step its volume up or down.
 - Notifications: `Circle` dismisses the selected notification; `◀▶ MORE` shows when there is more than one.
@@ -879,13 +885,13 @@ Mode-specific details:
 
 ## UI Notes
 
-- The remote restores the previously selected menu, item, contrast, and the setting you last picked after wake or reboot.
+- The remote restores the previously selected menu, item, contrast, and the setting you last picked after wake or reboot, as well as the alarm arm mode, the Info page, the notification and the weather detail it was showing.
 - Waking from sleep, the screen shows the item the remote went to sleep on, as it looked then (without the clock, which would be out of date), with `WAITING FOR WI-FI…` and then `CONNECTING…` in the footer, or `WAITING TO SEND…` once you have pressed a button on it. It changes to the live values as soon as Home Assistant sends them, showing `SYNCING…` (`SENDING…` with a press waiting) for at most 2 seconds until then. The frame is kept in the ESP32's RTC memory, which only survives deep sleep: after a power cut, a reboot or an update the remote shows the connecting screens instead.
 - Empty favorite lists are skipped automatically.
 - Holding the wake/power button for `EXTENDED_HOLD_DURATION_MS` reboots the remote. The screen shows `HOLD TO REBOOT` with a bar that fills while you hold, then `REBOOTING` briefly before restart. Releasing before the bar is full puts the remote to sleep.
 - Lock, cover, automation, script and scene actions use long-press protection: the footer's hold bar fills while you hold, and the action fires when it is full. A tap that is too short leaves a `HOLD TO …` reminder in the footer. In automation mode only `Circle` runs the automation; `Square` does nothing.
 - When a favorite entry resolves to a lock, circle locks and square unlocks. The footer shows feedback such as `LOCKING...`, `UNLOCKING...`, `OPENING...`, `LOCKED`, `UNLOCKED`, `OPENED`, `JAMMED`, `ALREADY LOCKED`, `ALREADY UNLOCKED`, and `ALREADY OPEN`, or `LOCK FAILED` / `UNLOCK FAILED` / `OPEN FAILED` if the lock hasn't changed within 15 seconds. A lock opened with `OPEN` goes back to unlocked once the door has been pulled; ending unlocked shows `UNLOCKED`. (Home Assistant doesn't report a device's own errors back, so the remote watches the lock's state.)
-- When a favorite entry resolves to a cover, circle opens and square closes. The footer shows feedback such as `OPENING...`, `CLOSING...`, `OPENED`, `CLOSED`, and `OPEN xx%` (moved, then stopped part-way), or `OPEN FAILED` / `CLOSE FAILED` if the cover hasn't moved within 20 seconds. A cover without state feedback, which Home Assistant reports as `unknown`, shows `SENT`.
+- When a favorite entry resolves to a cover, circle opens and square closes. The footer shows feedback such as `OPENING...`, `CLOSING...`, `OPENED`, `CLOSED`, and `OPEN xx%` (moved, then stopped part-way), or `OPEN FAILED` / `CLOSE FAILED` if the cover hasn't moved within 20 seconds; stopping one shows `STOPPED`, or `STOP FAILED`. A cover without state feedback, which Home Assistant reports as `unknown`, shows `SENT`.
 - When a favorite entry resolves to an automation, script, or scene, the remote shows temporary feedback such as `TRIGGERING...`, `ACTIVATING...`, `RUNNING...`, `TRIGGERED`, `ACTIVATED`, `STARTED`, and `COMPLETED`. A script shows `RUNNING` while it runs, and a running script in single mode shows `ALREADY RUNNING` instead of starting again. An automation shows `TRIGGERED` once Home Assistant records the run (the remote doesn't wait for it to finish), or `NOT RUN` if that hasn't happened within 5 seconds: a single-mode automation that is already running ignores the request. A scene or script request Home Assistant doesn't answer within 10 seconds shows `NO RESPONSE`. Home Assistant ignores every request when the remote may not perform actions (see [A Home Assistant entity does not respond](#a-home-assistant-entity-does-not-respond)).
 - When a favorite entry resolves to a switch, the screen shows `TURNING ON` / `TURNING OFF` until Home Assistant confirms, and `FAILED` if the switch hasn't changed within 5 seconds.
 - When a favorite entry resolves to an alarm, the footer shows the arm modes the panel supports (`AWAY`, `HOME`, `NIGHT`, `VAC`) with the selected one highlighted. `Plus` and `Minus` move the highlight; circle long-press arms with that mode, and square long-press disarms. If the panel is already armed in the selected mode, the footer shows `ALREADY ARMED`.
@@ -894,7 +900,7 @@ Mode-specific details:
 - Info mode includes Time & Date (a large clock with the date as its title), Wireless (signal bars and dBm), Network, Device Name, Battery (a battery gauge and voltage), Version and Favorites (how many favorites and lists, where they come from, and what became of the last update from Home Assistant) screens.
 - Notifications reads from `NOTIFICATION_FEED_ENTITY` in `esphome/local_entities.h`. A notification wraps over up to three lines; an empty feed shows `ALL CAUGHT UP`.
 - System screens: `WI-FI` and then `HOME ASSISTANT` with `CONNECTING…` (and the firmware version) after a power cut, a reboot or an update, `WI-FI LOST` or `HOME ASSISTANT` with `RECONNECTING…` if a connection drops, `LOW BATTERY` / `PLEASE CHARGE` with the voltage for 10 seconds when the battery is below `LOW_BATTERY_VOLTAGE` at wake, and `GOODBYE` / `POWERING OFF` before sleep.
-- The remote sleeps after `SLEEP_DURATION` seconds without a button press, and after `DEEP_SLEEP_DURATION` awake even while in use. The screen dims 10 seconds before it sleeps (when `SLEEP_DURATION` is more than 20 seconds), and any button brings it back. Only Wake / Power wakes it.
+- The remote sleeps after `SLEEP_DURATION` seconds without a button press, and after `DEEP_SLEEP_DURATION` awake even while in use. The screen dims 10 seconds before it sleeps (when `SLEEP_DURATION` is more than 20 seconds), and any button brings it back, doing what it normally does as well. Only Wake / Power wakes it.
 
 ## Supported Home Assistant Entity Domains
 
@@ -918,7 +924,7 @@ Mode-specific details:
 
 Other domains, such as `camera` or `input_text`, aren't supported: the build stops with an error if a favorite uses one.
 
-Each value the remote follows adds a little to how long it takes to sync after a wake (Home Assistant answers one subscription per pass of ESPHome's main loop). The item the remote wakes into, and the rest of its list, sync first.
+Each value the remote follows adds a little to how long it takes to sync after a wake (the remote announces one subscription to Home Assistant per pass of ESPHome's main loop). The item the remote wakes into, and the rest of its list, sync first.
 
 ## Troubleshooting
 
@@ -946,9 +952,9 @@ Create it from the example file, then choose your PCB package in it (see [step 5
 cp esphome/examples/settings-example.yaml esphome/settings.yaml
 ```
 
-### The build stops with "'SOME_SETTING' is undefined"
+### ESPHome warns that "'SOME_SETTING' is undefined"
 
-Your `esphome/settings.yaml` is older than a setting the firmware now uses. Copy that setting's line from [`esphome/examples/settings-example.yaml`](esphome/examples/settings-example.yaml) into the `substitutions:` block of your copy.
+Your `esphome/settings.yaml` is older than a setting the firmware now uses. Copy that setting's line from [`esphome/examples/settings-example.yaml`](esphome/examples/settings-example.yaml) into the `substitutions:` block of your copy. The warning comes early, and the error that stops the build may come much later; a setting used only in text, such as `TEMPERATURE_UNIT`, can even build and then show `${TEMPERATURE_UNIT}` on the remote.
 
 ### `git pull` stops at `esphome/settings.yaml`, or the file is gone after updating
 
@@ -968,7 +974,7 @@ The `VERSION` line in an older copy is no longer used and can be deleted: the ve
 
 ### A favorite list does not appear in the menu
 
-That usually means the corresponding favorite list is empty. Empty favorite lists are intentionally hidden.
+That usually means the corresponding favorite list is empty. Empty favorite lists are intentionally hidden. If you added it in Home Assistant, the remote may not be using the new lists yet: its **Favorites status** sensor says which lists it uses (see the next two entries).
 
 ### Changes to `local_entities.h` don't show up
 
@@ -976,7 +982,7 @@ The remote is using favorite lists from Home Assistant, which take the place of 
 
 ### The remote didn't take new favorite lists from Home Assistant
 
-The **Favorites status** sensor, or the Favorites page in Info, says why, with the line at fault. `Next wake: …` is expected if a button was pressed after the remote woke: it then waits for the next wake rather than restart while you use it (hold the power button to restart it and use them straight away). If the sensor doesn't mention the change, check the template entity has the new `lists` in **Developer tools → States**, and that the remote reads the sensor you edited (`FAVORITES_ENTITY`, `sensor.remote_favorites` by default).
+The **Favorites status** sensor says why, with the line at fault; the Favorites page in Info shows what happened and the line number. `Next wake: …` is expected if a button was pressed after the remote woke, or if it has already restarted once for those same lists: it then waits for the next wake rather than restart (hold the power button to restart it and use them straight away). If the sensor doesn't mention the change, check the template entity has the new `lists` in **Developer tools → States**, and that the remote reads the sensor you edited (`FAVORITES_ENTITY`, `sensor.remote_favorites` by default).
 
 ### A Home Assistant entity does not respond
 
@@ -1009,6 +1015,10 @@ Make sure both of these are true:
 
 A favorite in `esphome/local_entities.h` is missing its `entity_id`, or uses a domain the remote can't control (for example `camera.`, or a typo such as `lights.`). Fix or remove that entry; see [Supported Home Assistant Entity Domains](#supported-home-assistant-entity-domains).
 
+### The build stops with "Too many favorite lists for persisted state" or "a favorite list has more than 64 favorites"
+
+`esphome/local_entities.h` has more lists than `MAX_PERSISTED_FAVORITE_LISTS` in `esphome/settings.yaml` (empty `{"…", nullptr, 0}` lists count too), or a list with more than 64 favorites. Raise the setting (at most 30), or merge or split lists. A setting above 30 stops the build with "current_menu_index is packed into 5 bits".
+
 ### The build stops with "a remote's third field must be apple_tv, android_tv, …"
 
 A `remote.` favorite's third field isn't one of the command set names, or doesn't list seven commands (eight with a device) separated by `|`. See [TV remotes](#tv-remotes-third-field).
@@ -1040,7 +1050,7 @@ esphome logs esphome/remote_control.yaml
 
 Common causes:
 
-- **`chip revision check failed. Required >= vX.Y, found vX.Z`** — `minimum_chip_revision`
+- **`Image requires chip rev >= vX.Y, but chip is vX.Z`**, then `esp_ota_end failed (err=0x1503)` — `minimum_chip_revision`
   in `esphome/remote_control.yaml` is higher than the ESP32 on this board. Lower it to
   match the revision the log reports. ESP32 boards ship with varying revisions, so a
   value that works for one remote can reject another.
@@ -1055,9 +1065,10 @@ Common causes:
 OTA uploads are encrypted with the API `encryption_key`. If the remote runs firmware
 built with an ESPHome older than 2026.9.0, it doesn't offer encryption, and the upload
 stops before sending anything. Flash it once over USB. Alternatively, for that one
-upload, replace `encryption:` under `ota:` in `esphome/remote_control.yaml` with
-`password: !secret ota_password` (and add `ota_password` to `esphome/secrets.yaml`),
-then switch it back.
+upload, delete `encryption:` under `ota:` in `esphome/remote_control.yaml`: ESPHome then
+tries the API key and falls back to an unencrypted upload. If the running firmware has
+an OTA password, add `password:` with that same password. Restore `encryption:`
+afterwards.
 
 ### The remote doesn't boot after an OTA update
 

@@ -6,21 +6,38 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+- The README now matches the firmware in a number of places, among them: a held `Plus`
+  or `Minus` sends its first step at once; when the remote restarts for new favorite
+  lists; the media settings' order; `Previous` and `Next` going round a list; the
+  diagnostic sensors; and the OTA troubleshooting steps.
+
+## 4.11 — 2026-10-05
+- Favorite lists that change while nobody has pressed a button since the remote woke
+  are used straight away: the remote restarts to pick them up (otherwise from the next
+  wake, as before).
+- A new Favorites page in Info shows how many favorites and lists the remote has, where
+  they come from, and what became of the last update from Home Assistant. A remote with
+  no favorites yet opens on it, naming the sensor to add.
+- `home_assistant/remote_favorites_labels.yaml` builds the lists from a "Remote" label
+  instead of writing them out, one list per area.
+- Tests for the favorite lists, the converter and the labels template
+  (`tools/favorites_tests/`), run by CI.
+
+## 4.10 — 2026-10-05
+- The example `local_entities.h` now starts with no favorites; its lists moved to the
+  Home Assistant example. `tools/favorites_to_home_assistant.py` leaves out empty lists,
+  and says so when there is nothing to convert. Your own copies of the Home Assistant
+  files can be named `home_assistant/*.local.yaml`, which git ignores.
 
 ## 4.9 — 2026-10-05
 - Favorite lists can live in Home Assistant, so changing them no longer means
   rebuilding the firmware. Add the template sensor in
   `home_assistant/remote_favorites.yaml` (`tools/favorites_to_home_assistant.py` writes
   it from your `local_entities.h`). The remote checks the lists as they arrive, keeps
-  them in flash, and restarts to use them straight away if nobody has pressed a button
-  since it woke (otherwise from the next wake). Its new **Favorites status** sensor, and a
-  new Favorites page in Info, say which lists it uses and why it turned down an update; a
-  remote with no favorites yet opens on that page.
-  `home_assistant/remote_favorites_labels.yaml` builds the lists from a "Remote" label
-  instead, one list per area. Without the sensor, `local_entities.h` works as before; set
-  `#define FAVORITES_ENTITY ""` to ignore Home Assistant's lists. The example
-  `local_entities.h` now starts with no favorites; its lists moved to the Home Assistant
-  example.
+  them in flash, and uses them from the next wake; the first ones restart it to use them
+  straight away. Its new **Favorites status** sensor says which lists it uses, and why
+  it turned down an update. Without the sensor, `local_entities.h` works as before; set
+  `#define FAVORITES_ENTITY ""` to ignore Home Assistant's lists.
 
 ## 4.8 — 2026-10-04
 - A press made while the remote is still connecting after a wake now waits and goes out
