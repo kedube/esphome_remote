@@ -1,7 +1,7 @@
 substitutions:
   # Firmware version shown on the boot and Info screens. The release workflow
   # bumps it; set it by hand only to choose the next release's number.
-  VERSION: "4.9"
+  VERSION: "4.10"
   ALARM_CODE: !secret alarm_code
   PIN_WAKE: "0"
   PIN_I2C_SDA: "27"
