@@ -43,7 +43,7 @@ If you just want to get the remote running:
 
 1. Install ESPHome.
 2. Copy [`esphome/examples/secrets-example.yaml`](esphome/examples/secrets-example.yaml) to [`esphome/secrets.yaml`](esphome/secrets.yaml) and fill in your Wi-Fi details and an API encryption key.
-3. Copy [`esphome/examples/local_entities-example.h`](esphome/examples/local_entities-example.h) to [`esphome/local_entities.h`](esphome/local_entities.h) and define your favorite lists, or keep them in Home Assistant (see [Favorites from Home Assistant](#favorites-from-home-assistant)).
+3. Copy [`esphome/examples/local_entities-example.h`](esphome/examples/local_entities-example.h) to [`esphome/local_entities.h`](esphome/local_entities.h), and add your favorite lists to Home Assistant (see [Favorites from Home Assistant](#favorites-from-home-assistant)).
 4. Copy [`esphome/examples/settings-example.yaml`](esphome/examples/settings-example.yaml) to `esphome/settings.yaml` and choose the correct PCB package.
 5. Connect the remote over USB and run `esphome run esphome/remote_control.yaml` (the first flash must be over USB).
 6. Add the remote to Home Assistant and allow it to perform Home Assistant actions (see [step 8](#8-add-the-remote-to-home-assistant)).
@@ -366,52 +366,19 @@ alarm_code: ""
 
 ## 4. Create Your Favorite Lists
 
-Copy the example favorite-list file:
+Copy the example file:
 
 ```bash
 cp esphome/examples/local_entities-example.h esphome/local_entities.h
 ```
 
-Edit `esphome/local_entities.h` so it matches your Home Assistant setup.
+It starts with no favorites: the remote takes its lists from Home Assistant, so you can change them without rebuilding the firmware (see below). To build them into the firmware instead, list them in `esphome/local_entities.h` (see [Lists in the firmware](#lists-in-the-firmware)).
 
-The file now only needs favorite lists. Each `FavoriteEntity` entry provides a display name and a Home Assistant `entity_id`, and the remote infers the entity type from the `entity_id` prefix such as `light.`, `switch.`, `climate.`, `weather.`, and so on.
-
-You can define up to `MAX_PERSISTED_FAVORITE_LISTS` lists (16 by default, at most 30), each with up to 64 entries. A list with no entries is skipped in the menu; write it as `{"OUTDOOR", nullptr, 0}` in `FAVORITE_LISTS`, since an empty `FavoriteEntity` array doesn't compile.
-
-Every entry needs an `entity_id` in a [supported domain](#supported-home-assistant-entity-domains); the build stops with an error otherwise.
-
-_Example:_
-
-```cpp
-inline constexpr FavoriteEntity MAIN_FAVORITES[] = {
-  {"Living Room Lamp", "light.living_room_lamp"},
-  {"Bedroom TV", "media_player.bedroom_tv"},
-  {"Main Thermostat", "climate.main_thermostat"},
-  {"Front Door", "lock.front_door"},
-};
-
-inline constexpr FavoriteList FAVORITE_LISTS[] = {
-  make_favorite_list("MAIN", MAIN_FAVORITES),
-};
-```
-
-Minimal multi-list example:
-
-```cpp
-inline constexpr FavoriteEntity UPSTAIRS_FAVORITES[] = {
-  {"Hallway Thermostat", "climate.hallway_thermostat"},
-  {"Bedroom Fan", "fan.bedroom_fan"},
-};
-
-inline constexpr FavoriteList FAVORITE_LISTS[] = {
-  make_favorite_list("UPSTAIRS", UPSTAIRS_FAVORITES),
-  {"OUTDOOR", nullptr, 0},  // nothing here yet: hidden from the menu
-};
-```
+The file also holds the optional settings below: light warmth and colour, and Notifications.
 
 ### Favorites from Home Assistant
 
-Home Assistant can hold the favorite lists instead, so you can change them without rebuilding the firmware. Add a template sensor whose `lists` attribute holds them as text. Copy [`home_assistant/remote_favorites.yaml`](home_assistant/remote_favorites.yaml) into your Home Assistant configuration, or include it as a package:
+The remote reads its favorite lists from a Home Assistant template sensor whose `lists` attribute holds them as text. Copy [`home_assistant/remote_favorites.yaml`](home_assistant/remote_favorites.yaml) into your Home Assistant configuration, or include it as a package, and replace the example lists with yours:
 
 ```yaml
 template:
@@ -451,6 +418,45 @@ How the remote uses the lists:
 
 The remote's **Favorites status** sensor in Home Assistant says which lists it uses, and when it didn't take an update, why, with the line at fault: for example `Not used: line 7: Light.Office isn't an entity ID (lower-case letters, digits and _, with one dot). Still using the previous list.`
 
+### Lists in the firmware
+
+To build the lists into the firmware, define them in `esphome/local_entities.h`. The remote uses them until it has lists from Home Assistant, or always with `#define FAVORITES_ENTITY ""`.
+
+Each `FavoriteEntity` entry provides a display name and a Home Assistant `entity_id`, and the remote infers the entity type from the `entity_id` prefix such as `light.`, `switch.`, `climate.`, `weather.`, and so on.
+
+You can define up to `MAX_PERSISTED_FAVORITE_LISTS` lists (16 by default, at most 30), each with up to 64 entries. A list with no entries is skipped in the menu; write it as `{"OUTDOOR", nullptr, 0}` in `FAVORITE_LISTS`, since an empty `FavoriteEntity` array doesn't compile.
+
+Every entry needs an `entity_id` in a [supported domain](#supported-home-assistant-entity-domains); the build stops with an error otherwise.
+
+_Example:_
+
+```cpp
+inline constexpr FavoriteEntity MAIN_FAVORITES[] = {
+  {"Living Room Lamp", "light.living_room_lamp"},
+  {"Bedroom TV", "media_player.bedroom_tv"},
+  {"Main Thermostat", "climate.main_thermostat"},
+  {"Front Door", "lock.front_door"},
+};
+
+inline constexpr FavoriteList FAVORITE_LISTS[] = {
+  make_favorite_list("MAIN", MAIN_FAVORITES),
+};
+```
+
+Minimal multi-list example:
+
+```cpp
+inline constexpr FavoriteEntity UPSTAIRS_FAVORITES[] = {
+  {"Hallway Thermostat", "climate.hallway_thermostat"},
+  {"Bedroom Fan", "fan.bedroom_fan"},
+};
+
+inline constexpr FavoriteList FAVORITE_LISTS[] = {
+  make_favorite_list("UPSTAIRS", UPSTAIRS_FAVORITES),
+  {"OUTDOOR", nullptr, 0},  // nothing here yet: hidden from the menu
+};
+```
+
 ### Light warmth and colour (optional)
 
 Lights with a colour temperature get a `WARMTH` setting, and lights that take a colour a `COLOR` setting. Following them costs Home Assistant subscriptions: three per light for warmth and one per light for colour. With many lights a wake takes a little longer before every light has synced (the item the remote wakes into, and its list, still sync first). To go without either, add these lines to `esphome/local_entities.h`:
@@ -462,7 +468,15 @@ Lights with a colour temperature get a `WARMTH` setting, and lights that take a 
 
 ### TV remotes (third field)
 
-A TV or streaming box's `remote` entity takes a third field naming the commands it understands, since each Home Assistant integration names its keys differently:
+A TV or streaming box's `remote` entity takes a third field naming the commands it understands, since each Home Assistant integration names its keys differently. In the lists in Home Assistant:
+
+```text
+#DEN
+TV|media_player.den_tv
+TV Remote|remote.den_tv|samsung
+```
+
+or in `local_entities.h`:
 
 ```cpp
 inline constexpr FavoriteEntity DEN_FAVORITES[] = {
@@ -482,16 +496,24 @@ inline constexpr FavoriteEntity DEN_FAVORITES[] = {
 
 For anything else, list the seven commands yourself, in that order and separated by `|`. A Harmony hub also needs the device the commands go to, as an eighth item (the commands are the ones the Harmony app lists for that device):
 
-```cpp
-  {"Harmony", "remote.living_room", "DirectionUp|DirectionDown|DirectionLeft|DirectionRight|Select|Back|Home|Samsung TV"},
+```text
+Harmony|remote.living_room|DirectionUp|DirectionDown|DirectionLeft|DirectionRight|Select|Back|Home|Samsung TV
 ```
 
-Without a third field, a remote only offers its `ACTIVITY` list, if it has one. A third field that is neither a name above nor seven or eight commands stops the build with an error. Which keys a TV accepts can vary by model; one it rejects shows `COMMAND FAILED`. Turn the TV on and off from its media player favorite: Home Assistant's `remote.turn_on` and `remote.turn_off` mean different things to different integrations (for an Apple TV they only connect or disconnect Home Assistant).
+or `{"Harmony", "remote.living_room", "DirectionUp|…|Home|Samsung TV"}` in `local_entities.h`.
+
+Without a third field, a remote only offers its `ACTIVITY` list, if it has one. A third field that is neither a name above nor seven or eight commands stops the build with an error, or in the lists from Home Assistant makes the remote turn them down. Which keys a TV accepts can vary by model; one it rejects shows `COMMAND FAILED`. Turn the TV on and off from its media player favorite: Home Assistant's `remote.turn_on` and `remote.turn_off` mean different things to different integrations (for an Apple TV they only connect or disconnect Home Assistant).
 
 ### Media player sources (optional third field)
 
 A favorite entry accepts an optional third field listing selectable sources, separated
-by `|`:
+by `|`. In the lists in Home Assistant:
+
+```text
+Speaker|media_player.living_room_speaker|Spotify|Radio|Line In
+```
+
+or in `local_entities.h`:
 
 ```cpp
 inline constexpr FavoriteEntity LIVING_ROOM_FAVORITES[] = {

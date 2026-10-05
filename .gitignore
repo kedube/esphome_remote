@@ -10,6 +10,7 @@ esphome/.esphome/
 esphome/secrets.yaml
 esphome/local_entities.h
 esphome/settings.yaml
+home_assistant/*.local.yaml
 .vscode/settings.json
 # Your own fonts, such as trial or commercial fonts that can't be redistributed
 assets/fonts/local/

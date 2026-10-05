@@ -138,8 +138,11 @@ def main() -> None:
 
     lines = []
     for title, entries in read_lists(args.path):
-        lines.append(f"#{title}")
-        lines.extend("|".join(entry) for entry in entries)
+        if entries:
+            lines.append(f"#{title}")
+            lines.extend("|".join(entry) for entry in entries)
+    if not lines:
+        sys.exit(f"{args.path}: no favorites to convert")
     for line in lines:
         # Home Assistant reads the attribute as a template.
         if "{{" in line or "{%" in line or "{#" in line:

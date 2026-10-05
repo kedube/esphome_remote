@@ -15,7 +15,9 @@ rotates that section into a version heading and publishes it as the release's Hi
   them in flash, and uses them from the next wake; the first ones restart it to use them
   straight away. Its new **Favorites status** sensor says which lists it uses, and why
   it turned down an update. Without the sensor, `local_entities.h` works as before; set
-  `#define FAVORITES_ENTITY ""` to ignore Home Assistant's lists.
+  `#define FAVORITES_ENTITY ""` to ignore Home Assistant's lists. The example
+  `local_entities.h` now starts with no favorites; its lists moved to the Home Assistant
+  example.
 
 ## 4.8 — 2026-10-04
 - A press made while the remote is still connecting after a wake now waits and goes out
