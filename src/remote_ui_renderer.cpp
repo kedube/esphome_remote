@@ -2022,6 +2022,12 @@ void render_system_screen(display::Display *it, const RemoteUiFonts &fonts, Remo
       detail = "BE RIGHT BACK";
       lit = true;
       break;
+    case REMOTE_SCREEN_NEW_FAVORITES:
+      glyph = icon::RESTART;
+      headline = "NEW FAVORITES";
+      detail = "RESTARTING";
+      lit = true;
+      break;
   }
   draw_badge(it, f, glyph, lit, 64, 15, 13);
   text_fit(it, f.title, 64, 42, TextAlign::BASELINE_CENTER, headline, SCREEN_W);

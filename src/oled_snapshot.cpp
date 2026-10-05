@@ -124,4 +124,11 @@ bool oled_snapshot_shows(const std::string &entity, int preferred) {
 
 int oled_snapshot_setting() { return oled_snapshot_valid() ? rtc_snapshot.setting : -1; }
 
+bool oled_snapshot_entity_is(const char *entity) {
+  return oled_snapshot_valid() && entity != nullptr && entity[0] != '\0' &&
+         rtc_snapshot.entity_hash == text_hash(entity);
+}
+
+void oled_snapshot_discard() { rtc_snapshot.magic = 0; }
+
 }  // namespace esphome

@@ -243,7 +243,7 @@ int main() {
     draw_every_screen("on", r);
   }
 
-  for (int screen = REMOTE_SCREEN_CONNECTING_WIFI; screen <= REMOTE_SCREEN_REBOOTING; screen++) {
+  for (int screen = REMOTE_SCREEN_CONNECTING_WIFI; screen <= REMOTE_SCREEN_NEW_FAVORITES; screen++) {
     for (const std::string &s : text) {
       for (Reading r : extreme) {
         RemoteSystemScreenInfo info;

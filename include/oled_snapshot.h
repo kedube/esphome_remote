@@ -40,4 +40,10 @@ bool oled_snapshot_shows(const std::string &entity, int preferred);
 // The setting the frame from before sleep shows; -1 when there is none.
 int oled_snapshot_setting();
 
+// Whether the frame from before sleep shows this entity.
+bool oled_snapshot_entity_is(const char *entity);
+
+// Forgets the frame from before sleep.
+void oled_snapshot_discard();
+
 }  // namespace esphome

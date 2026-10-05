@@ -689,6 +689,7 @@ int main(int argc, char **argv) {
     hold.progress = 40;
     sys("45_sys_hold_reboot", REMOTE_SCREEN_HOLD_TO_REBOOT, hold);
     sys("46_sys_rebooting", REMOTE_SCREEN_REBOOTING, info);
+    sys("47_sys_new_favorites", REMOTE_SCREEN_NEW_FAVORITES, info);
   }
 
   const char *out_dir = argc > 1 ? argv[1] : ".";

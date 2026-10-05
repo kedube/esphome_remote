@@ -16,6 +16,8 @@ esphome:
       # Forced sleep (run_duration), the hold-to-reboot and OTA restarts skip
       # turn_off, so save the UI state here too.
       - script.execute: persist_ui_state
+      # Keeps favorite lists Home Assistant changed while the remote was awake.
+      - lambda: 'favorites_save_pending();'
       - script.execute: clear_display_for_sleep
 
 sensor:

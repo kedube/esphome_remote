@@ -57,6 +57,25 @@ script:
       - lambda: |-
           App.safe_reboot();
 
+  # The first favorite lists from Home Assistant arrived and are saved:
+  # restart to use them (see favorites_store.h).
+  - id: restart_for_new_favorites
+    mode: single
+    then:
+      - script.stop: update_display
+      - script.stop: show_hold_to_reboot_screen
+      - lambda: |-
+          id(system_screen_active) = true;
+          auto it = id(oled_display);
+          if (it->is_failed() || !it->is_ready()) {
+            return;
+          }
+          render_system_screen(it, remote_ui_fonts, REMOTE_SCREEN_NEW_FAVORITES, RemoteSystemScreenInfo{});
+          it->display();
+      - delay: ${REBOOT_MESSAGE_DURATION_MS}ms
+      - lambda: |-
+          App.safe_reboot();
+
   - id: clear_display_for_sleep
     mode: single
     then:
@@ -110,6 +129,7 @@ script:
           state.selected_setting_option = id(preferred_setting_option);
           state.selected_weather_detail_index = id(selected_weather_detail_index);
           state.selected_alarm_arm_mode = id(selected_alarm_arm_mode);
+          state.selected_entity_hash = ui_state_entity_hash(id(selected_item_entity));
           id(persisted_ui_state) = pack_persisted_ui_state(state);
           id(persisted_ui_state_aux) = pack_persisted_ui_state_aux(state);
 

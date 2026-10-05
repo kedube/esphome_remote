@@ -13,9 +13,33 @@ sensor:
     accuracy_decimals: 0
     update_interval: never
 
+# What the remote is using for favorites, and what became of the last lists
+# Home Assistant published (see Favorites from Home Assistant in the README).
+text_sensor:
+  - platform: template
+    id: favorites_status
+    name: "Favorites status"
+    icon: "mdi:star"
+    entity_category: diagnostic
+    update_interval: never
+
 interval:
   - interval: 500ms
     then:
+      # The first favorite lists from Home Assistant arrived.
+      - if:
+          condition:
+            lambda: 'return favorites_restart_requested();'
+          then:
+            - if:
+                condition:
+                  and:
+                    - not:
+                        script.is_running: restart_for_new_favorites
+                    - not:
+                        script.is_running: turn_off
+                then:
+                  - script.execute: restart_for_new_favorites
       - if:
           condition:
             lambda: |-

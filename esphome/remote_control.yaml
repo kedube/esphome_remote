@@ -53,6 +53,9 @@ esphome:
     - ../include/entity_helpers.h
     - ../include/entity_trackers.h
     - ../include/entity_helpers_common.h
+    # After entity_helpers_common.h, which includes local_entities.h first.
+    - ../include/favorites_lists.h
+    - ../include/favorites_store.h
     - ../include/remote_ui_bindings.h
     - ../include/remote_ui_feedback.h
     - ../include/remote_ui_input_logic.h
@@ -72,6 +75,7 @@ esphome:
     - ../src/remote_ui_renderer.cpp
     - ../src/remote_ui_sync.cpp
     - ../src/remote_ui_runtime.cpp
+    - ../src/favorites_store.cpp
     - local_entities.h
   on_boot:
     # Bind the C++ UI helpers to the globals before any script can use them.
@@ -160,9 +164,12 @@ esphome:
       then:
         - lambda: |-
             id(last_active) = millis() / 1000;
+            // Loads the favorite lists: the ones saved from Home Assistant, or
+            // local_entities.h.
+            favorites_set_status_listener([](const std::string &status) { id(favorites_status).publish_state(status); });
             PersistedUIStateData restored = unpack_persisted_ui_state(id(persisted_ui_state), id(persisted_ui_state_aux));
 
-            if (menu_index_is_favorite(restored.current_menu_index) && restored.current_menu_index < FAVORITE_LIST_COUNT_INT) {
+            if (menu_index_is_favorite(restored.current_menu_index)) {
               favorite_selected_index_ref(restored.current_menu_index) = restored.current_favorite_index;
             }
             id(selected_notification_index) = restored.selected_notification_index;
@@ -180,6 +187,7 @@ esphome:
             id(oled_display).set_contrast(id(contrast) * 1.0f / 10.0f);
 
             id(current_menu_index) = clamp_menu_index(restored.current_menu_index);
+            follow_saved_selection(id(current_menu_index), restored.selected_entity_hash, id(selected_info_index));
             id(current_mode) = restored.current_mode >= 0 && restored.current_mode < REMOTE_MODE_COUNT
                 ? restored.current_mode
                 : REMOTE_MODE_INFO;

@@ -51,6 +51,12 @@ inline constexpr FavoriteList FAVORITE_LISTS[] = {
 // per light; uncomment to go without.
 // #define LIGHT_COLOR 0
 
+// Favorite lists from Home Assistant (see Favorites from Home Assistant in the
+// README) replace the ones above once the remote has them. It reads
+// sensor.remote_favorites unless you name another sensor here; set it to ""
+// to use only the lists above.
+// #define FAVORITES_ENTITY "sensor.remote_favorites"
+
 // Optional notifications mode. Leave NOTIFICATION_FEED_ENTITY undefined or set it
 // to an empty string to hide Notifications from the UI entirely.
 #define NOTIFICATION_FEED_ENTITY "sensor.remote_notifications"

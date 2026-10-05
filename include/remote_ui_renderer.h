@@ -242,6 +242,7 @@ enum RemoteSystemScreen {
   REMOTE_SCREEN_POWERING_OFF,
   REMOTE_SCREEN_HOLD_TO_REBOOT,
   REMOTE_SCREEN_REBOOTING,
+  REMOTE_SCREEN_NEW_FAVORITES,  // restarting to use the first lists from Home Assistant
 };
 
 struct RemoteSystemScreenInfo {

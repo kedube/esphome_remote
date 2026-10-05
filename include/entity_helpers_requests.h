@@ -1,12 +1,17 @@
 #pragma once
 
 #include <ctime>
+#include <type_traits>
+
+#include <esp_heap_caps.h>
 
 #include "entity_trackers.h"
+#include "oled_snapshot.h"
+#include "ui_state_helpers.h"
 #include "remote_ui_runtime.h"
 
 inline LightStatusTracker light_status_tracker_storage;
-inline SwitchStatusTracker switch_status_tracker_storage(SWITCH_LIST);
+inline SwitchStatusTracker switch_status_tracker_storage(REMOTE_MODE_SWITCHES);
 inline FanStatusTracker fan_status_tracker_storage;
 inline HumidifierStatusTracker humidifier_status_tracker_storage;
 inline ClimateStatusTracker climate_status_tracker_storage;
@@ -43,7 +48,7 @@ struct TrackerSubscriptionOrder {
       return 0;
     }
     for (int i = 0; i < favorite_list_item_count(this->favorite_list_index); i++) {
-      if (strcmp(entity_id, FAVORITE_LISTS[this->favorite_list_index].entries[i].entity_id) == 0) {
+      if (strcmp(entity_id, favorite_list_entry(this->favorite_list_index, i)->entity_id) == 0) {
         return 1;
       }
     }
@@ -67,11 +72,69 @@ inline TrackerSubscriptionOrder tracker_subscription_order_for_menu(int menu_ind
 
 template <typename Tracker>
 inline void subscribe_tracker_rank(Tracker &tracker, const TrackerSubscriptionOrder &order, int rank) {
-  for (int i = 0; i < Tracker::COUNT; i++) {
+  for (int i = 0; i < tracker.count(); i++) {
     if (order.rank(tracker.entity_id(i)) == rank) {
       tracker.subscribe(i);
     }
   }
+}
+
+// Calls fn on every entity tracker.
+template <typename Fn>
+inline void for_each_entity_tracker(Fn fn) {
+  fn(light_status_tracker_storage);
+  fn(switch_status_tracker_storage);
+  fn(fan_status_tracker_storage);
+  fn(humidifier_status_tracker_storage);
+  fn(climate_status_tracker_storage);
+  fn(water_heater_status_tracker_storage);
+  fn(lock_status_tracker_storage);
+  fn(cover_status_tracker_storage);
+  fn(media_status_tracker_storage);
+  fn(sensor_status_tracker_storage);
+  fn(automation_status_tracker_storage);
+  fn(alarm_status_tracker_storage);
+  fn(weather_status_tracker_storage);
+  fn(input_status_tracker_storage);
+  fn(vacuum_status_tracker_storage);
+  fn(timer_status_tracker_storage);
+  fn(remote_status_tracker_storage);
+}
+
+// About how much memory the trackers and their subscriptions take for a set
+// of favorite lists. Values Home Assistant sends (titles, option lists) come
+// on top.
+inline size_t favorites_memory_estimate(const FavoriteSet &favorites) {
+  constexpr size_t SUBSCRIPTION_BYTES = sizeof(esphome::api::APIServer::HomeAssistantStateSubscription);
+  size_t bytes = favorites.text().size() + favorites.favorite_count() * 2 * sizeof(FavoriteEntity);
+  for_each_entity_tracker([&](auto &tracker) {
+    using Tracker = std::remove_reference_t<decltype(tracker)>;
+    // The API server keeps its subscriptions in a vector, which can hold
+    // twice what it uses.
+    bytes += favorites.mode_count(tracker.tracked_mode()) *
+             (sizeof(typename Tracker::SlotType) + Tracker::SUBSCRIPTIONS * 2 * SUBSCRIPTION_BYTES);
+  });
+  return bytes;
+}
+
+// Memory the remote keeps free for everything else: values Home Assistant
+// sends, Wi-Fi and the API connection.
+inline constexpr size_t FAVORITES_MEMORY_RESERVE = 16 * 1024;
+
+// Whether new lists from Home Assistant fit in memory alongside everything
+// else, judged by what the lists in use take and what is free now.
+inline std::string favorites_fit_in_memory(const FavoriteSet &candidate, const FavoriteSet &current) {
+  size_t need = favorites_memory_estimate(candidate);
+  size_t free_now = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+  size_t available = favorites_memory_estimate(current) + free_now;
+  ESP_LOGI("favorites", "New lists need about %u bytes; %u in use, %u free", static_cast<unsigned>(need),
+           static_cast<unsigned>(favorites_memory_estimate(current)), static_cast<unsigned>(free_now));
+  if (need + FAVORITES_MEMORY_RESERVE <= available) {
+    return "";
+  }
+  size_t room = available > FAVORITES_MEMORY_RESERVE ? available - FAVORITES_MEMORY_RESERVE : 0;
+  return "too big for the remote's memory: it needs about " + std::to_string((need + 1023) / 1024) +
+         " KB, and about " + std::to_string(room / 1024) + " KB is free for favorites";
 }
 
 // Sets up all trackers once. State is delivered exclusively through the
@@ -81,6 +144,9 @@ inline void subscribe_tracker_rank(Tracker &tracker, const TrackerSubscriptionOr
 // a tracker — issuing explicit fetches via get_home_assistant_state() would
 // permanently grow the API server's subscription vector without ever being
 // announced to Home Assistant once the handshake is done.
+//
+// The favorite lists Home Assistant publishes come last: they are only used
+// from the next wake, so nothing on screen waits for them.
 //
 // on_boot calls this with the restored selection; the lazy calls from the
 // accessors below are a fallback and use the default (declaration) order.
@@ -94,6 +160,7 @@ inline void ensure_remote_status_trackers(const TrackerSubscriptionOrder &order 
     return;
   }
   validate_remote_configuration();
+  for_each_entity_tracker([](auto &tracker) { tracker.allocate(); });
   for (int rank = 0; rank < TrackerSubscriptionOrder::RANK_COUNT; rank++) {
     subscribe_tracker_rank(light_status_tracker_storage, order, rank);
     subscribe_tracker_rank(switch_status_tracker_storage, order, rank);
@@ -116,10 +183,70 @@ inline void ensure_remote_status_trackers(const TrackerSubscriptionOrder &order 
     subscribe_tracker_rank(timer_status_tracker_storage, order, rank);
     subscribe_tracker_rank(remote_status_tracker_storage, order, rank);
   }
-  if (WEATHER_LIST_COUNT > 0) {
+  if (mode_entity_count(REMOTE_MODE_WEATHER) > 0) {
     sun_state_tracker_storage.subscribe();
   }
+  if (favorites_from_home_assistant_enabled()) {
+    ha_subscribe(FAVORITES_ENTITY, FAVORITES_ATTRIBUTE, [](esphome::StringRef state) {
+      favorites_received(state.c_str(), state.size(), favorites_fit_in_memory);
+    });
+  }
   remote_status_trackers_initialized = true;
+}
+
+// The entity the menu position selects at boot: a favorite, the
+// notification feed or an Info page.
+inline const char *menu_position_entity(int menu_index, int info_index) {
+  if (menu_index_is_favorite(menu_index)) {
+    const FavoriteEntity *entry = favorite_list_entry(menu_index, favorite_selected_index_ref(menu_index));
+    return entry != nullptr ? entry->entity_id : "";
+  }
+  if (menu_index_is_notifications(menu_index)) {
+    return NotificationFeedTracker::entity_cstr();
+  }
+  return indexed_value_cstr(INFO_ITEM_ENTITIES, INFO_ITEM_COUNT, info_index);
+}
+
+// The item the remote was on before it slept or restarted, by the hash
+// persist_ui_state kept of its entity. The saved menu position is a number,
+// so when the favorite lists have changed it may now hold another item, or
+// Notifications and Info (which follow the lists) may have moved: find the
+// item in the lists in use, the same list first. Then drops the wake
+// snapshot if the remote isn't on what it shows.
+inline void follow_saved_selection(int &menu_index, uint32_t saved_hash, int info_index) {
+  auto is_saved = [saved_hash](const char *entity) {
+    return entity != nullptr && entity[0] != '\0' && ui_state_entity_hash(entity) == saved_hash;
+  };
+  if (saved_hash != 0 && !is_saved(menu_position_entity(menu_index, info_index))) {
+    bool found = false;
+    if (notifications_mode_enabled() && is_saved(NotificationFeedTracker::entity_cstr())) {
+      menu_index = notifications_menu_index();
+      found = true;
+    }
+    for (int i = 0; i < INFO_ITEM_COUNT && !found; i++) {
+      if (is_saved(INFO_ITEM_ENTITIES[i])) {
+        menu_index = info_menu_index();
+        found = true;
+      }
+    }
+    for (int pass = 0; pass < 2 && !found; pass++) {
+      for (int list = 0; list < favorite_list_count() && !found; list++) {
+        if ((pass == 0) != (list == menu_index)) {
+          continue;
+        }
+        for (int item = 0; item < favorite_list_item_count(list) && !found; item++) {
+          if (is_saved(favorite_list_entry(list, item)->entity_id)) {
+            menu_index = list;
+            favorite_selected_index_ref(list) = item;
+            found = true;
+          }
+        }
+      }
+    }
+  }
+  if (esphome::oled_snapshot_valid() && !esphome::oled_snapshot_entity_is(menu_position_entity(menu_index, info_index))) {
+    esphome::oled_snapshot_discard();
+  }
 }
 
 inline const std::string &selected_light_state(int idx) {
@@ -580,7 +707,7 @@ inline bool selected_cover_is_valve(int idx) {
 // The service that does verb ("open", "close", "stop") to this cover or valve:
 // cover.open_cover, valve.stop_valve.
 inline std::string cover_action_for_index(int idx, const char *verb) {
-  return cover_domain_action(indexed_entity_id_cstr(COVER_LIST, COVER_LIST_COUNT, idx), verb);
+  return cover_domain_action(mode_item_entity_cstr(REMOTE_MODE_COVERS, idx), verb);
 }
 
 inline const std::string &selected_media_state(int idx) {
@@ -793,7 +920,7 @@ inline const std::string &notification_id_for_index(int idx) {
 }
 
 inline const char *weather_entity_id_for_index(int idx) {
-  return idx >= 0 && idx < WEATHER_LIST_COUNT ? WEATHER_LIST[idx].entity_id : "";
+  return mode_item_entity_cstr(REMOTE_MODE_WEATHER, idx);
 }
 
 // Whether fetch_weather_forecast should ask now: once per wake, again if Home

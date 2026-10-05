@@ -30,6 +30,7 @@ The firmware has been entirely rewritten from scratch based on a newly designed 
 - Arrows, OK, Back and Home for Apple TV, Android TV, Roku, Samsung, Bravia and Philips TVs through Home Assistant's remote entities
 - Multiple board package options for different PCB revisions
 - Favorite-list navigation with mixed Home Assistant entity types in each list
+- Favorite lists kept in Home Assistant, so changing them doesn't mean reflashing (optional; otherwise they're built into the firmware)
 - Automatic hiding of empty favorite lists and optional Notifications mode
 - Persistent restore of the current menu, selected item, contrast, and the setting you last picked after wake or reboot
 - Notification, weather, and detailed info screens for time/date, wireless, network, device name, battery, and version
@@ -42,7 +43,7 @@ If you just want to get the remote running:
 
 1. Install ESPHome.
 2. Copy [`esphome/examples/secrets-example.yaml`](esphome/examples/secrets-example.yaml) to [`esphome/secrets.yaml`](esphome/secrets.yaml) and fill in your Wi-Fi details and an API encryption key.
-3. Copy [`esphome/examples/local_entities-example.h`](esphome/examples/local_entities-example.h) to [`esphome/local_entities.h`](esphome/local_entities.h) and define your favorite lists.
+3. Copy [`esphome/examples/local_entities-example.h`](esphome/examples/local_entities-example.h) to [`esphome/local_entities.h`](esphome/local_entities.h) and define your favorite lists, or keep them in Home Assistant (see [Favorites from Home Assistant](#favorites-from-home-assistant)).
 4. Copy [`esphome/examples/settings-example.yaml`](esphome/examples/settings-example.yaml) to `esphome/settings.yaml` and choose the correct PCB package.
 5. Connect the remote over USB and run `esphome run esphome/remote_control.yaml` (the first flash must be over USB).
 6. Add the remote to Home Assistant and allow it to perform Home Assistant actions (see [step 8](#8-add-the-remote-to-home-assistant)).
@@ -191,12 +192,15 @@ esphome_remote/
 │   ├── secrets.yaml           # your copy of the example; local-only
 │   └── settings.yaml          # your copy of the example; local-only
 ├── home_assistant/
+│   ├── remote_favorites.yaml
 │   └── remote_notifications.yaml
 ├── include/
 │   ├── entity_helpers_common.h
 │   ├── entity_helpers.h
 │   ├── entity_helpers_requests.h
 │   ├── entity_trackers.h
+│   ├── favorites_lists.h
+│   ├── favorites_store.h
 │   ├── framebuffer_web_debug.h
 │   ├── local_entities.h
 │   ├── oled_snapshot.h
@@ -214,6 +218,7 @@ esphome_remote/
 │   └── remote_UI-*.png
 ├── platformio.ini
 ├── src/
+│   ├── favorites_store.cpp
 │   ├── framebuffer_web_debug.cpp
 │   ├── oled_snapshot.cpp
 │   ├── remote_ui_feedback.cpp
@@ -223,6 +228,7 @@ esphome_remote/
 │   ├── remote_ui_runtime.cpp
 │   └── remote_ui_sync.cpp
 └── tools/
+    ├── favorites_to_home_assistant.py
     ├── pio_esphome_bridge.py
     └── ui_preview/
         ├── preview.py
@@ -251,6 +257,10 @@ esphome_remote/
   Example entity definitions and favorite lists you can copy and customize.
 - `include/local_entities.h`
   Compatibility shim that forwards to `esphome/local_entities.h`.
+- `include/favorites_lists.h`, `include/favorites_store.h` and `src/favorites_store.cpp`
+  The favorite lists the remote uses: reading and checking the lists Home Assistant publishes, keeping them in flash, and choosing between them and `local_entities.h` at boot.
+- `home_assistant/remote_favorites.yaml` and `tools/favorites_to_home_assistant.py`
+  The Home Assistant template sensor that holds the favorite lists, and a script that writes it from your `local_entities.h`.
 - `esphome/packages/`
   Modular ESPHome packages for actions, button/input handling, runtime behavior, display globals, fonts, and UI scripts.
 - `src/remote_ui_renderer.cpp` and `include/remote_ui_renderer.h`
@@ -273,11 +283,13 @@ esphome_remote/
 - `esphome/remote_control.yaml`
   Top-level composition file: imports the packages and C++ helpers, and holds the I2C bus, the display, Wi-Fi, the API, OTA and deep sleep.
 - `include/entity_helpers_common.h`
-  Favorite-list plumbing (including the build-time check that every favorite has a supported `entity_id`), per-domain indexing, selection helpers, and configuration validation.
+  Favorite-list plumbing (including the build-time check that every favorite in `local_entities.h` has a supported `entity_id`), per-domain indexing, selection helpers, and configuration validation.
+- `include/favorites_lists.h` and `src/favorites_store.cpp`
+  The favorite lists in use, built once at boot from the lists saved from Home Assistant, or from `local_entities.h`, and never changed while the remote is awake: the trackers and Home Assistant's subscriptions keep pointers into them. Lists Home Assistant changes are checked as they arrive, saved to NVS as the remote goes to sleep, and used from the next wake. The first lists restart the remote, once per list. A saved list the remote crashes with three times running as it starts is set aside, in RTC memory, until Home Assistant sends a different one. `persist_ui_state` keeps a hash of the selected entity, so `follow_saved_selection` finds the item again when the lists change.
 - `include/entity_trackers.h`
-  Home Assistant tracker classes that subscribe to and cache entity state.
+  Home Assistant tracker classes that subscribe to and cache entity state, one slot per favorite, sized at boot.
 - `include/entity_helpers_requests.h`
-  One tracker per domain, the subscription order (the current selection first, so it syncs first after a wake), and per-entity accessors.
+  One tracker per domain, the subscription order (the current selection first, so it syncs first after a wake; the favorite lists from Home Assistant last), the memory check for new lists, and per-entity accessors.
 - `src/remote_ui_sync.cpp`
   Copies the selected entity's tracked values into the UI globals.
 - `include/remote_ui_types.h`
@@ -308,7 +320,7 @@ The `esphome/packages/` folder is split by responsibility:
 - `remote_inputs.yaml` and `remote_runtime.yaml`
   Physical input bindings and the runtime loop.
 
-Every favorite's `entity_id` is checked when the firmware is built: a missing one, or one in a domain the remote doesn't support (see [Supported Home Assistant Entity Domains](#supported-home-assistant-entity-domains)), stops the build with an error. At startup the remote also logs favorites that have no display name.
+Every favorite's `entity_id` in `local_entities.h` is checked when the firmware is built: a missing one, or one in a domain the remote doesn't support (see [Supported Home Assistant Entity Domains](#supported-home-assistant-entity-domains)), stops the build with an error. Lists from Home Assistant get the same checks as the remote receives them, and one that fails is not used. At startup the remote also logs favorites that have no display name.
 
 ## 1. Install ESPHome
 
@@ -396,6 +408,48 @@ inline constexpr FavoriteList FAVORITE_LISTS[] = {
   {"OUTDOOR", nullptr, 0},  // nothing here yet: hidden from the menu
 };
 ```
+
+### Favorites from Home Assistant
+
+Home Assistant can hold the favorite lists instead, so you can change them without rebuilding the firmware. Add a template sensor whose `lists` attribute holds them as text. Copy [`home_assistant/remote_favorites.yaml`](home_assistant/remote_favorites.yaml) into your Home Assistant configuration, or include it as a package:
+
+```yaml
+template:
+  - sensor:
+      - name: Remote Favorites
+        unique_id: remote_favorites
+        state: "ok"
+        attributes:
+          lists: |
+            #LIVING ROOM
+            Lamp|light.living_room_lamp
+            Speaker|media_player.living_room_speaker|Spotify|Radio|Line In
+            Apple TV|remote.living_room_apple_tv|apple_tv
+            #KITCHEN
+            Ceiling Light|light.kitchen_ceiling
+            Pasta Timer|timer.kitchen
+```
+
+- A line starting with `#` starts a list and names it. Each line after it is a favorite, `Name|entity_id`, with the optional third field ([TV remote](#tv-remotes-third-field) commands, [media player sources](#media-player-sources-optional-third-field)) after another `|`. The remote shows them in this order. Blank lines and spaces around the fields don't matter.
+- To start from the lists you have, run `python3 tools/favorites_to_home_assistant.py`. It prints this sensor with everything in `esphome/local_entities.h`.
+- After editing the lists, reload them in Home Assistant: **Developer tools → YAML → Template entities**.
+
+The remote reads `sensor.remote_favorites`. To give a remote other lists, point it at another sensor in `esphome/local_entities.h`:
+
+```cpp
+#define FAVORITES_ENTITY "sensor.bedroom_remote_favorites"
+```
+
+How the remote uses the lists:
+
+- It saves them in flash and uses them from then on, Home Assistant down or not. `local_entities.h` only counts until the first lists arrive, or if you set `FAVORITES_ENTITY` to `""` to turn this off.
+- The first lists it gets, it restarts to use straight away (`NEW FAVORITES`).
+- After that, the remote picks up a change the next time it's awake, saves it as it goes to sleep, and uses it from the wake after. To use it straight away, hold the power button to restart the remote. When the lists change, the remote stays on the item it was on, if that's still in them.
+- It checks the lists as they arrive, the way the build checks `local_entities.h`. If any line is wrong, it ignores the whole update and keeps the lists it has.
+- The lists must fit the remote: at most `MAX_PERSISTED_FAVORITE_LISTS` lists (16 by default), 64 favorites in a list and 8 KB of text, and no more than it has memory for. How many favorites that is depends on their kind: a thermostat takes far more memory than a switch. The remote turns down lists it can't hold and says so. (Text over 32 KB is more than ESPHome's connection takes in one message: the remote drops its connection to Home Assistant instead, so the status can't say why.)
+- If the remote crashes three times running as it starts with saved lists, it goes back to `local_entities.h` until Home Assistant sends different lists, or the remote loses power.
+
+The remote's **Favorites status** sensor in Home Assistant says which lists it uses, and when it didn't take an update, why, with the line at fault: for example `Not used: line 7: Light.Office isn't an entity ID (lower-case letters, digits and _, with one dot). Still using the previous list.`
 
 ### Light warmth and colour (optional)
 
@@ -872,6 +926,14 @@ The `VERSION` line in an older copy is no longer used and can be deleted: the ve
 ### A favorite list does not appear in the menu
 
 That usually means the corresponding favorite list is empty. Empty favorite lists are intentionally hidden.
+
+### Changes to `local_entities.h` don't show up
+
+The remote is using favorite lists from Home Assistant, which take the place of `local_entities.h` once the remote has them (see [Favorites from Home Assistant](#favorites-from-home-assistant)). Its **Favorites status** sensor says which it uses. Edit the lists in Home Assistant instead, or set `#define FAVORITES_ENTITY ""` in `local_entities.h` to go back to it.
+
+### The remote didn't take new favorite lists from Home Assistant
+
+The **Favorites status** sensor says why, with the line at fault. A remote that was asleep while you changed them picks them up as it wakes and uses them from the wake after, so `Next wake: …` is expected: hold the power button to restart it and use them straight away. If the sensor doesn't mention the change, check the template entity has the new `lists` in **Developer tools → States**, and that the remote reads the sensor you edited (`FAVORITES_ENTITY`, `sensor.remote_favorites` by default).
 
 ### A Home Assistant entity does not respond
 

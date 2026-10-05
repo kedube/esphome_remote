@@ -6,6 +6,14 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+- Favorite lists can live in Home Assistant, so changing them no longer means
+  rebuilding the firmware. Add the template sensor in
+  `home_assistant/remote_favorites.yaml` (`tools/favorites_to_home_assistant.py` writes
+  it from your `local_entities.h`). The remote checks the lists as they arrive, keeps
+  them in flash, and uses them from the next wake; the first ones restart it to use them
+  straight away. Its new **Favorites status** sensor says which lists it uses, and why
+  it turned down an update. Without the sensor, `local_entities.h` works as before; set
+  `#define FAVORITES_ENTITY ""` to ignore Home Assistant's lists.
 
 ## 4.8 — 2026-10-04
 - A press made while the remote is still connecting after a wake now waits and goes out

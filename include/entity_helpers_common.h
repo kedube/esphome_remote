@@ -19,116 +19,35 @@
 
 #include "remote_ui_types.h"
 
-struct EntityEntry {
-  const char *name;
-  const char *entity_id;
-  const char *sources = nullptr;
-};
+#include "favorites_lists.h"
 
-struct FavoriteEntity {
-    const char *name;
-    const char *entity_id;
-    // Optional third field. A media player whose device_class is not
-    // tv/receiver: its '|'-separated source list (HA does not report a usable
-    // source_list for those). A remote: its command set, a name from
-    // REMOTE_COMMAND_SETS or seven '|'-separated commands (see the README).
-    const char *sources = nullptr;
-};
-
-struct FavoriteList {
-    const char *title;
-    const FavoriteEntity *entries;
-    size_t count;
-};
-
-template <size_t Count>
-inline constexpr FavoriteList make_favorite_list(const char *title, const FavoriteEntity (&entries)[Count]) {
-  return {title, entries, Count};
-}
-
+// local_entities.h before favorites_store.h, which only fills in what it
+// leaves out.
 #include "local_entities.h"
+#include "favorites_store.h"
 
-inline constexpr size_t FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);
+// The lists in local_entities.h, which the remote uses until Home Assistant
+// sends its own (see favorites_store.h). Checked here as the firmware builds;
+// a list from Home Assistant gets the same checks as the remote receives it.
+inline constexpr size_t BUILTIN_FAVORITE_LIST_COUNT = sizeof(FAVORITE_LISTS) / sizeof(FAVORITE_LISTS[0]);
+static_assert(static_cast<int>(BUILTIN_FAVORITE_LIST_COUNT) <= MAX_PERSISTED_FAVORITE_LISTS,
+              "Too many favorite lists for persisted state");
 
-inline constexpr int FAVORITE_LIST_COUNT_INT = static_cast<int>(FAVORITE_LIST_COUNT);
-#ifndef REMOTE_MAX_PERSISTED_FAVORITE_LISTS
-#define REMOTE_MAX_PERSISTED_FAVORITE_LISTS 16
-#endif
-
-inline constexpr int MAX_PERSISTED_FAVORITE_LISTS = REMOTE_MAX_PERSISTED_FAVORITE_LISTS;
-static_assert(FAVORITE_LIST_COUNT_INT <= MAX_PERSISTED_FAVORITE_LISTS, "Too many favorite lists for persisted state");
-
-inline constexpr bool cstr_eq_constexpr(const char *lhs, const char *rhs) {
-  if (lhs == rhs) {
-    return true;
-  }
-  if (lhs == nullptr || rhs == nullptr) {
-    return false;
-  }
-  while (*lhs != '\0' && *rhs != '\0') {
-    if (*lhs != *rhs) {
+inline constexpr bool builtin_favorite_lists_fit() {
+  for (size_t i = 0; i < BUILTIN_FAVORITE_LIST_COUNT; i++) {
+    if (FAVORITE_LISTS[i].count > static_cast<size_t>(FAVORITE_LIST_MAX_ITEMS)) {
       return false;
     }
-    ++lhs;
-    ++rhs;
-  }
-  return *lhs == *rhs;
-}
-
-inline constexpr bool cstr_starts_with_constexpr(const char *value, const char *prefix) {
-  if (value == nullptr || prefix == nullptr) {
-    return false;
-  }
-  while (*prefix != '\0') {
-    if (*value == '\0' || *value != *prefix) {
-      return false;
-    }
-    ++value;
-    ++prefix;
   }
   return true;
 }
-
-inline constexpr RemoteMode favorite_entity_mode_constexpr(const char *entity_id) {
-  return cstr_starts_with_constexpr(entity_id, "light.")            ? REMOTE_MODE_LIGHTS :
-         (cstr_starts_with_constexpr(entity_id, "switch.") ||
-          cstr_starts_with_constexpr(entity_id, "input_boolean."))  ? REMOTE_MODE_SWITCHES :
-         cstr_starts_with_constexpr(entity_id, "climate.")          ? REMOTE_MODE_CLIMATE :
-         cstr_starts_with_constexpr(entity_id, "water_heater.")     ? REMOTE_MODE_WATER_HEATERS :
-         cstr_starts_with_constexpr(entity_id, "humidifier.")       ? REMOTE_MODE_HUMIDIFIERS :
-         cstr_starts_with_constexpr(entity_id, "fan.")              ? REMOTE_MODE_FANS :
-         (cstr_starts_with_constexpr(entity_id, "cover.") ||
-          cstr_starts_with_constexpr(entity_id, "valve."))          ? REMOTE_MODE_COVERS :
-         cstr_starts_with_constexpr(entity_id, "lock.")             ? REMOTE_MODE_LOCKS :
-         cstr_starts_with_constexpr(entity_id, "media_player.")     ? REMOTE_MODE_MEDIA :
-         (cstr_starts_with_constexpr(entity_id, "sensor.") ||
-          cstr_starts_with_constexpr(entity_id, "binary_sensor.") ||
-          cstr_starts_with_constexpr(entity_id, "person.") ||
-          cstr_starts_with_constexpr(entity_id, "device_tracker.") ||
-          cstr_starts_with_constexpr(entity_id, "event."))          ? REMOTE_MODE_SENSORS :
-         (cstr_starts_with_constexpr(entity_id, "automation.") ||
-          cstr_starts_with_constexpr(entity_id, "script.") ||
-          cstr_starts_with_constexpr(entity_id, "scene.") ||
-          cstr_starts_with_constexpr(entity_id, "button.") ||
-          cstr_starts_with_constexpr(entity_id, "input_button."))   ? REMOTE_MODE_AUTOMATION :
-         cstr_starts_with_constexpr(entity_id, "alarm_control_panel.") ? REMOTE_MODE_ALARMS :
-         cstr_starts_with_constexpr(entity_id, "weather.")          ? REMOTE_MODE_WEATHER :
-         (cstr_starts_with_constexpr(entity_id, "number.") ||
-          cstr_starts_with_constexpr(entity_id, "input_number.") ||
-          cstr_starts_with_constexpr(entity_id, "select.") ||
-          cstr_starts_with_constexpr(entity_id, "input_select."))   ? REMOTE_MODE_INPUTS :
-         (cstr_starts_with_constexpr(entity_id, "vacuum.") ||
-          cstr_starts_with_constexpr(entity_id, "lawn_mower."))     ? REMOTE_MODE_VACUUMS :
-         cstr_starts_with_constexpr(entity_id, "timer.")            ? REMOTE_MODE_TIMERS :
-         cstr_starts_with_constexpr(entity_id, "remote.")           ? REMOTE_MODE_REMOTES :
-                                                                        REMOTE_MODE_INFO;
-}
+static_assert(builtin_favorite_lists_fit(), "local_entities.h: a favorite list has more than 64 favorites");
 
 // Every favorite needs an entity_id in a domain this firmware supports. One
 // without would belong to no mode: its page would be empty, and Previous/Next
 // could not move past it.
 inline constexpr bool favorite_entities_supported() {
-  for (size_t i = 0; i < FAVORITE_LIST_COUNT; i++) {
+  for (size_t i = 0; i < BUILTIN_FAVORITE_LIST_COUNT; i++) {
     for (size_t j = 0; j < FAVORITE_LISTS[i].count; j++) {
       const char *entity_id = FAVORITE_LISTS[i].entries[j].entity_id;
       if (entity_id == nullptr || entity_id[0] == '\0' ||
@@ -145,7 +64,7 @@ static_assert(favorite_entities_supported(),
 
 // A remote's third field names its command set or lists the commands.
 inline constexpr bool favorite_remote_commands_valid() {
-  for (size_t i = 0; i < FAVORITE_LIST_COUNT; i++) {
+  for (size_t i = 0; i < BUILTIN_FAVORITE_LIST_COUNT; i++) {
     for (size_t j = 0; j < FAVORITE_LISTS[i].count; j++) {
       const FavoriteEntity &entry = FAVORITE_LISTS[i].entries[j];
       if (favorite_entity_mode_constexpr(entry.entity_id) == REMOTE_MODE_REMOTES &&
@@ -161,109 +80,16 @@ static_assert(favorite_remote_commands_valid(),
               "or seven '|'-separated commands (up|down|left|right|select|back|home), with an optional eighth naming "
               "the device (see TV remotes in the README)");
 
-inline constexpr bool favorite_entity_seen_earlier(size_t list_index, size_t entry_index, const char *entity_id) {
-  for (size_t i = 0; i <= list_index && i < FAVORITE_LIST_COUNT; i++) {
-    size_t limit = i == list_index ? entry_index : FAVORITE_LISTS[i].count;
-    for (size_t j = 0; j < limit; j++) {
-      if (cstr_eq_constexpr(FAVORITE_LISTS[i].entries[j].entity_id, entity_id)) {
-        return true;
-      }
-    }
-  }
-  return false;
+// One mode's favorites in the lists in use: each entity once, in the order
+// the lists first name it.
+inline int mode_entity_count(RemoteMode mode) { return active_favorites().mode_count(mode); }
+inline const EntityEntry *mode_entities(RemoteMode mode) { return active_favorites().mode_entries(mode); }
+
+// A favorite's optional third field (see FavoriteEntity); nullptr for none.
+inline const char *mode_item_sources_cstr(RemoteMode mode, int idx) {
+  return idx >= 0 && idx < mode_entity_count(mode) ? mode_entities(mode)[idx].sources : nullptr;
 }
 
-inline constexpr int count_unique_mode_entities(RemoteMode mode) {
-  int count = 0;
-  for (size_t i = 0; i < FAVORITE_LIST_COUNT; i++) {
-    for (size_t j = 0; j < FAVORITE_LISTS[i].count; j++) {
-      const FavoriteEntity &entry = FAVORITE_LISTS[i].entries[j];
-      if (favorite_entity_mode_constexpr(entry.entity_id) != mode) {
-        continue;
-      }
-      if (favorite_entity_seen_earlier(i, j, entry.entity_id)) {
-        continue;
-      }
-      count++;
-    }
-  }
-  return count;
-}
-
-template <size_t Count>
-inline constexpr std::array<EntityEntry, Count> make_mode_entity_array(RemoteMode mode) {
-  std::array<EntityEntry, Count> entities{};
-  size_t out = 0;
-  for (size_t i = 0; i < FAVORITE_LIST_COUNT; i++) {
-    for (size_t j = 0; j < FAVORITE_LISTS[i].count; j++) {
-      const FavoriteEntity &entry = FAVORITE_LISTS[i].entries[j];
-      if (favorite_entity_mode_constexpr(entry.entity_id) != mode) {
-        continue;
-      }
-      if (favorite_entity_seen_earlier(i, j, entry.entity_id)) {
-        continue;
-      }
-      if (out < Count) {
-        entities[out++] = {entry.name, entry.entity_id, entry.sources};
-      }
-    }
-  }
-  return entities;
-}
-
-inline constexpr int LIGHT_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_LIGHTS);
-inline constexpr int SWITCH_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_SWITCHES);
-inline constexpr int CLIMATE_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_CLIMATE);
-inline constexpr int WATER_HEATER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_WATER_HEATERS);
-inline constexpr int HUMIDIFIER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_HUMIDIFIERS);
-inline constexpr int FAN_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_FANS);
-inline constexpr int COVER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_COVERS);
-inline constexpr int LOCK_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_LOCKS);
-inline constexpr int MEDIA_PLAYER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_MEDIA);
-inline constexpr int SENSOR_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_SENSORS);
-inline constexpr int AUTOMATION_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_AUTOMATION);
-inline constexpr int ALARM_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_ALARMS);
-inline constexpr int WEATHER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_WEATHER);
-inline constexpr int INPUT_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_INPUTS);
-inline constexpr int VACUUM_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_VACUUMS);
-inline constexpr int TIMER_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_TIMERS);
-inline constexpr int REMOTE_LIST_COUNT = count_unique_mode_entities(REMOTE_MODE_REMOTES);
-
-inline constexpr auto LIGHT_LIST_STORAGE = make_mode_entity_array<LIGHT_LIST_COUNT>(REMOTE_MODE_LIGHTS);
-inline constexpr auto SWITCH_LIST_STORAGE = make_mode_entity_array<SWITCH_LIST_COUNT>(REMOTE_MODE_SWITCHES);
-inline constexpr auto CLIMATE_LIST_STORAGE = make_mode_entity_array<CLIMATE_LIST_COUNT>(REMOTE_MODE_CLIMATE);
-inline constexpr auto WATER_HEATER_LIST_STORAGE = make_mode_entity_array<WATER_HEATER_LIST_COUNT>(REMOTE_MODE_WATER_HEATERS);
-inline constexpr auto HUMIDIFIER_LIST_STORAGE = make_mode_entity_array<HUMIDIFIER_LIST_COUNT>(REMOTE_MODE_HUMIDIFIERS);
-inline constexpr auto FAN_LIST_STORAGE = make_mode_entity_array<FAN_LIST_COUNT>(REMOTE_MODE_FANS);
-inline constexpr auto COVER_LIST_STORAGE = make_mode_entity_array<COVER_LIST_COUNT>(REMOTE_MODE_COVERS);
-inline constexpr auto LOCK_LIST_STORAGE = make_mode_entity_array<LOCK_LIST_COUNT>(REMOTE_MODE_LOCKS);
-inline constexpr auto MEDIA_PLAYER_LIST_STORAGE = make_mode_entity_array<MEDIA_PLAYER_LIST_COUNT>(REMOTE_MODE_MEDIA);
-inline constexpr auto SENSOR_LIST_STORAGE = make_mode_entity_array<SENSOR_LIST_COUNT>(REMOTE_MODE_SENSORS);
-inline constexpr auto AUTOMATION_LIST_STORAGE = make_mode_entity_array<AUTOMATION_LIST_COUNT>(REMOTE_MODE_AUTOMATION);
-inline constexpr auto ALARM_LIST_STORAGE = make_mode_entity_array<ALARM_LIST_COUNT>(REMOTE_MODE_ALARMS);
-inline constexpr auto WEATHER_LIST_STORAGE = make_mode_entity_array<WEATHER_LIST_COUNT>(REMOTE_MODE_WEATHER);
-inline constexpr auto INPUT_LIST_STORAGE = make_mode_entity_array<INPUT_LIST_COUNT>(REMOTE_MODE_INPUTS);
-inline constexpr auto VACUUM_LIST_STORAGE = make_mode_entity_array<VACUUM_LIST_COUNT>(REMOTE_MODE_VACUUMS);
-inline constexpr auto TIMER_LIST_STORAGE = make_mode_entity_array<TIMER_LIST_COUNT>(REMOTE_MODE_TIMERS);
-inline constexpr auto REMOTE_LIST_STORAGE = make_mode_entity_array<REMOTE_LIST_COUNT>(REMOTE_MODE_REMOTES);
-
-inline constexpr const EntityEntry *LIGHT_LIST = LIGHT_LIST_STORAGE.data();
-inline constexpr const EntityEntry *SWITCH_LIST = SWITCH_LIST_STORAGE.data();
-inline constexpr const EntityEntry *CLIMATE_LIST = CLIMATE_LIST_STORAGE.data();
-inline constexpr const EntityEntry *WATER_HEATER_LIST = WATER_HEATER_LIST_STORAGE.data();
-inline constexpr const EntityEntry *HUMIDIFIER_LIST = HUMIDIFIER_LIST_STORAGE.data();
-inline constexpr const EntityEntry *FAN_LIST = FAN_LIST_STORAGE.data();
-inline constexpr const EntityEntry *COVER_LIST = COVER_LIST_STORAGE.data();
-inline constexpr const EntityEntry *LOCK_LIST = LOCK_LIST_STORAGE.data();
-inline constexpr const EntityEntry *MEDIA_PLAYER_LIST = MEDIA_PLAYER_LIST_STORAGE.data();
-inline constexpr const EntityEntry *SENSOR_LIST = SENSOR_LIST_STORAGE.data();
-inline constexpr const EntityEntry *AUTOMATION_LIST = AUTOMATION_LIST_STORAGE.data();
-inline constexpr const EntityEntry *ALARM_LIST = ALARM_LIST_STORAGE.data();
-inline constexpr const EntityEntry *WEATHER_LIST = WEATHER_LIST_STORAGE.data();
-inline constexpr const EntityEntry *INPUT_LIST = INPUT_LIST_STORAGE.data();
-inline constexpr const EntityEntry *VACUUM_LIST = VACUUM_LIST_STORAGE.data();
-inline constexpr const EntityEntry *TIMER_LIST = TIMER_LIST_STORAGE.data();
-inline constexpr const EntityEntry *REMOTE_LIST = REMOTE_LIST_STORAGE.data();
 inline constexpr const char *INFO_ITEM_NAMES[] = {"Time & Date", "Wireless", "Network", "Device Name", "Battery", "Version"};
 inline constexpr const char *INFO_ITEM_ENTITIES[] = {
     "info.date", "info.wireless", "info.network", "info.device_name", "info.battery", "info.version"};
@@ -592,10 +418,7 @@ inline bool notifications_mode_enabled() {
 inline const std::string &media_configured_source_list_for_index(int idx) {
   static std::string configured;
   configured.clear();
-  if (idx < 0 || idx >= MEDIA_PLAYER_LIST_COUNT) {
-    return configured;
-  }
-  const char *sources = MEDIA_PLAYER_LIST[idx].sources;
+  const char *sources = mode_item_sources_cstr(REMOTE_MODE_MEDIA, idx);
   if (sources != nullptr) {
     configured.assign(sources);
   }
@@ -637,25 +460,19 @@ inline bool entity_id_matches_domain(const char *entity_id, const char *domain) 
   return strncmp(entity_id, domain, domain_len) == 0 && entity_id[domain_len] == '.';
 }
 
-template <typename Entity>
-inline void validate_entity_list(const char *label, const Entity *entities, int count,
-                                 std::initializer_list<const char *> domains) {
-  for (int i = 0; i < count; i++) {
-    const char *name = entities[i].name;
-    const char *entity_id = entities[i].entity_id;
-    if (name == nullptr || name[0] == '\0') {
-      ESP_LOGW("remote_config", "%s[%d] is missing a display name", label, i);
-    }
-    if (entity_id == nullptr || entity_id[0] == '\0') {
-      ESP_LOGW("remote_config", "%s[%d] is missing an entity_id", label, i);
-      continue;
-    }
-    bool valid_domain = false;
-    for (const char *domain : domains) {
-      valid_domain = valid_domain || entity_id_matches_domain(entity_id, domain);
-    }
-    if (!valid_domain) {
-      ESP_LOGW("remote_config", "%s[%d] has unexpected domain: %s", label, i, entity_id);
+// Every favorite has an entity ID in a supported domain, whether it came from
+// local_entities.h (checked as the firmware builds) or Home Assistant (as the
+// remote receives it); a name is all that can still be missing.
+inline void validate_favorite_names() {
+  const FavoriteSet &favorites = active_favorites();
+  for (int i = 0; i < favorites.list_count(); i++) {
+    const FavoriteList *list = favorites.list(i);
+    for (size_t j = 0; j < list->count; j++) {
+      const char *name = list->entries[j].name;
+      if (name == nullptr || name[0] == '\0') {
+        ESP_LOGW("remote_config", "%s favorite %d (%s) is missing a display name", list->title, static_cast<int>(j),
+                 list->entries[j].entity_id);
+      }
     }
   }
 }
@@ -670,36 +487,8 @@ inline void validate_notification_config() {
 }
 
 inline void validate_remote_configuration() {
-  validate_entity_list("LIGHT_LIST", LIGHT_LIST, LIGHT_LIST_COUNT, {"light"});
-  validate_entity_list("SWITCH_LIST", SWITCH_LIST, SWITCH_LIST_COUNT, {"switch", "input_boolean"});
-  validate_entity_list("CLIMATE_LIST", CLIMATE_LIST, CLIMATE_LIST_COUNT, {"climate"});
-  validate_entity_list("WATER_HEATER_LIST", WATER_HEATER_LIST, WATER_HEATER_LIST_COUNT, {"water_heater"});
-  validate_entity_list("HUMIDIFIER_LIST", HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, {"humidifier"});
-  validate_entity_list("FAN_LIST", FAN_LIST, FAN_LIST_COUNT, {"fan"});
-  validate_entity_list("COVER_LIST", COVER_LIST, COVER_LIST_COUNT, {"cover", "valve"});
-  validate_entity_list("LOCK_LIST", LOCK_LIST, LOCK_LIST_COUNT, {"lock"});
-  validate_entity_list("MEDIA_PLAYER_LIST", MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, {"media_player"});
-  validate_entity_list("SENSOR_LIST", SENSOR_LIST, SENSOR_LIST_COUNT,
-                       {"sensor", "binary_sensor", "person", "device_tracker", "event"});
-  validate_entity_list("AUTOMATION_LIST", AUTOMATION_LIST, AUTOMATION_LIST_COUNT,
-                       {"automation", "script", "scene", "button", "input_button"});
-  validate_entity_list("ALARM_LIST", ALARM_LIST, ALARM_LIST_COUNT, {"alarm_control_panel"});
-  validate_entity_list("WEATHER_LIST", WEATHER_LIST, WEATHER_LIST_COUNT, {"weather"});
-  validate_entity_list("INPUT_LIST", INPUT_LIST, INPUT_LIST_COUNT, {"number", "input_number", "select", "input_select"});
-  validate_entity_list("VACUUM_LIST", VACUUM_LIST, VACUUM_LIST_COUNT, {"vacuum", "lawn_mower"});
-  validate_entity_list("TIMER_LIST", TIMER_LIST, TIMER_LIST_COUNT, {"timer"});
-  validate_entity_list("REMOTE_LIST", REMOTE_LIST, REMOTE_LIST_COUNT, {"remote"});
+  validate_favorite_names();
   validate_notification_config();
-}
-
-template <typename Entity>
-inline int find_entity_index(const Entity *entities, int count, const std::string &entity_id) {
-  for (int i = 0; i < count; i++) {
-    if (entity_id == entities[i].entity_id) {
-      return i;
-    }
-  }
-  return -1;
 }
 
 template <typename Entity>
@@ -729,53 +518,15 @@ inline const char *indexed_value_cstr(const char *const *values, int count, int 
   return (idx >= 0 && idx < count) ? values[idx] : "";
 }
 
-inline RemoteMode favorite_entity_mode(const char *entity_id) {
-  return favorite_entity_mode_constexpr(entity_id);
+inline int favorite_entity_mode_index(RemoteMode mode, const char *entity_id) {
+  return index_of_entity_id(mode_entities(mode), mode_entity_count(mode), entity_id);
 }
 
-inline int favorite_entity_mode_index(RemoteMode mode, const char *entity_id) {
-  switch (mode) {
-    case REMOTE_MODE_LIGHTS:
-      return index_of_entity_id(LIGHT_LIST, LIGHT_LIST_COUNT, entity_id);
-    case REMOTE_MODE_SWITCHES:
-      return index_of_entity_id(SWITCH_LIST, SWITCH_LIST_COUNT, entity_id);
-    case REMOTE_MODE_CLIMATE:
-      return index_of_entity_id(CLIMATE_LIST, CLIMATE_LIST_COUNT, entity_id);
-    case REMOTE_MODE_WATER_HEATERS:
-      return index_of_entity_id(WATER_HEATER_LIST, WATER_HEATER_LIST_COUNT, entity_id);
-    case REMOTE_MODE_HUMIDIFIERS:
-      return index_of_entity_id(HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, entity_id);
-    case REMOTE_MODE_FANS:
-      return index_of_entity_id(FAN_LIST, FAN_LIST_COUNT, entity_id);
-    case REMOTE_MODE_COVERS:
-      return index_of_entity_id(COVER_LIST, COVER_LIST_COUNT, entity_id);
-    case REMOTE_MODE_LOCKS:
-      return index_of_entity_id(LOCK_LIST, LOCK_LIST_COUNT, entity_id);
-    case REMOTE_MODE_MEDIA:
-      return index_of_entity_id(MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, entity_id);
-    case REMOTE_MODE_SENSORS:
-      return index_of_entity_id(SENSOR_LIST, SENSOR_LIST_COUNT, entity_id);
-    case REMOTE_MODE_AUTOMATION:
-      return index_of_entity_id(AUTOMATION_LIST, AUTOMATION_LIST_COUNT, entity_id);
-    case REMOTE_MODE_ALARMS:
-      return index_of_entity_id(ALARM_LIST, ALARM_LIST_COUNT, entity_id);
-    case REMOTE_MODE_WEATHER:
-      return index_of_entity_id(WEATHER_LIST, WEATHER_LIST_COUNT, entity_id);
-    case REMOTE_MODE_INPUTS:
-      return index_of_entity_id(INPUT_LIST, INPUT_LIST_COUNT, entity_id);
-    case REMOTE_MODE_VACUUMS:
-      return index_of_entity_id(VACUUM_LIST, VACUUM_LIST_COUNT, entity_id);
-    case REMOTE_MODE_TIMERS:
-      return index_of_entity_id(TIMER_LIST, TIMER_LIST_COUNT, entity_id);
-    case REMOTE_MODE_REMOTES:
-      return index_of_entity_id(REMOTE_LIST, REMOTE_LIST_COUNT, entity_id);
-    default:
-      return -1;
-  }
-}
+inline int favorite_list_count() { return active_favorites().list_count(); }
 
 inline int favorite_list_item_count(int list_index) {
-  return (list_index >= 0 && list_index < FAVORITE_LIST_COUNT_INT) ? static_cast<int>(FAVORITE_LISTS[list_index].count) : 0;
+  const FavoriteList *list = active_favorites().list(list_index);
+  return list != nullptr ? static_cast<int>(list->count) : 0;
 }
 
 inline bool favorite_list_is_available(int list_index) {
@@ -783,44 +534,43 @@ inline bool favorite_list_is_available(int list_index) {
 }
 
 inline const char *favorite_list_title(int list_index) {
-  return (list_index >= 0 && list_index < FAVORITE_LIST_COUNT_INT) ? FAVORITE_LISTS[list_index].title : "FAVORITES";
+  const FavoriteList *list = active_favorites().list(list_index);
+  return list != nullptr ? list->title : "FAVORITES";
 }
 
 inline const FavoriteEntity *favorite_list_entry(int list_index, int item_index) {
-  if (list_index < 0 || list_index >= FAVORITE_LIST_COUNT_INT) {
+  const FavoriteList *list = active_favorites().list(list_index);
+  if (list == nullptr || item_index < 0 || item_index >= static_cast<int>(list->count)) {
     return nullptr;
   }
-  const FavoriteList &list = FAVORITE_LISTS[list_index];
-  if (item_index < 0 || item_index >= static_cast<int>(list.count)) {
-    return nullptr;
-  }
-  return &list.entries[item_index];
+  return &list->entries[item_index];
 }
 
-inline std::array<int, FAVORITE_LIST_COUNT> &favorite_selection_indices() {
-  static std::array<int, FAVORITE_LIST_COUNT> indices{};
+inline std::array<int, MAX_PERSISTED_FAVORITE_LISTS> &favorite_selection_indices() {
+  static std::array<int, MAX_PERSISTED_FAVORITE_LISTS> indices{};
   return indices;
 }
 
 inline int &favorite_selected_index_ref(int list_index) {
   auto &indices = favorite_selection_indices();
-  return indices[list_index];
+  static int unused = 0;
+  return list_index >= 0 && list_index < MAX_PERSISTED_FAVORITE_LISTS ? indices[list_index] : (unused = 0);
 }
 
 inline int menu_slot_count() {
-  return FAVORITE_LIST_COUNT_INT + (notifications_mode_enabled() ? 1 : 0) + 1;
+  return favorite_list_count() + (notifications_mode_enabled() ? 1 : 0) + 1;
 }
 
 inline int notifications_menu_index() {
-  return FAVORITE_LIST_COUNT_INT;
+  return favorite_list_count();
 }
 
 inline int info_menu_index() {
-  return FAVORITE_LIST_COUNT_INT + (notifications_mode_enabled() ? 1 : 0);
+  return favorite_list_count() + (notifications_mode_enabled() ? 1 : 0);
 }
 
 inline bool menu_index_is_favorite(int menu_index) {
-  return menu_index >= 0 && menu_index < FAVORITE_LIST_COUNT_INT;
+  return menu_index >= 0 && menu_index < favorite_list_count();
 }
 
 inline bool menu_index_is_notifications(int menu_index) {
@@ -832,7 +582,7 @@ inline bool menu_index_is_info(int menu_index) {
 }
 
 inline int first_available_menu_index() {
-  for (int i = 0; i < FAVORITE_LIST_COUNT_INT; i++) {
+  for (int i = 0; i < favorite_list_count(); i++) {
     if (favorite_list_is_available(i)) {
       return i;
     }
@@ -892,46 +642,12 @@ inline const char *menu_index_title(int menu_index) {
 
 inline int mode_item_count(RemoteMode mode) {
   switch (mode) {
-    case REMOTE_MODE_LIGHTS:
-      return LIGHT_LIST_COUNT;
-    case REMOTE_MODE_SWITCHES:
-      return SWITCH_LIST_COUNT;
-    case REMOTE_MODE_CLIMATE:
-      return CLIMATE_LIST_COUNT;
-    case REMOTE_MODE_WATER_HEATERS:
-      return WATER_HEATER_LIST_COUNT;
-    case REMOTE_MODE_HUMIDIFIERS:
-      return HUMIDIFIER_LIST_COUNT;
-    case REMOTE_MODE_FANS:
-      return FAN_LIST_COUNT;
-    case REMOTE_MODE_COVERS:
-      return COVER_LIST_COUNT;
-    case REMOTE_MODE_LOCKS:
-      return LOCK_LIST_COUNT;
-    case REMOTE_MODE_MEDIA:
-      return MEDIA_PLAYER_LIST_COUNT;
-    case REMOTE_MODE_SENSORS:
-      return SENSOR_LIST_COUNT;
-    case REMOTE_MODE_AUTOMATION:
-      return AUTOMATION_LIST_COUNT;
-    case REMOTE_MODE_ALARMS:
-      return ALARM_LIST_COUNT;
     case REMOTE_MODE_NOTIFICATIONS:
       return notifications_mode_enabled() ? notification_mode_item_count() : 0;
-    case REMOTE_MODE_WEATHER:
-      return WEATHER_LIST_COUNT;
     case REMOTE_MODE_INFO:
       return INFO_ITEM_COUNT;
-    case REMOTE_MODE_INPUTS:
-      return INPUT_LIST_COUNT;
-    case REMOTE_MODE_VACUUMS:
-      return VACUUM_LIST_COUNT;
-    case REMOTE_MODE_TIMERS:
-      return TIMER_LIST_COUNT;
-    case REMOTE_MODE_REMOTES:
-      return REMOTE_LIST_COUNT;
     default:
-      return 0;
+      return mode_entity_count(mode);
   }
 }
 
@@ -973,89 +689,23 @@ inline RemoteMode next_available_mode(RemoteMode current, int step) {
 
 inline const char *mode_item_name_cstr(RemoteMode mode, int idx) {
   switch (mode) {
-    case REMOTE_MODE_LIGHTS:
-      return indexed_entity_name_cstr(LIGHT_LIST, LIGHT_LIST_COUNT, idx);
-    case REMOTE_MODE_SWITCHES:
-      return indexed_entity_name_cstr(SWITCH_LIST, SWITCH_LIST_COUNT, idx);
-    case REMOTE_MODE_CLIMATE:
-      return indexed_entity_name_cstr(CLIMATE_LIST, CLIMATE_LIST_COUNT, idx);
-    case REMOTE_MODE_WATER_HEATERS:
-      return indexed_entity_name_cstr(WATER_HEATER_LIST, WATER_HEATER_LIST_COUNT, idx);
-    case REMOTE_MODE_HUMIDIFIERS:
-      return indexed_entity_name_cstr(HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, idx);
-    case REMOTE_MODE_FANS:
-      return indexed_entity_name_cstr(FAN_LIST, FAN_LIST_COUNT, idx);
-    case REMOTE_MODE_COVERS:
-      return indexed_entity_name_cstr(COVER_LIST, COVER_LIST_COUNT, idx);
-    case REMOTE_MODE_LOCKS:
-      return indexed_entity_name_cstr(LOCK_LIST, LOCK_LIST_COUNT, idx);
-    case REMOTE_MODE_MEDIA:
-      return indexed_entity_name_cstr(MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, idx);
-    case REMOTE_MODE_SENSORS:
-      return indexed_entity_name_cstr(SENSOR_LIST, SENSOR_LIST_COUNT, idx);
-    case REMOTE_MODE_AUTOMATION:
-      return indexed_entity_name_cstr(AUTOMATION_LIST, AUTOMATION_LIST_COUNT, idx);
-    case REMOTE_MODE_ALARMS:
-      return indexed_entity_name_cstr(ALARM_LIST, ALARM_LIST_COUNT, idx);
-    case REMOTE_MODE_WEATHER:
-      return indexed_entity_name_cstr(WEATHER_LIST, WEATHER_LIST_COUNT, idx);
     case REMOTE_MODE_INFO:
       return indexed_value_cstr(INFO_ITEM_NAMES, INFO_ITEM_COUNT, idx);
-    case REMOTE_MODE_INPUTS:
-      return indexed_entity_name_cstr(INPUT_LIST, INPUT_LIST_COUNT, idx);
-    case REMOTE_MODE_VACUUMS:
-      return indexed_entity_name_cstr(VACUUM_LIST, VACUUM_LIST_COUNT, idx);
-    case REMOTE_MODE_TIMERS:
-      return indexed_entity_name_cstr(TIMER_LIST, TIMER_LIST_COUNT, idx);
-    case REMOTE_MODE_REMOTES:
-      return indexed_entity_name_cstr(REMOTE_LIST, REMOTE_LIST_COUNT, idx);
     case REMOTE_MODE_NOTIFICATIONS:
-    default:
       return nullptr;
+    default:
+      return indexed_entity_name_cstr(mode_entities(mode), mode_entity_count(mode), idx);
   }
 }
 
 inline const char *mode_item_entity_cstr(RemoteMode mode, int idx) {
   switch (mode) {
-    case REMOTE_MODE_LIGHTS:
-      return indexed_entity_id_cstr(LIGHT_LIST, LIGHT_LIST_COUNT, idx);
-    case REMOTE_MODE_SWITCHES:
-      return indexed_entity_id_cstr(SWITCH_LIST, SWITCH_LIST_COUNT, idx);
-    case REMOTE_MODE_CLIMATE:
-      return indexed_entity_id_cstr(CLIMATE_LIST, CLIMATE_LIST_COUNT, idx);
-    case REMOTE_MODE_WATER_HEATERS:
-      return indexed_entity_id_cstr(WATER_HEATER_LIST, WATER_HEATER_LIST_COUNT, idx);
-    case REMOTE_MODE_HUMIDIFIERS:
-      return indexed_entity_id_cstr(HUMIDIFIER_LIST, HUMIDIFIER_LIST_COUNT, idx);
-    case REMOTE_MODE_FANS:
-      return indexed_entity_id_cstr(FAN_LIST, FAN_LIST_COUNT, idx);
-    case REMOTE_MODE_COVERS:
-      return indexed_entity_id_cstr(COVER_LIST, COVER_LIST_COUNT, idx);
-    case REMOTE_MODE_LOCKS:
-      return indexed_entity_id_cstr(LOCK_LIST, LOCK_LIST_COUNT, idx);
-    case REMOTE_MODE_MEDIA:
-      return indexed_entity_id_cstr(MEDIA_PLAYER_LIST, MEDIA_PLAYER_LIST_COUNT, idx);
-    case REMOTE_MODE_SENSORS:
-      return indexed_entity_id_cstr(SENSOR_LIST, SENSOR_LIST_COUNT, idx);
-    case REMOTE_MODE_AUTOMATION:
-      return indexed_entity_id_cstr(AUTOMATION_LIST, AUTOMATION_LIST_COUNT, idx);
-    case REMOTE_MODE_ALARMS:
-      return indexed_entity_id_cstr(ALARM_LIST, ALARM_LIST_COUNT, idx);
-    case REMOTE_MODE_WEATHER:
-      return indexed_entity_id_cstr(WEATHER_LIST, WEATHER_LIST_COUNT, idx);
     case REMOTE_MODE_INFO:
       return indexed_value_cstr(INFO_ITEM_ENTITIES, INFO_ITEM_COUNT, idx);
-    case REMOTE_MODE_INPUTS:
-      return indexed_entity_id_cstr(INPUT_LIST, INPUT_LIST_COUNT, idx);
-    case REMOTE_MODE_VACUUMS:
-      return indexed_entity_id_cstr(VACUUM_LIST, VACUUM_LIST_COUNT, idx);
-    case REMOTE_MODE_TIMERS:
-      return indexed_entity_id_cstr(TIMER_LIST, TIMER_LIST_COUNT, idx);
-    case REMOTE_MODE_REMOTES:
-      return indexed_entity_id_cstr(REMOTE_LIST, REMOTE_LIST_COUNT, idx);
     case REMOTE_MODE_NOTIFICATIONS:
-    default:
       return nullptr;
+    default:
+      return indexed_entity_id_cstr(mode_entities(mode), mode_entity_count(mode), idx);
   }
 }
 
@@ -1125,14 +775,10 @@ inline ModeSelectionStateRefs make_mode_selection_state_refs(
 }
 
 inline AutomationKind automation_kind(int idx) {
-  if (idx < 0 || idx >= AUTOMATION_LIST_COUNT) {
-    return AUTOMATION_KIND_SCRIPT;
-  }
-
   // Compared in place: this runs on every automation-mode redraw and on every
   // sync tick, so the temporary strings a substr-based split allocates are pure
   // heap churn.
-  const char *entity_id = AUTOMATION_LIST[idx].entity_id;
+  const char *entity_id = mode_item_entity_cstr(REMOTE_MODE_AUTOMATION, idx);
   if (entity_id_matches_domain(entity_id, "automation")) {
     return AUTOMATION_KIND_AUTOMATION;
   }

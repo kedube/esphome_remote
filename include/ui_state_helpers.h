@@ -12,11 +12,18 @@ struct PersistedUIStateData {
   int selected_setting_option = REMOTE_SETTING_NONE;
   int selected_weather_detail_index = 0;
   int selected_alarm_arm_mode = ALARM_ARM_MODE_AWAY;
+  // UI_STATE_ENTITY_HASH_MASK bits of favorites_text_hash() of the selected
+  // item's entity; 0 for none. Finds the item again when the favorite lists
+  // have changed (see follow_saved_selection).
+  uint32_t selected_entity_hash = 0;
 };
 
 inline constexpr uint32_t UI_STATE_AUX_FORMAT_MASK = 3UL << 30;
 inline constexpr uint32_t UI_STATE_AUX_FORMAT_V7 = 1UL << 31;
 inline constexpr uint32_t UI_STATE_AUX_FORMAT_V8 = 3UL << 30;
+// The aux word's other bits hold the selected entity's hash. Firmware before
+// it left them 0, and ignores them.
+inline constexpr uint32_t UI_STATE_ENTITY_HASH_MASK = ~UI_STATE_AUX_FORMAT_MASK;
 // V9 widens current_mode to 5 bits (V8 had 4, for up to 16 modes). It keeps
 // V8's format bits and sets this marker in state bits 48-55, which V8 never
 // set: format bits of 01 would match V6 state, whose top aux bits held the
@@ -26,19 +33,11 @@ inline constexpr uint64_t UI_STATE_V9_MARKER_MASK = uint64_t(0xFF) << 48;
 
 // The V9 pack below masks each field to a fixed bit width; these asserts tie
 // every width to the constant that bounds the corresponding value so a raised
-// limit cannot silently wrap the restored index.
-constexpr size_t max_favorite_list_entry_count() {
-  size_t max_count = 0;
-  for (size_t i = 0; i < FAVORITE_LIST_COUNT; i++) {
-    if (FAVORITE_LISTS[i].count > max_count) {
-      max_count = FAVORITE_LISTS[i].count;
-    }
-  }
-  return max_count;
-}
-
+// limit cannot silently wrap the restored index. The favorite lists, from
+// local_entities.h or Home Assistant, are held to FAVORITE_LIST_MAX_ITEMS
+// and MAX_PERSISTED_FAVORITE_LISTS as they load.
 static_assert(MAX_PERSISTED_FAVORITE_LISTS + 2 <= 32, "current_menu_index is packed into 5 bits");
-static_assert(max_favorite_list_entry_count() <= 64, "current_favorite_index is packed into 6 bits");
+static_assert(FAVORITE_LIST_MAX_ITEMS <= 64, "current_favorite_index is packed into 6 bits");
 static_assert(NOTIFICATION_FEED_MAX_ITEMS <= 64, "selected_notification_index is packed into 6 bits");
 static_assert(INFO_ITEM_COUNT <= 64, "selected_info_index is packed into 6 bits");
 static_assert(REMOTE_MODE_COUNT <= 32, "current_mode is packed into 5 bits");
@@ -66,6 +65,7 @@ inline PersistedUIStateData unpack_persisted_ui_state(uint64_t state, uint32_t a
     data.selected_setting_option = (state >> 32) & 0x3F;
     data.selected_weather_detail_index = (state >> 38) & 0x0F;
     data.selected_alarm_arm_mode = (state >> 42) & 0x07;
+    data.selected_entity_hash = aux_state & UI_STATE_ENTITY_HASH_MASK;
     return data;
   }
 
@@ -112,6 +112,10 @@ inline uint64_t pack_persisted_ui_state(const PersistedUIStateData &data) {
 }
 
 inline uint32_t pack_persisted_ui_state_aux(const PersistedUIStateData &data) {
-  (void) data;
-  return UI_STATE_AUX_FORMAT_V8;
+  return UI_STATE_AUX_FORMAT_V8 | (data.selected_entity_hash & UI_STATE_ENTITY_HASH_MASK);
+}
+
+// The hash persist_ui_state keeps of the selected item's entity.
+inline uint32_t ui_state_entity_hash(const std::string &entity) {
+  return entity.empty() ? 0 : favorites_text_hash(entity.c_str()) & UI_STATE_ENTITY_HASH_MASK;
 }
