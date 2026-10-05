@@ -6,6 +6,8 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+
+## 4.9 — 2026-10-05
 - Favorite lists can live in Home Assistant, so changing them no longer means
   rebuilding the firmware. Add the template sensor in
   `home_assistant/remote_favorites.yaml` (`tools/favorites_to_home_assistant.py` writes
