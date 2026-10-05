@@ -137,6 +137,12 @@ jobs:
         # fails the build.
         run: python tools/ui_preview/preview.py --stress
 
+      - name: Test the favorite lists
+        # The parser for the lists Home Assistant publishes, which lists the
+        # remote uses and what it does with new ones, and the converter from
+        # local_entities.h, under the same sanitizers.
+        run: python tools/favorites_tests/run.py
+
       - name: Upload screens
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7

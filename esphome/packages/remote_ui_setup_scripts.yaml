@@ -57,8 +57,8 @@ script:
       - lambda: |-
           App.safe_reboot();
 
-  # The first favorite lists from Home Assistant arrived and are saved:
-  # restart to use them (see favorites_store.h).
+  # New favorite lists from Home Assistant are saved: restart to use them
+  # (see favorites_store.h).
   - id: restart_for_new_favorites
     mode: single
     then:
@@ -66,6 +66,12 @@ script:
       - script.stop: show_hold_to_reboot_screen
       - lambda: |-
           id(system_screen_active) = true;
+          // A remote that had no favorites opens the first list after the
+          // restart, not the Info page it showed meanwhile.
+          if (active_favorites().favorite_count() == 0) {
+            id(current_menu_index) = 0;
+            id(selected_item_entity) = "";
+          }
           auto it = id(oled_display);
           if (it->is_failed() || !it->is_ready()) {
             return;

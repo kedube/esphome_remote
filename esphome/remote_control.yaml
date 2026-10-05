@@ -166,7 +166,10 @@ esphome:
             id(last_active) = millis() / 1000;
             // Loads the favorite lists: the ones saved from Home Assistant, or
             // local_entities.h.
-            favorites_set_status_listener([](const std::string &status) { id(favorites_status).publish_state(status); });
+            favorites_set_status_listener([](const std::string &status) {
+              id(favorites_status).publish_state(status);
+              id(updated_ui) = true;  // the Favorites page in Info
+            });
             PersistedUIStateData restored = unpack_persisted_ui_state(id(persisted_ui_state), id(persisted_ui_state_aux));
 
             if (menu_index_is_favorite(restored.current_menu_index)) {
@@ -188,6 +191,11 @@ esphome:
 
             id(current_menu_index) = clamp_menu_index(restored.current_menu_index);
             follow_saved_selection(id(current_menu_index), restored.selected_entity_hash, id(selected_info_index));
+            // No favorites yet: open the Info page that says where they come from.
+            if (active_favorites().favorite_count() == 0) {
+              id(current_menu_index) = info_menu_index();
+              id(selected_info_index) = INFO_FAVORITES_INDEX;
+            }
             id(current_mode) = restored.current_mode >= 0 && restored.current_mode < REMOTE_MODE_COUNT
                 ? restored.current_mode
                 : REMOTE_MODE_INFO;

@@ -193,6 +193,7 @@ esphome_remote/
 │   └── settings.yaml          # your copy of the example; local-only
 ├── home_assistant/
 │   ├── remote_favorites.yaml
+│   ├── remote_favorites_labels.yaml
 │   └── remote_notifications.yaml
 ├── include/
 │   ├── entity_helpers_common.h
@@ -228,6 +229,12 @@ esphome_remote/
 │   ├── remote_ui_runtime.cpp
 │   └── remote_ui_sync.cpp
 └── tools/
+    ├── favorites_tests/
+    │   ├── local_entities.h
+    │   ├── roundtrip.cpp
+    │   ├── run.py
+    │   ├── test_lists.cpp
+    │   └── test_store.cpp
     ├── favorites_to_home_assistant.py
     ├── pio_esphome_bridge.py
     └── ui_preview/
@@ -259,8 +266,10 @@ esphome_remote/
   Compatibility shim that forwards to `esphome/local_entities.h`.
 - `include/favorites_lists.h`, `include/favorites_store.h` and `src/favorites_store.cpp`
   The favorite lists the remote uses: reading and checking the lists Home Assistant publishes, keeping them in flash, and choosing between them and `local_entities.h` at boot.
-- `home_assistant/remote_favorites.yaml` and `tools/favorites_to_home_assistant.py`
-  The Home Assistant template sensor that holds the favorite lists, and a script that writes it from your `local_entities.h`.
+- `home_assistant/remote_favorites.yaml`, `home_assistant/remote_favorites_labels.yaml` and `tools/favorites_to_home_assistant.py`
+  The Home Assistant template sensor that holds the favorite lists, the same sensor built from a label, and a script that writes the first from your `local_entities.h`.
+- `tools/favorites_tests/`
+  Tests for the favorite lists on your computer: the parser, which lists the remote uses and what it does with new ones, the converter, and the labels template. Run `python3 tools/favorites_tests/run.py` (it needs ESPHome's Python packages).
 - `esphome/packages/`
   Modular ESPHome packages for actions, button/input handling, runtime behavior, display globals, fonts, and UI scripts.
 - `src/remote_ui_renderer.cpp` and `include/remote_ui_renderer.h`
@@ -285,7 +294,7 @@ esphome_remote/
 - `include/entity_helpers_common.h`
   Favorite-list plumbing (including the build-time check that every favorite in `local_entities.h` has a supported `entity_id`), per-domain indexing, selection helpers, and configuration validation.
 - `include/favorites_lists.h` and `src/favorites_store.cpp`
-  The favorite lists in use, built once at boot from the lists saved from Home Assistant, or from `local_entities.h`, and never changed while the remote is awake: the trackers and Home Assistant's subscriptions keep pointers into them. Lists Home Assistant changes are checked as they arrive, saved to NVS as the remote goes to sleep, and used from the next wake. The first lists restart the remote, once per list. A saved list the remote crashes with three times running as it starts is set aside, in RTC memory, until Home Assistant sends a different one. `persist_ui_state` keeps a hash of the selected entity, so `follow_saved_selection` finds the item again when the lists change.
+  The favorite lists in use, built once at boot from the lists saved from Home Assistant, or from `local_entities.h`, and never changed while the remote is awake: the trackers and Home Assistant's subscriptions keep pointers into them. Lists Home Assistant changes are checked as they arrive, saved to NVS as the remote goes to sleep, and used from the next wake, unless they are the first lists or nobody has pressed a button since the wake (`remote_buttons_pressed_since_boot`): then they are saved at once and the remote restarts, once per list. A saved list the remote crashes with three times running as it starts is set aside, in RTC memory, until Home Assistant sends a different one. `persist_ui_state` keeps a hash of the selected entity, so `follow_saved_selection` finds the item again when the lists change.
 - `include/entity_trackers.h`
   Home Assistant tracker classes that subscribe to and cache entity state, one slot per favorite, sized at boot.
 - `include/entity_helpers_requests.h`
@@ -411,12 +420,24 @@ How the remote uses the lists:
 
 - It saves them in flash and uses them from then on, Home Assistant down or not. `local_entities.h` only counts until the first lists arrive, or if you set `FAVORITES_ENTITY` to `""` to turn this off.
 - The first lists it gets, it restarts to use straight away (`NEW FAVORITES`).
-- After that, the remote picks up a change the next time it's awake, saves it as it goes to sleep, and uses it from the wake after. To use it straight away, hold the power button to restart the remote. When the lists change, the remote stays on the item it was on, if that's still in them.
+- After that, the remote picks up a change the next time it's awake. If nobody has pressed a button since it woke, it restarts to use the change straight away; otherwise it saves the change as it goes to sleep and uses it from the next wake (hold the power button to restart it sooner). When the lists change, the remote stays on the item it was on, if that's still in them.
 - It checks the lists as they arrive, the way the build checks `local_entities.h`. If any line is wrong, it ignores the whole update and keeps the lists it has.
 - The lists must fit the remote: at most `MAX_PERSISTED_FAVORITE_LISTS` lists (16 by default), 64 favorites in a list and 8 KB of text, and no more than it has memory for. How many favorites that is depends on their kind: a thermostat takes far more memory than a switch. The remote turns down lists it can't hold and says so. (Text over 32 KB is more than ESPHome's connection takes in one message: the remote drops its connection to Home Assistant instead, so the status can't say why.)
 - If the remote crashes three times running as it starts with saved lists, it goes back to `local_entities.h` until Home Assistant sends different lists, or the remote loses power.
 
-The remote's **Favorites status** sensor in Home Assistant says which lists it uses, and when it didn't take an update, why, with the line at fault: for example `Not used: line 7: Light.Office isn't an entity ID (lower-case letters, digits and _, with one dot). Still using the previous list.`
+The remote's **Favorites status** sensor in Home Assistant says which lists it uses, and when it didn't take an update, why, with the line at fault: for example `Not used: line 7: Light.Office isn't an entity ID (lower-case letters, digits and _, with one dot). Still using the previous list.` On the remote, the **Favorites** page in Info shows how many favorites and lists it has and where they come from, and what became of the last update: `NEXT WAKE`, `RESTARTING`, `NOT USED` with the line at fault, `NOT SAVED`, or `SET ASIDE` after crashes. A remote with no favorites yet opens on that page, which names the sensor to add.
+
+### Lists from labels
+
+Instead of writing the lists out, Home Assistant can build them from a label. Use [`home_assistant/remote_favorites_labels.yaml`](home_assistant/remote_favorites_labels.yaml) in place of `remote_favorites.yaml` (they make the same sensor, so use one), then give the entities you want on the remote the label **Remote** (**Settings → Labels**; its ID must be `remote`, and the label goes on the entities, not their devices):
+
+- Each area with labelled entities becomes a list, in alphabetical order, and entities in no area go in a last list, `OTHER`. Within a list, favorites are in alphabetical order.
+- A favorite's name is the entity's name without its area's in front: `Office Light` in the Office list is `Light`.
+- Third fields (a TV remote's command set, a media player's sources) go in the `extras` table at the top of the template.
+- Entities the remote can't control are left out, so a label on a camera doesn't stop the update.
+- The lists are built again whenever a label, name or area changes, so the remote picks the change up as above.
+
+You give up choosing the order and the names, and lists that aren't areas; write the lists out if you want those.
 
 ### Lists in the firmware
 
@@ -599,7 +620,7 @@ packages:
 | `DEVICE_NAME` | Network name used by ESPHome and OTA. |
 | `FRIENDLY_NAME` | Human-readable device name shown in Home Assistant. |
 | `NOTIFICATION_FEED_MAX_ITEMS` | Maximum number of notification messages cached and exposed in Notifications mode. |
-| `MAX_PERSISTED_FAVORITE_LISTS` | Compile-time capacity limit for configured favorite lists. This must be at least as large as your configured favorite list count. |
+| `MAX_PERSISTED_FAVORITE_LISTS` | Compile-time capacity limit for favorite lists (at most 30). It must be at least the number of lists in `local_entities.h`; the remote turns down lists from Home Assistant with more. |
 | `TEMPERATURE_UNIT` | Set to `"F"` or `"C"` to match your Home Assistant climate and water heater values. Weather screens use the units the weather entity reports. |
 | `LABEL_FONT`, `LABEL_FONT_SIZE` | Header, chips and footer labels. Liberation Sans Bold, `"9"`. Each font setting takes a font file or a Google Font; see [Choosing fonts](#choosing-fonts). |
 | `TEXT_FONT`, `TEXT_FONT_SIZE` | Media titles, notifications, units and the weather high/low. Liberation Sans Bold, `"10"`. |
@@ -842,7 +863,7 @@ Long-press protection:
 | Favorites: Alarms | `Circle` arm, `Square` disarm (both held); hold `Settings` to trigger. `Plus` / `Minus` pick the arm mode highlighted in the footer, out of those the panel supports. |
 | Favorites: Weather | `Plus` / `Minus` (or `Settings`) step through the weather details. |
 | Notifications | `Plus` / `Minus` move between notifications; `Circle` dismisses the one shown. |
-| Info | Read-only status screens for time/date, wireless, network, device name, battery, and version. |
+| Info | Read-only status screens for time/date, wireless, network, device name, battery, version, and the favorite lists. |
 
 Settings and details only appear when Home Assistant reports them: a light without effects has no `EFFECT`, and a weather entity without a gust speed has no `GUSTS`. While a light or fan is off, only `Plus` (turn it on) applies; its other settings return once it is on.
 
@@ -870,7 +891,7 @@ Mode-specific details:
 - When a favorite entry resolves to an alarm, the footer shows the arm modes the panel supports (`AWAY`, `HOME`, `NIGHT`, `VAC`) with the selected one highlighted. `Plus` and `Minus` move the highlight; circle long-press arms with that mode, and square long-press disarms. If the panel is already armed in the selected mode, the footer shows `ALREADY ARMED`.
 - When a favorite entry resolves to an alarm that supports triggering, the Settings button must be held for `EXTENDED_HOLD_DURATION_MS` to call `alarm_trigger`. The footer shows a `HOLD TO TRIGGER` bar while held.
 - Alarm actions show `ARMING...`, `DISARMING...` or `TRIGGERING...` in the footer for as long as the panel's exit or entry delay runs (up to 3 minutes), then `SUCCESS`, or `FAILED` if the panel hasn't started within `ALARM_STATUS_UPDATE_DELAY_MS`; `ALREADY ARMED`, `ALREADY DISARMED` or `SYNCING` when nothing is sent. The panel's own state (`ARMED HOME`, `DISARMED`) shows in large text.
-- Info mode includes Time & Date (a large clock with the date as its title), Wireless (signal bars and dBm), Network, Device Name, Battery (a battery gauge and voltage), and Version screens.
+- Info mode includes Time & Date (a large clock with the date as its title), Wireless (signal bars and dBm), Network, Device Name, Battery (a battery gauge and voltage), Version and Favorites (how many favorites and lists, where they come from, and what became of the last update from Home Assistant) screens.
 - Notifications reads from `NOTIFICATION_FEED_ENTITY` in `esphome/local_entities.h`. A notification wraps over up to three lines; an empty feed shows `ALL CAUGHT UP`.
 - System screens: `WI-FI` and then `HOME ASSISTANT` with `CONNECTING…` (and the firmware version) after a power cut, a reboot or an update, `WI-FI LOST` or `HOME ASSISTANT` with `RECONNECTING…` if a connection drops, `LOW BATTERY` / `PLEASE CHARGE` with the voltage for 10 seconds when the battery is below `LOW_BATTERY_VOLTAGE` at wake, and `GOODBYE` / `POWERING OFF` before sleep.
 - The remote sleeps after `SLEEP_DURATION` seconds without a button press, and after `DEEP_SLEEP_DURATION` awake even while in use. The screen dims 10 seconds before it sleeps (when `SLEEP_DURATION` is more than 20 seconds), and any button brings it back. Only Wake / Power wakes it.
@@ -955,7 +976,7 @@ The remote is using favorite lists from Home Assistant, which take the place of 
 
 ### The remote didn't take new favorite lists from Home Assistant
 
-The **Favorites status** sensor says why, with the line at fault. A remote that was asleep while you changed them picks them up as it wakes and uses them from the wake after, so `Next wake: …` is expected: hold the power button to restart it and use them straight away. If the sensor doesn't mention the change, check the template entity has the new `lists` in **Developer tools → States**, and that the remote reads the sensor you edited (`FAVORITES_ENTITY`, `sensor.remote_favorites` by default).
+The **Favorites status** sensor, or the Favorites page in Info, says why, with the line at fault. `Next wake: …` is expected if a button was pressed after the remote woke: it then waits for the next wake rather than restart while you use it (hold the power button to restart it and use them straight away). If the sensor doesn't mention the change, check the template entity has the new `lists` in **Developer tools → States**, and that the remote reads the sensor you edited (`FAVORITES_ENTITY`, `sensor.remote_favorites` by default).
 
 ### A Home Assistant entity does not respond
 
@@ -1059,7 +1080,8 @@ A separate job runs the [UI preview](#previewing-the-ui) with `--stress`: it dra
 sample screen, then stress-tests the renderer under AddressSanitizer and
 UndefinedBehaviorSanitizer, and fails on any report. The contact sheet of every screen is
 attached to the run as the `ui-preview` artifact, so a pull request shows what its
-screens look like.
+screens look like. The same job runs the [favorite-list tests](tools/favorites_tests/run.py)
+under the same sanitizers.
 
 `esphome/secrets.yaml`, `esphome/local_entities.h` and `esphome/settings.yaml` are
 gitignored, so [`.github/scripts/prepare_ci_config.py`](.github/scripts/prepare_ci_config.py)

@@ -7,7 +7,7 @@ substitutions:
   FRIENDLY_NAME: "ESPHome Remote"
   FRAMEBUFFER_WEB_DEBUG: "0" # Set to 1 to enable the framebuffer web debugging server on port 80 (see web_server: section below)
   NOTIFICATION_FEED_MAX_ITEMS: "16" # Max number of notifications to keep in the feed and show on the remote
-  MAX_PERSISTED_FAVORITE_LISTS: "16" # Max number of favorite lists that can be persisted (must be >= the number of lists defined in your configuration)
+  MAX_PERSISTED_FAVORITE_LISTS: "16" # Max number of favorite lists (at most 30), in local_entities.h or from Home Assistant; the remote turns down Home Assistant lists with more
   TEMPERATURE_UNIT: "F" # Set to "C" when Home Assistant climate values are Celsius
   # Fonts: each is a .ttf, .otf or .bdf file (path relative to this folder) or
   # "gfonts://Family@700" for a Google Font. Sizes are heights in pixels (for a

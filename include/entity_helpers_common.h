@@ -90,10 +90,13 @@ inline const char *mode_item_sources_cstr(RemoteMode mode, int idx) {
   return idx >= 0 && idx < mode_entity_count(mode) ? mode_entities(mode)[idx].sources : nullptr;
 }
 
-inline constexpr const char *INFO_ITEM_NAMES[] = {"Time & Date", "Wireless", "Network", "Device Name", "Battery", "Version"};
-inline constexpr const char *INFO_ITEM_ENTITIES[] = {
-    "info.date", "info.wireless", "info.network", "info.device_name", "info.battery", "info.version"};
+inline constexpr const char *INFO_ITEM_NAMES[] = {"Time & Date", "Wireless", "Network", "Device Name",
+                                                 "Battery",     "Version",  "Favorites"};
+inline constexpr const char *INFO_ITEM_ENTITIES[] = {"info.date",    "info.wireless", "info.network",  "info.device_name",
+                                                    "info.battery", "info.version",  "info.favorites"};
 inline constexpr int INFO_ITEM_COUNT = sizeof(INFO_ITEM_NAMES) / sizeof(INFO_ITEM_NAMES[0]);
+static_assert(cstr_eq_constexpr(INFO_ITEM_ENTITIES[INFO_FAVORITES_INDEX], "info.favorites"),
+              "INFO_FAVORITES_INDEX must name the Favorites page");
 
 #ifndef REMOTE_NOTIFICATION_FEED_MAX_ITEMS
 #define REMOTE_NOTIFICATION_FEED_MAX_ITEMS 16

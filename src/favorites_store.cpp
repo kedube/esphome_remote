@@ -160,6 +160,8 @@ struct State {
   uint32_t last_payload_hash = 0;
   bool restart = false;
   std::string status;
+  FavoritesNote note = FAVORITES_NOTE_NONE;
+  int note_line = 0;
   void (*listener)(const std::string &) = nullptr;
 };
 
@@ -168,11 +170,16 @@ State &state() {
   return state;
 }
 
-std::string describe(const FavoriteSet &set) {
+int lists_with_favorites(const FavoriteSet &set) {
   int lists = 0;
   for (int i = 0; i < set.list_count(); i++) {
     lists += set.list(i)->count > 0 ? 1 : 0;
   }
+  return lists;
+}
+
+std::string describe(const FavoriteSet &set) {
+  int lists = lists_with_favorites(set);
   int favorites = set.favorite_count();
   return std::to_string(lists) + (lists == 1 ? " list, " : " lists, ") + std::to_string(favorites) +
          (favorites == 1 ? " favorite" : " favorites");
@@ -182,7 +189,9 @@ std::string still_using(const State &st) {
   return st.from_home_assistant ? "Still using the previous list." : "Still using local_entities.h.";
 }
 
-void set_status(State &st, std::string status) {
+void set_status(State &st, std::string status, FavoritesNote note = FAVORITES_NOTE_NONE, int note_line = 0) {
+  st.note = note;
+  st.note_line = note_line;
   if (status.size() > STATUS_MAX_BYTES) {
     size_t cut = STATUS_MAX_BYTES;
     while (cut > 0 && (static_cast<uint8_t>(status[cut]) & 0xC0) == 0x80) {
@@ -200,12 +209,12 @@ void set_status(State &st, std::string status) {
   }
 }
 
-void reject(State &st, std::string why) {
+void reject(State &st, std::string why, int line = 0, FavoritesNote note = FAVORITES_NOTE_NOT_USED) {
   if (!why.empty() && why[0] >= 'A' && why[0] <= 'Z') {
     why[0] = static_cast<char>(why[0] - 'A' + 'a');
   }
   ESP_LOGW(TAG, "List from Home Assistant not used: %s", why.c_str());
-  set_status(st, "Not used: " + why + ". " + still_using(st));
+  set_status(st, "Not used: " + why + ". " + still_using(st), note, line);
 }
 
 // The remote booted, synced and is working: the saved list doesn't crash it.
@@ -230,7 +239,7 @@ void load(State &st) {
   std::string error;
   if (!saved.parse(text.data(), text.size(), &error)) {
     ESP_LOGW(TAG, "The saved list can't be read: %s", error.c_str());
-    set_status(st, local + ". The saved list from Home Assistant can't be read.");
+    set_status(st, local + ". The saved list from Home Assistant can't be read.", FAVORITES_NOTE_NOT_USED);
     return;
   }
   st.stored_hash = saved.hash();
@@ -246,7 +255,8 @@ void load(State &st) {
   if (g.bad_hash == st.stored_hash) {
     g.unfinished_boots = 0;
     store_guard();
-    set_status(st, local + ". The remote kept crashing with the list from Home Assistant, so it isn't used.");
+    set_status(st, local + ". The remote kept crashing with the list from Home Assistant, so it isn't used.",
+               FAVORITES_NOTE_SET_ASIDE);
     return;
   }
   g.unfinished_boots++;
@@ -270,7 +280,7 @@ const FavoriteSet &active_favorites() { return loaded_state().set; }
 
 bool active_favorites_from_home_assistant() { return loaded_state().from_home_assistant; }
 
-void favorites_received(const char *text, size_t len, FavoritesFitCheck fits) {
+void favorites_received(const char *text, size_t len, FavoritesFitCheck fits, bool may_restart) {
   State &st = loaded_state();
   boot_finished();
   if (!favorites_from_home_assistant_enabled() || text == nullptr || ha_state_missing(text, len)) {
@@ -285,14 +295,15 @@ void favorites_received(const char *text, size_t len, FavoritesFitCheck fits) {
 
   FavoriteSet received;
   std::string error;
-  if (!received.parse(text, len, &error)) {
-    reject(st, error);
+  int error_line = 0;
+  if (!received.parse(text, len, &error, &error_line)) {
+    reject(st, error, error_line);
     return;
   }
   uint32_t hash = received.hash();
   BootGuard &g = guard();
   if (hash == g.bad_hash) {
-    reject(st, "the remote kept crashing with this list");
+    reject(st, "the remote kept crashing with this list", 0, FAVORITES_NOTE_SET_ASIDE);
     return;
   }
   // Only lists the remote doesn't hold already: it measures free memory with
@@ -321,13 +332,15 @@ void favorites_received(const char *text, size_t len, FavoritesFitCheck fits) {
     set_status(st, "Home Assistant: " + describe(st.set));
     return;
   }
-  // Still on local_entities.h: restart to use this list now. Once per list,
-  // so a list that fails to load can't restart the remote over and over.
-  if (!st.from_home_assistant && g.restarted_for != hash) {
+  // Restart to use this list now if the remote is still on local_entities.h,
+  // or isn't in use. Once per list, so a list that fails to load can't
+  // restart the remote over and over.
+  if ((!st.from_home_assistant || may_restart) && g.restarted_for != hash) {
     std::string save_error;
     if (!storage_save(received.text(), &save_error)) {
       ESP_LOGE(TAG, "Couldn't save the list: %s", save_error.c_str());
-      set_status(st, "Couldn't save the list from Home Assistant (" + save_error + "). " + still_using(st));
+      set_status(st, "Couldn't save the list from Home Assistant (" + save_error + "). " + still_using(st),
+                 FAVORITES_NOTE_NOT_SAVED);
       return;
     }
     st.stored_hash = hash;
@@ -337,15 +350,17 @@ void favorites_received(const char *text, size_t len, FavoritesFitCheck fits) {
     g.save_failed = 0;
     store_guard();
     st.restart = true;
-    set_status(st, "Restarting to use " + describe(received) + " from Home Assistant");
+    set_status(st, "Restarting to use " + describe(received) + " from Home Assistant", FAVORITES_NOTE_RESTARTING);
     return;
   }
   if (g.save_failed == hash) {
-    set_status(st, "The remote couldn't save " + describe(received) +
-                       " from Home Assistant last time; it tries again as it goes to sleep. " + still_using(st));
+    set_status(st,
+               "The remote couldn't save " + describe(received) +
+                   " from Home Assistant last time; it tries again as it goes to sleep. " + still_using(st),
+               FAVORITES_NOTE_NOT_SAVED);
     return;
   }
-  set_status(st, "Next wake: " + describe(received) + " from Home Assistant");
+  set_status(st, "Next wake: " + describe(received) + " from Home Assistant", FAVORITES_NOTE_NEXT_WAKE);
 }
 
 void favorites_save_pending() {
@@ -370,6 +385,17 @@ void favorites_save_pending() {
 }
 
 bool favorites_restart_requested() { return state().restart; }
+
+FavoritesSummary favorites_summary() {
+  const State &st = loaded_state();
+  FavoritesSummary summary;
+  summary.from_home_assistant = st.from_home_assistant;
+  summary.lists = lists_with_favorites(st.set);
+  summary.favorites = st.set.favorite_count();
+  summary.note = st.note;
+  summary.note_line = st.note_line;
+  return summary;
+}
 
 void favorites_set_status_listener(void (*listener)(const std::string &status)) {
   State &st = loaded_state();

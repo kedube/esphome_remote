@@ -12,9 +12,12 @@ rotates that section into a version heading and publishes it as the release's Hi
   rebuilding the firmware. Add the template sensor in
   `home_assistant/remote_favorites.yaml` (`tools/favorites_to_home_assistant.py` writes
   it from your `local_entities.h`). The remote checks the lists as they arrive, keeps
-  them in flash, and uses them from the next wake; the first ones restart it to use them
-  straight away. Its new **Favorites status** sensor says which lists it uses, and why
-  it turned down an update. Without the sensor, `local_entities.h` works as before; set
+  them in flash, and restarts to use them straight away if nobody has pressed a button
+  since it woke (otherwise from the next wake). Its new **Favorites status** sensor, and a
+  new Favorites page in Info, say which lists it uses and why it turned down an update; a
+  remote with no favorites yet opens on that page.
+  `home_assistant/remote_favorites_labels.yaml` builds the lists from a "Remote" label
+  instead, one list per area. Without the sensor, `local_entities.h` works as before; set
   `#define FAVORITES_ENTITY ""` to ignore Home Assistant's lists. The example
   `local_entities.h` now starts with no favorites; its lists moved to the Home Assistant
   example.

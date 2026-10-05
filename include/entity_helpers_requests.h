@@ -31,6 +31,10 @@ inline TimerStatusTracker timer_status_tracker_storage;
 inline RemoteStatusTracker remote_status_tracker_storage;
 inline bool remote_status_trackers_initialized = false;
 
+// A button was pressed since the remote woke (set by reset_idle_timer). Until
+// then the remote isn't in use, so it may restart to use new favorite lists.
+inline bool remote_buttons_pressed_since_boot = false;
+
 // Order in which entities announce their subscriptions. Home Assistant answers
 // each subscription with the current value as soon as it arrives, but the API
 // server announces only one per main-loop pass, so with a few hundred
@@ -188,7 +192,7 @@ inline void ensure_remote_status_trackers(const TrackerSubscriptionOrder &order 
   }
   if (favorites_from_home_assistant_enabled()) {
     ha_subscribe(FAVORITES_ENTITY, FAVORITES_ATTRIBUTE, [](esphome::StringRef state) {
-      favorites_received(state.c_str(), state.size(), favorites_fit_in_memory);
+      favorites_received(state.c_str(), state.size(), favorites_fit_in_memory, !remote_buttons_pressed_since_boot);
     });
   }
   remote_status_trackers_initialized = true;

@@ -202,12 +202,12 @@ class FavoriteSet {
   // '|'. Blank lines and spaces around fields don't count, and favorites
   // before the first title go in a list called FAVORITES. Takes the text if
   // every line holds; otherwise leaves this set as it was and says what is
-  // wrong in *error.
-  bool parse(const char *text, size_t len, std::string *error) {
+  // wrong in *error, and in *error_line the line at fault (0 for none).
+  bool parse(const char *text, size_t len, std::string *error, int *error_line = nullptr) {
     std::string canonical;
     int lists = 0;
     int favorites = 0;
-    if (!canonicalize_(text, len, &canonical, &lists, &favorites, error)) {
+    if (!canonicalize_(text, len, &canonical, &lists, &favorites, Failure{error, error_line})) {
       return false;
     }
     this->adopt_(canonical, lists, favorites);
@@ -234,16 +234,24 @@ class FavoriteSet {
     }
   }
 
-  static bool fail_(std::string *error, int line, const std::string &message) {
-    if (error != nullptr) {
-      *error = line > 0 ? "Line " + std::to_string(line) + ": " + message : message;
+  struct Failure {
+    std::string *error;
+    int *line;
+  };
+
+  static bool fail_(const Failure &failure, int line, const std::string &message) {
+    if (failure.error != nullptr) {
+      *failure.error = line > 0 ? "Line " + std::to_string(line) + ": " + message : message;
+    }
+    if (failure.line != nullptr) {
+      *failure.line = line;
     }
     return false;
   }
 
   // Checks text and writes it out without what parse() ignores.
   static bool canonicalize_(const char *text, size_t len, std::string *out, int *list_count, int *favorite_count,
-                            std::string *error) {
+                            const Failure &error) {
     if (text == nullptr) {
       len = 0;
     }

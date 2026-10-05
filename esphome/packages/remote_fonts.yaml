@@ -88,6 +88,7 @@ font:
       "\ue19c", # battery_alert
       "\ue88e", # info
       "\uf053", # restart_alt
+      "\ue838", # star
       "\ue2c1", # cloud_off
       "\ue9b2", # home
       "\ue000", # error

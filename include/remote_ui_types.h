@@ -1251,6 +1251,20 @@ inline RemoteRequestProgress evaluate_alarm_request(AlarmRequest request, const 
 inline bool lock_state_unlocked(const std::string &state) { return state == "unlocked" || state == "open"; }
 
 // A lock's supported_features bit for lock.open, which unlatches the door.
+// The Info page about the favorite lists (see INFO_ITEM_NAMES).
+inline constexpr int INFO_FAVORITES_INDEX = 6;
+
+// What became of the last favorite lists Home Assistant sent, for that page
+// (see favorites_store.h).
+enum FavoritesNote {
+  FAVORITES_NOTE_NONE,
+  FAVORITES_NOTE_NEXT_WAKE,   // saved; used from the next wake
+  FAVORITES_NOTE_RESTARTING,  // the remote restarts to use them
+  FAVORITES_NOTE_NOT_USED,    // turned down: a line is wrong, or they're too big
+  FAVORITES_NOTE_NOT_SAVED,   // the remote couldn't save them
+  FAVORITES_NOTE_SET_ASIDE,   // the remote kept crashing with them
+};
+
 inline constexpr int LOCK_FEATURE_OPEN = 1;
 
 enum LockRequest {

@@ -1,0 +1,69 @@
+template:
+  # The remote's favorite lists, built from a label instead of written out
+  # (see Lists from labels in the README). Use this or remote_favorites.yaml,
+  # not both: they make the same sensor.
+  #
+  # Give the entities you want on the remote the label "Remote" (Settings >
+  # Labels; its ID must be "remote"). Each area with such entities becomes a
+  # list, in alphabetical order; entities in no area go in a last list, OTHER.
+  # A favorite's name is the entity's name without its area's in front.
+  # Entities the remote can't control are left out.
+  - trigger:
+      # Built again when Home Assistant starts, templates reload, and labels,
+      # names or areas change.
+      - trigger: homeassistant
+        event: start
+      - trigger: event
+        event_type: event_template_reloaded
+      - trigger: event
+        event_type: entity_registry_updated
+      - trigger: event
+        event_type: device_registry_updated
+      - trigger: event
+        event_type: area_registry_updated
+    sensor:
+      - name: Remote Favorites
+        unique_id: remote_favorites
+        icon: mdi:star
+        state: "{{ label_entities('remote') | count }}"
+        attributes:
+          lists: >-
+            {#- Third fields: a TV remote's command set, or the sources of a
+                media player that isn't a TV or receiver. -#}
+            {%- set extras = {
+                  'remote.living_room_apple_tv': 'apple_tv',
+                  'media_player.living_room_speaker': 'Spotify|Radio|Line In',
+                } -%}
+            {%- set supported = '^(light|switch|input_boolean|climate|water_heater|humidifier|fan|cover|valve|lock|'
+                                ~ 'media_player|sensor|binary_sensor|person|device_tracker|event|automation|script|'
+                                ~ 'scene|button|input_button|alarm_control_panel|weather|number|input_number|select|'
+                                ~ 'input_select|vacuum|lawn_mower|timer|remote)\\.' -%}
+            {%- set tagged = label_entities('remote') | select('match', supported) | list -%}
+            {%- set ns = namespace(areas=[], lines=[], placed=[]) -%}
+            {%- for area in areas() -%}
+              {%- set ns.areas = ns.areas + [[area_name(area), area]] -%}
+            {%- endfor -%}
+            {%- for area in ns.areas | sort(attribute='0') + [['OTHER', none]] -%}
+              {%- if area[1] is none -%}
+                {%- set members = tagged | reject('in', ns.placed) | list -%}
+              {%- else -%}
+                {%- set members = area_entities(area[1]) | select('in', tagged) | list -%}
+              {%- endif -%}
+              {%- set ns.placed = ns.placed + members -%}
+              {%- set favorites = namespace(items=[]) -%}
+              {%- for entity in members -%}
+                {%- set name = state_attr(entity, 'friendly_name') or entity -%}
+                {%- if area[1] is not none and name.startswith(area[0] ~ ' ') -%}
+                  {%- set name = name[area[0] | length + 1:] -%}
+                {%- endif -%}
+                {%- set favorites.items = favorites.items + [[name | replace('|', '/'), entity]] -%}
+              {%- endfor -%}
+              {%- if favorites.items -%}
+                {%- set ns.lines = ns.lines + ['#' ~ area[0] | upper] -%}
+                {%- for item in favorites.items | sort(attribute='0') -%}
+                  {%- set ns.lines = ns.lines + [item[0] ~ '|' ~ item[1]
+                                                 ~ ('|' ~ extras[item[1]] if item[1] in extras else '')] -%}
+                {%- endfor -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {{ ns.lines | join('\n') }}

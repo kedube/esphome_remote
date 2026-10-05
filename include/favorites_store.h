@@ -7,8 +7,9 @@
 // until it has one. A list Home Assistant changes is saved as the remote goes
 // to sleep and used from the next wake: the trackers and Home Assistant's
 // subscriptions keep pointers into the lists in use, so those never change
-// while the remote is awake. The exception is the first list from Home
-// Assistant, which the remote restarts to use straight away.
+// while the remote is awake. Instead the remote restarts to use new lists
+// straight away when they are the first from Home Assistant, or when nobody
+// has pressed a button since it woke (it isn't in use).
 
 #include <cstddef>
 #include <cstdint>
@@ -38,14 +39,26 @@ bool active_favorites_from_home_assistant();
 // candidate is the new list, current the one in use.
 using FavoritesFitCheck = std::string (*)(const FavoriteSet &candidate, const FavoriteSet &current);
 
-// Home Assistant sent the lists' text.
-void favorites_received(const char *text, size_t len, FavoritesFitCheck fits);
+// Home Assistant sent the lists' text. may_restart: nobody has pressed a
+// button since the remote woke, so it may restart to use changed lists now.
+void favorites_received(const char *text, size_t len, FavoritesFitCheck fits, bool may_restart);
 
 // Saves a changed list. Called as the remote goes to sleep or restarts.
 void favorites_save_pending();
 
-// The first list from Home Assistant arrived: restart to use it.
+// New lists from Home Assistant are saved: restart to use them.
 bool favorites_restart_requested();
+
+// The lists in use and what became of the last ones Home Assistant sent, for
+// the Favorites page in Info.
+struct FavoritesSummary {
+  bool from_home_assistant = false;
+  int lists = 0;  // lists with favorites
+  int favorites = 0;
+  FavoritesNote note = FAVORITES_NOTE_NONE;
+  int note_line = 0;  // for FAVORITES_NOTE_NOT_USED, the line at fault; 0 for none
+};
+FavoritesSummary favorites_summary();
 
 // What the remote is using and what became of the last list Home Assistant
 // sent, for the Favorites status sensor. The listener hears it now and on

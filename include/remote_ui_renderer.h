@@ -208,6 +208,13 @@ struct RemoteRenderContext {
   int info_index = 0;
   std::string info_primary_text;
   std::string info_secondary_text;
+  // The Favorites page in Info (INFO_FAVORITES_INDEX).
+  bool favorites_from_home_assistant = false;
+  int favorites_lists = 0;
+  int favorites_count = 0;
+  int favorites_note = FAVORITES_NOTE_NONE;
+  int favorites_note_line = 0;
+  const char *favorites_entity = "";  // the sensor the lists come from; "" when that's off
   int wifi_rssi = 0;  // dBm, 0 when unknown
   int clock_weekday = 0;  // 1 = Sunday, 0 unknown
   int clock_day = 0;

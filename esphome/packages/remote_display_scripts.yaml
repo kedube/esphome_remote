@@ -259,6 +259,15 @@ script:
                     if (wifi::global_wifi_component != nullptr && wifi::global_wifi_component->is_connected()) {
                       ctx.wifi_rssi = wifi::global_wifi_component->wifi_rssi();
                     }
+                    if (ctx.info_index == INFO_FAVORITES_INDEX) {
+                      FavoritesSummary favorites = favorites_summary();
+                      ctx.favorites_from_home_assistant = favorites.from_home_assistant;
+                      ctx.favorites_lists = favorites.lists;
+                      ctx.favorites_count = favorites.favorites;
+                      ctx.favorites_note = favorites.note;
+                      ctx.favorites_note_line = favorites.note_line;
+                      ctx.favorites_entity = FAVORITES_ENTITY;
+                    }
                     break;
                   default:
                     break;

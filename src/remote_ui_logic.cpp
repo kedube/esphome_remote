@@ -98,6 +98,10 @@ void populate_remote_info_text(
     return;
   }
 
+  if (info_index == INFO_FAVORITES_INDEX) {
+    return;  // drawn from the favorites summary
+  }
+
   primary_text = version != nullptr ? version : "";
   secondary_text = ESPHOME_VERSION;
 }

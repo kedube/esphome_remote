@@ -230,27 +230,27 @@ int main(int argc, char **argv) {
     add("33_weather_humidity", c);
   }
   {
-    auto c = base(REMOTE_MODE_INFO, "INFO", "Time & Date", "", 0, 6);
+    auto c = base(REMOTE_MODE_INFO, "INFO", "Time & Date", "", 0, 7);
     c.info_index = 0;
     c.clock_weekday = 3;
     c.clock_month = 4;
     c.clock_day = 7;
     add("34_info_time", c);
-    auto w = base(REMOTE_MODE_INFO, "INFO", "Wireless", "", 1, 6);
+    auto w = base(REMOTE_MODE_INFO, "INFO", "Wireless", "", 1, 7);
     w.info_index = 1;
     w.info_primary_text = "HomeWiFi";
     w.info_secondary_text = "-61 dBm";
     w.wifi_rssi = -61;
     add("35_info_wifi", w);
-    auto b = base(REMOTE_MODE_INFO, "INFO", "Battery", "", 4, 6);
+    auto b = base(REMOTE_MODE_INFO, "INFO", "Battery", "", 4, 7);
     b.info_index = 4;
     add("36_info_battery", b);
-    auto v = base(REMOTE_MODE_INFO, "INFO", "Version", "", 5, 6);
+    auto v = base(REMOTE_MODE_INFO, "INFO", "Version", "", 5, 7);
     v.info_index = 5;
     v.info_primary_text = "3.11";
     v.info_secondary_text = "2026.9.0";
     add("37_info_version", v);
-    auto n = base(REMOTE_MODE_INFO, "INFO", "Network", "", 2, 6);
+    auto n = base(REMOTE_MODE_INFO, "INFO", "Network", "", 2, 7);
     n.info_index = 2;
     n.info_primary_text = "192.168.0.84";
     add("38_info_network", n);
@@ -388,15 +388,37 @@ int main(int argc, char **argv) {
     add("75_weather_bearing", wb);
     auto ws = base(REMOTE_MODE_WEATHER, "OUTSIDE", "Home Forecast", "", 0, 1);
     add("76_weather_syncing", ws);
-    auto dev = base(REMOTE_MODE_INFO, "INFO", "Device Name", "", 3, 6);
+    auto dev = base(REMOTE_MODE_INFO, "INFO", "Device Name", "", 3, 7);
     dev.info_index = 3;
     dev.info_primary_text = "esphome-remote";
     dev.info_secondary_text = "ESPHome Remote";
     add("77_info_device", dev);
-    auto nb = base(REMOTE_MODE_INFO, "INFO", "Battery", "", 4, 6);
+    auto nb = base(REMOTE_MODE_INFO, "INFO", "Battery", "", 4, 7);
     nb.info_index = 4;
     nb.battery_monitoring_available = false;
     add("78_info_no_battery", nb);
+
+    // The Favorites page in Info.
+    auto fav = [&](const char *name, bool from_ha, int lists, int count, int note, int line) {
+      auto x = base(REMOTE_MODE_INFO, "INFO", "Favorites", "", INFO_FAVORITES_INDEX, 7);
+      x.info_index = INFO_FAVORITES_INDEX;
+      x.favorites_from_home_assistant = from_ha;
+      x.favorites_lists = lists;
+      x.favorites_count = count;
+      x.favorites_note = note;
+      x.favorites_note_line = line;
+      x.favorites_entity = "sensor.remote_favorites";
+      add(name, x);
+    };
+    fav("c0_favorites_ha", true, 14, 58, FAVORITES_NOTE_NONE, 0);
+    fav("c1_favorites_firmware", false, 3, 21, FAVORITES_NOTE_NONE, 0);
+    fav("c2_favorites_next_wake", true, 14, 58, FAVORITES_NOTE_NEXT_WAKE, 0);
+    fav("c3_favorites_not_used", true, 14, 58, FAVORITES_NOTE_NOT_USED, 7);
+    fav("c4_favorites_none", false, 0, 0, FAVORITES_NOTE_NONE, 0);
+    fav("c5_favorites_set_aside", false, 3, 21, FAVORITES_NOTE_SET_ASIDE, 0);
+    fav("c6_favorites_restarting", false, 0, 0, FAVORITES_NOTE_RESTARTING, 0);
+    fav("c7_favorites_not_saved", true, 14, 58, FAVORITES_NOTE_NOT_SAVED, 0);
+    fav("c8_favorites_too_big", true, 16, 9999, FAVORITES_NOTE_NOT_USED, 0);
 
     // States behind fixed display bugs.
     auto ton = base(REMOTE_MODE_SWITCHES, "KITCHEN", "Coffee Maker", "turning_on", 0, 3);

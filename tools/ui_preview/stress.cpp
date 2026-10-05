@@ -197,6 +197,14 @@ RemoteRenderContext hostile_context(int mode, int setting, const std::string &s,
   c.remote_has_commands = variant != 0;
   c.remote_key_flash = variant == 0 ? r.percent : (r.percent + variant * 3) % 8;  // every key, and none
   c.remote_key_flash_at = just_now;
+  // The Favorites page in Info: every note, ones that don't exist, and counts
+  // and lines out of any range.
+  c.favorites_from_home_assistant = variant != 1;
+  c.favorites_count = variant == 0 ? r.percent : r.percent * 1000;
+  c.favorites_lists = r.percent;
+  c.favorites_note = variant == 0 ? r.percent : (r.percent + variant) % (FAVORITES_NOTE_SET_ASIDE + 2);
+  c.favorites_note_line = variant == 2 ? r.percent : r.percent * 100000;
+  c.favorites_entity = variant == 0 ? s.c_str() : variant == 1 ? "sensor." : "";
   return c;
 }
 
@@ -215,7 +223,7 @@ int main() {
   long frames = 0;
   auto draw_every_screen = [&](const std::string &s, Reading r) {
     for (int mode = 0; mode < REMOTE_MODE_COUNT; mode++) {
-      int pages = mode == REMOTE_MODE_INFO ? 7 : 1;  // six Info pages, plus one past the end
+      int pages = mode == REMOTE_MODE_INFO ? 8 : 1;  // seven Info pages, plus one past the end
       for (int setting = REMOTE_SETTING_NONE; setting <= REMOTE_SETTING_LAST; setting++) {
         for (int variant = 0; variant < 3; variant++) {
           RemoteRenderContext c = hostile_context(mode, setting, s, r, variant);

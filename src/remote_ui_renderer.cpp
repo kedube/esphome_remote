@@ -87,6 +87,7 @@ const char *const BATTERY = "\ue1a5";
 const char *const BATTERY_ALERT = "\ue19c";
 const char *const INFO = "\ue88e";
 const char *const RESTART = "\uf053";
+const char *const STAR = "\ue838";
 const char *const CLOUD_OFF = "\ue2c1";
 const char *const HOME = "\ue9b2";
 const char *const ALERT = "\ue000";  // error: a jammed lock
@@ -1817,6 +1818,62 @@ void render_weather(Display *it, const RemoteUiFonts &f, const RemoteRenderConte
   draw_weather_footer(it, f, ctx);
 }
 
+// Where the favorite lists come from, and what became of the last ones Home
+// Assistant sent. With none yet, where to add them.
+void render_favorites_info(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
+  draw_badge(it, f, icon::STAR, ctx.favorites_from_home_assistant && ctx.favorites_count > 0);
+  bool from_ha_off = ctx.favorites_entity == nullptr || ctx.favorites_entity[0] == '\0';
+  char title[24];
+  char detail[32];
+  if (ctx.favorites_count <= 0) {
+    snprintf(title, sizeof(title), "NONE YET");
+    snprintf(detail, sizeof(detail), "%s", from_ha_off ? "IN THE FIRMWARE" : "IN HOME ASSISTANT");
+  } else {
+    snprintf(title, sizeof(title), "%d %s", std::min(ctx.favorites_count, 9999),
+             ctx.favorites_count == 1 ? "FAVORITE" : "FAVORITES");
+    snprintf(detail, sizeof(detail), "IN %d %s", std::min(ctx.favorites_lists, 99),
+             ctx.favorites_lists == 1 ? "LIST" : "LISTS");
+  }
+  text_fit(it, f.title, HERO_X, 38, TextAlign::BASELINE_LEFT, title, SCREEN_W - HERO_X);
+  text_fit(it, f.tiny, HERO_X, 49, TextAlign::BASELINE_LEFT, detail, SCREEN_W - HERO_X);
+
+  if (draw_footer_overlay(it, f, ctx, nullptr)) {
+    return;
+  }
+  char note[24];
+  switch (ctx.favorites_note) {
+    case FAVORITES_NOTE_NEXT_WAKE:
+      footer_info(it, f, "UPDATE", "NEXT WAKE");
+      return;
+    case FAVORITES_NOTE_RESTARTING:
+      footer_info(it, f, "UPDATE", "RESTARTING");
+      return;
+    case FAVORITES_NOTE_NOT_USED:
+      if (ctx.favorites_note_line > 0) {
+        snprintf(note, sizeof(note), "LINE %d", std::min(ctx.favorites_note_line, 9999));
+        footer_info(it, f, "NOT USED", note);
+      } else {
+        footer_info(it, f, "UPDATE", "NOT USED");
+      }
+      return;
+    case FAVORITES_NOTE_NOT_SAVED:
+      footer_info(it, f, "UPDATE", "NOT SAVED");
+      return;
+    case FAVORITES_NOTE_SET_ASIDE:
+      footer_info(it, f, "HA LISTS", "SET ASIDE");
+      return;
+    default:
+      break;
+  }
+  if (ctx.favorites_count <= 0 && !from_ha_off) {
+    // The sensor to add, without its "sensor." prefix.
+    const char *entity = ctx.favorites_entity;
+    footer_info(it, f, "SENSOR", strncmp(entity, "sensor.", 7) == 0 ? entity + 7 : entity);
+    return;
+  }
+  footer_info(it, f, "FROM", ctx.favorites_from_home_assistant ? "HOME ASSISTANT" : "FIRMWARE");
+}
+
 void render_info(Display *it, const RemoteUiFonts &f, const RemoteRenderContext &ctx) {
   const char *primary = ctx.info_primary_text.c_str();
   const char *secondary = ctx.info_secondary_text.c_str();
@@ -1873,6 +1930,9 @@ void render_info(Display *it, const RemoteUiFonts &f, const RemoteRenderContext 
       }
       break;
     }
+    case INFO_FAVORITES_INDEX:
+      render_favorites_info(it, f, ctx);
+      return;
     default: {  // Version
       draw_badge(it, f, icon::INFO, false);
       int right = hero_value(it, f, primary);
