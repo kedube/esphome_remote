@@ -8,15 +8,15 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "/Users/katherine/Downloads/esphome_remote/include",
-                "/Users/katherine/Downloads/esphome_remote/src",
+                "/Users/katherine/Downloads/github/esphome_remote/include",
+                "/Users/katherine/Downloads/github/esphome_remote/src",
                 ""
             ],
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "/Users/katherine/Downloads/esphome_remote/include",
-                    "/Users/katherine/Downloads/esphome_remote/src",
+                    "/Users/katherine/Downloads/github/esphome_remote/include",
+                    "/Users/katherine/Downloads/github/esphome_remote/src",
                     ""
                 ]
             },
