@@ -6,6 +6,8 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+
+## 4.14 — 2026-10-30
 - Builds with ESPHome 2026.10.1. ESPHome 2026.10.0 cannot compile the firmware (it places
   some generated code ahead of the remote's own headers), so use 2026.10.1 or later, or
   stay on 2026.9.x.
