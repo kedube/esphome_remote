@@ -6,6 +6,11 @@ Info screen. Add entries under **Unreleased** as part of each change; the releas
 rotates that section into a version heading and publishes it as the release's Highlights.
 
 ## Unreleased
+- Builds with ESPHome 2026.10.1. ESPHome 2026.10.0 cannot compile the firmware (it places
+  some generated code ahead of the remote's own headers), so use 2026.10.1 or later, or
+  stay on 2026.9.x.
+- `tools/ui_preview/` works with ESPHome 2026.10, which stores font glyphs in flash and
+  moves text decoding into a new `unicode` component.
 
 ## 4.12 — 2026-10-05
 - The README now matches the firmware in a number of places, among them: a held `Plus`

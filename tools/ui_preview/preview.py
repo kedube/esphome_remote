@@ -132,10 +132,10 @@ def copy_esphome_sources(work: Path) -> None:
     import esphome  # pylint: disable=import-outside-toplevel
 
     src = Path(esphome.__file__).resolve().parent
-    # Headers only beyond the four files build() compiles; newer ESPHome keeps
+    # Headers only beyond the files build() compiles; newer ESPHome keeps
     # the host HAL under components/host and splits core into subdirectories.
     keep = shutil.ignore_patterns("*.py", "*.pyc", "__pycache__")
-    for sub in ("core", "components/display", "components/font", "components/host"):
+    for sub in ("core", "components/display", "components/font", "components/host", "components/unicode"):
         if (src / sub).is_dir():
             shutil.copytree(src / sub, work / "esphome" / sub, ignore=keep, dirs_exist_ok=True)
     (work / "esphome" / "core" / "defines.h").write_text(DEFINES_H)
@@ -190,7 +190,9 @@ def generate_fonts(work: Path, substitutions: dict) -> None:
     # newer placement-new form.
     bitmaps = re.findall(r"^\s*static (?:constexpr|const) uint8_t (uint8_t_id\w*)\[\] PROGMEM = (\{.*?\});$",
                          main_cpp, re.M)
-    glyphs = re.findall(r"^\s*static const font::Glyph (font_glyph_id\w*)\[\] = (\{.*?\});$", main_cpp, re.M)
+    # 2026.10 moved the glyph tables to flash too ("static constexpr ... PROGMEM").
+    glyphs = re.findall(r"^\s*static (?:constexpr|const) font::Glyph (font_glyph_id\w*)\[\](?: PROGMEM)? = (\{.*?\});$",
+                        main_cpp, re.M)
     fonts = re.findall(r"^\s*new\((\w+)\) font::Font\((.*?)\);$", main_cpp, re.M)
     fonts += re.findall(r"^\s*(\w+) = new font::Font\((.*?)\);$", main_cpp, re.M)
     if not fonts:
@@ -256,6 +258,9 @@ def build(work: Path, main_source: Path, name: str, extra_flags=()) -> Path:
         esp / "display" / "rect.cpp",
         esp / "font" / "font.cpp",
     ]
+    # 2026.10 moved font.cpp's UTF-8 decoding into its own component.
+    if (esp / "unicode" / "unicode.cpp").is_file():
+        sources.append(esp / "unicode" / "unicode.cpp")
     flags = ["-std=gnu++20", "-O1", "-w", "-fno-rtti", *extra_flags,
              f"-I{work}", f"-I{HERE}", f"-I{REPO / 'include'}"]
     obj_dir = work / f"{name}_obj"
